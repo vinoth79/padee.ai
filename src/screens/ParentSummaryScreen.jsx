@@ -20,7 +20,7 @@ export default function ParentSummaryScreen({ onNavigate }) {
         <p className="text-teal-200 text-sm">{data.class} · AI Tutor Weekly Report</p>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-3 gap-2 bg-white/10 rounded-2xl p-3 mt-4">
+        <div className="grid grid-cols-3 gap-2 bg-white/10 rounded-xl p-3 mt-4">
           {[
             { value: data.summary.activeDays, label: 'Active Days', icon: '📅' },
             { value: `${data.summary.avgScore}%`, label: 'Avg Score', icon: '📊' },
@@ -37,11 +37,11 @@ export default function ParentSummaryScreen({ onNavigate }) {
 
       <div className="px-4 mt-4 space-y-4">
         {/* Activity summary */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-black text-gray-900 text-sm mb-3">This Week's Activity</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: '💬', value: data.summary.doubtsAsked, label: 'Doubts solved', color: 'bg-purple-50 text-purple-600' },
+              { icon: '💬', value: data.summary.doubtsAsked, label: 'Doubts solved', color: 'bg-brand-light text-purple-600' },
               { icon: '⚡', value: data.summary.practiceQuestions, label: 'Practice questions', color: 'bg-blue-50 text-blue-600' },
               { icon: '📋', value: data.summary.testsCompleted, label: 'Tests completed', color: 'bg-orange-50 text-orange-600' },
               { icon: '⚡', value: `+${data.summary.xpEarned}`, label: 'XP earned', color: 'bg-amber-50 text-amber-600' },
@@ -58,7 +58,7 @@ export default function ParentSummaryScreen({ onNavigate }) {
         </div>
 
         {/* Highlights */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
           <div className="font-black text-emerald-800 text-sm mb-3">🌟 Highlights</div>
           <div className="space-y-2">
             {data.highlights.map((h, i) => (
@@ -72,7 +72,7 @@ export default function ParentSummaryScreen({ onNavigate }) {
 
         {/* Concerns */}
         {data.concerns.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="font-black text-amber-800 text-sm mb-3">⚠️ Areas to Watch</div>
             <div className="space-y-2">
               {data.concerns.map((c, i) => (
@@ -86,9 +86,9 @@ export default function ParentSummaryScreen({ onNavigate }) {
         )}
 
         {/* Teacher note */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-bold text-indigo-700">P</div>
+            <div className="w-7 h-7 bg-brand-light rounded-full flex items-center justify-center text-xs font-bold text-brand-primary">P</div>
             <div>
               <div className="text-xs font-bold text-gray-700">Ms. Priya Nair</div>
               <div className="text-[10px] text-gray-400">Class Teacher, Physics</div>
@@ -98,7 +98,7 @@ export default function ParentSummaryScreen({ onNavigate }) {
         </div>
 
         {/* Subject accuracy */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-black text-gray-900 text-sm mb-3">Subject Accuracy (30 days)</h2>
           {[
             { subject: 'Mathematics', accuracy: 85, icon: '📐', color: 'purple' },
@@ -122,7 +122,7 @@ export default function ParentSummaryScreen({ onNavigate }) {
 
         <button
           onClick={() => alert('Report shared!')}
-          className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold py-3 rounded-2xl text-sm shadow-md active:scale-95"
+          className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold py-3 rounded-xl text-sm shadow-md active:scale-95"
         >
           📤 Share Report
         </button>

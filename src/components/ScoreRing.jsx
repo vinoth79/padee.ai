@@ -5,7 +5,7 @@ export default function ScoreRing({ percent, size = 80, strokeWidth = 7 }) {
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (animated / 100) * circumference
-  const color = percent >= 80 ? '#22C55E' : percent >= 50 ? '#F59E0B' : '#14B8A6'
+  const color = percent >= 80 ? '#059669' : percent >= 50 ? '#D97706' : '#DC2626'
 
   useEffect(() => {
     const t = setTimeout(() => setAnimated(percent), 100)
@@ -14,7 +14,7 @@ export default function ScoreRing({ percent, size = 80, strokeWidth = 7 }) {
 
   return (
     <svg width={size} height={size} className="transform -rotate-90">
-      <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth={strokeWidth} />
+      <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth} />
       <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
         strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
         style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4,0,0.2,1)' }}

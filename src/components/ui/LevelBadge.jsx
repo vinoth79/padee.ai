@@ -9,7 +9,7 @@ export default function LevelBadge({ level, size = 'sm' }) {
     : 'text-xs px-2 py-0.5 gap-1'
 
   return (
-    <span className={`inline-flex items-center ${sizeClass} bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-full`}>
+    <span className={`inline-flex items-center ${sizeClass} bg-brand-light text-brand-primary font-bold rounded-full`}>
       <span>{lvl.icon}</span>
       <span>Lv.{level} {lvl.name}</span>
     </span>

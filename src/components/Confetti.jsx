@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const COLORS = ['#7C3AED', '#14B8A6', '#F59E0B', '#22C55E', '#F43F5E', '#3B82F6', '#F97316']
+const COLORS = ['#0D9488', '#059669', '#D97706', '#2563EB', '#EA580C', '#7C3AED', '#E11D48']
 const SHAPES = ['●', '■', '▲', '◆']
 
 export default function Confetti({ active }) {

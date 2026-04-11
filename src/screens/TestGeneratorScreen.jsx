@@ -20,7 +20,7 @@ export default function TestGeneratorScreen({ onNavigate }) {
   if (phase === 'generating') {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 gap-6">
-        <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center shadow-2xl animate-pulse-slow">
+        <div className="w-20 h-20 bg-gradient-to-br from-brand-primary to-brand-mid rounded-full flex items-center justify-center shadow-2xl animate-pulse-slow">
           <span className="text-4xl">📋</span>
         </div>
         <div className="text-center">
@@ -28,7 +28,7 @@ export default function TestGeneratorScreen({ onNavigate }) {
           <p className="text-gray-500 text-sm mt-1">Balancing difficulty and marking scheme</p>
         </div>
         <div className="flex gap-2">
-          {[0,1,2].map(i => <div key={i} className="w-3 h-3 bg-purple-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />)}
+          {[0,1,2].map(i => <div key={i} className="w-3 h-3 bg-brand-pale rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />)}
         </div>
       </div>
     )
@@ -43,12 +43,12 @@ export default function TestGeneratorScreen({ onNavigate }) {
               <h1 className="font-black text-gray-900 text-lg">Test Paper Ready ✅</h1>
               <p className="text-gray-400 text-xs mt-0.5">Physics · Class 10 · {config.totalMarks} marks · {config.timeLimit} min</p>
             </div>
-            <button onClick={() => setPhase('config')} className="text-xs text-purple-600 font-bold border border-purple-200 px-3 py-1.5 rounded-xl">Edit</button>
+            <button onClick={() => setPhase('config')} className="text-xs text-purple-600 font-bold border border-brand-pale/30 px-3 py-1.5 rounded-xl">Edit</button>
           </div>
           <div className="flex gap-2">
             {['paper', 'answers'].map(t => (
               <button key={t} onClick={() => setTab(t)}
-                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${tab === t ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${tab === t ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'}`}>
                 {t === 'paper' ? '📄 Student Paper' : '✅ Answer Key'}
               </button>
             ))}
@@ -56,7 +56,7 @@ export default function TestGeneratorScreen({ onNavigate }) {
         </div>
 
         <div className="px-4 mt-4">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4 text-xs text-gray-700 leading-relaxed font-mono whitespace-pre-wrap">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4 text-xs text-gray-700 leading-relaxed font-mono whitespace-pre-wrap">
             {tab === 'paper' ? `CLASS 10 — PHYSICS TEST
 Chapter: Electricity | Time: ${config.timeLimit} min | Max Marks: ${config.totalMarks}
 
@@ -113,14 +113,14 @@ SECTION B:
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => alert('PDF simulated!')} className="py-3 rounded-2xl text-sm font-bold border-2 border-gray-200 bg-white text-gray-700 active:scale-95">
+            <button onClick={() => alert('PDF simulated!')} className="py-3 rounded-xl text-sm font-bold border-2 border-gray-200 bg-white text-gray-700 active:scale-95">
               📥 Student PDF
             </button>
-            <button onClick={() => alert('Answer key PDF!')} className="py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-purple-600 to-indigo-700 text-white shadow-md active:scale-95">
+            <button onClick={() => alert('Answer key PDF!')} className="py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-brand-primary to-brand-mid text-white shadow-md active:scale-95">
               🔑 Answer Key
             </button>
           </div>
-          <button onClick={() => alert('Share link copied!')} className="w-full mt-3 py-3 rounded-2xl text-sm font-bold bg-purple-50 text-purple-700 border border-purple-200 active:scale-95">
+          <button onClick={() => alert('Share link copied!')} className="w-full mt-3 py-3 rounded-xl text-sm font-bold bg-brand-light text-brand-primary border border-brand-pale/30 active:scale-95">
             🔗 Copy Shareable Link
           </button>
         </div>
@@ -130,14 +130,14 @@ SECTION B:
 
   return (
     <div className="pb-6 bg-gray-50 min-h-screen">
-      <div className="bg-gradient-to-br from-purple-600 to-indigo-700 px-4 pt-6 pb-6">
+      <div className="bg-gradient-to-br from-brand-primary to-brand-mid px-4 pt-6 pb-6">
         <h1 className="text-white font-black text-2xl">Create Test</h1>
-        <p className="text-purple-200 text-sm mt-1">Full CBSE-pattern test paper with answer key</p>
+        <p className="text-brand-pale text-sm mt-1">Full CBSE-pattern test paper with answer key</p>
       </div>
 
       <div className="px-4 mt-4 space-y-4">
         {/* Class + Subject (compact) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Class</label>
@@ -157,7 +157,7 @@ SECTION B:
         </div>
 
         {/* Test settings */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4">
           <h3 className="font-bold text-gray-700 text-sm">Test Settings</h3>
 
           <div>
@@ -165,7 +165,7 @@ SECTION B:
             <div className="flex gap-2">
               {[25, 40, 80, 100].map(m => (
                 <button key={m} onClick={() => setConfig(p => ({...p, totalMarks: m}))}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 ${config.totalMarks === m ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 text-gray-600'}`}>
+                  className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 ${config.totalMarks === m ? 'bg-brand-primary border-brand-primary text-white' : 'border-gray-200 text-gray-600'}`}>
                   {m}
                 </button>
               ))}
@@ -177,7 +177,7 @@ SECTION B:
             <div className="flex gap-2">
               {[30, 60, 90, 180].map(t => (
                 <button key={t} onClick={() => setConfig(p => ({...p, timeLimit: t}))}
-                  className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 ${config.timeLimit === t ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 text-gray-600'}`}>
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 ${config.timeLimit === t ? 'bg-brand-primary border-brand-primary text-white' : 'border-gray-200 text-gray-600'}`}>
                   {t}m
                 </button>
               ))}
@@ -197,7 +197,7 @@ SECTION B:
               </div>
               <button
                 onClick={() => setConfig(p => ({...p, [toggle.key]: !p[toggle.key]}))}
-                className={`w-12 h-6 rounded-full transition-colors ${config[toggle.key] ? 'bg-purple-600' : 'bg-gray-200'}`}
+                className={`w-12 h-6 rounded-full transition-colors ${config[toggle.key] ? 'bg-brand-primary' : 'bg-gray-200'}`}
               >
                 <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${config[toggle.key] ? 'translate-x-6' : ''}`} />
               </button>
@@ -207,7 +207,7 @@ SECTION B:
 
         <button
           onClick={handleGenerate}
-          className="w-full font-black py-4 rounded-2xl text-base bg-gradient-to-r from-purple-600 to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all active:scale-95"
+          className="w-full font-black py-4 rounded-xl text-base bg-gradient-to-r from-brand-primary to-brand-mid text-white shadow-lg hover:shadow-xl transition-all active:scale-95"
         >
           ✨ Generate Test Paper
         </button>

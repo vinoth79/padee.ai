@@ -5,17 +5,17 @@ import { testQuestions, mockTestResult } from '../data/mockData'
 function PreTestScreen({ onStart, onBack }) {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pb-10">
-      <div className="bg-gradient-to-br from-purple-700 to-indigo-800 px-4 pt-12 pb-8">
+      <div className="bg-gradient-to-br from-brand-dark to-brand-primary px-4 pt-12 pb-8">
         <button onClick={onBack} className="text-white/70 mb-4 block">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         </button>
         <div className="bg-white/10 text-white/70 text-xs font-bold px-3 py-1 rounded-full inline-block mb-3">Chapter Test</div>
         <h1 className="text-white font-black text-2xl leading-tight">Chapter 12 · Electricity</h1>
-        <p className="text-purple-200 text-sm mt-1">Class 10 Physics · CBSE Pattern</p>
+        <p className="text-brand-pale text-sm mt-1">Class 10 Physics · CBSE Pattern</p>
       </div>
 
       <div className="px-4 -mt-4">
-        <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 mb-4">
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-5 mb-4">
           <div className="grid grid-cols-2 gap-4">
             {[
               { icon: '❓', label: 'Questions', value: '15' },
@@ -24,7 +24,7 @@ function PreTestScreen({ onStart, onBack }) {
               { icon: '📝', label: 'Pattern', value: '10 MCQ + 5 Short' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">{item.icon}</div>
+                <div className="w-8 h-8 bg-brand-light rounded-lg flex items-center justify-center">{item.icon}</div>
                 <div>
                   <div className="text-xs text-gray-400">{item.label}</div>
                   <div className="text-sm font-bold text-gray-800">{item.value}</div>
@@ -34,7 +34,7 @@ function PreTestScreen({ onStart, onBack }) {
           </div>
         </div>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
           <div className="font-bold text-amber-800 text-sm mb-2">📌 Instructions</div>
           <ul className="space-y-1">
             {[
@@ -52,7 +52,7 @@ function PreTestScreen({ onStart, onBack }) {
 
         <button
           onClick={onStart}
-          className="w-full bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-black py-4 rounded-2xl text-base shadow-lg hover:shadow-xl transition-all active:scale-95"
+          className="w-full bg-gradient-to-r from-brand-primary to-brand-mid text-white font-black py-4 rounded-xl text-base shadow-lg hover:shadow-xl transition-all active:scale-95"
         >
           Start Test →
         </button>
@@ -108,7 +108,7 @@ function TestInterface({ onSubmit, onBack }) {
   const navColors = {
     answered: 'bg-emerald-500 text-white',
     flagged: 'bg-orange-400 text-white',
-    current: 'bg-purple-600 text-white ring-2 ring-purple-300',
+    current: 'bg-brand-primary text-white ring-2 ring-brand-pale',
     unattempted: 'bg-gray-100 text-gray-500',
   }
 
@@ -116,7 +116,7 @@ function TestInterface({ onSubmit, onBack }) {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className={`px-4 pt-12 pb-3 flex items-center gap-3 border-b border-gray-100 ${timeWarning ? 'bg-red-50' : 'bg-white'}`}>
-        <div className={`flex items-center gap-2 font-black text-lg px-3 py-1.5 rounded-xl ${timeWarning ? 'bg-red-100 text-red-700' : 'bg-purple-100 text-purple-700'}`}>
+        <div className={`flex items-center gap-2 font-black text-lg px-3 py-1.5 rounded-xl ${timeWarning ? 'bg-red-100 text-red-700' : 'bg-brand-light text-brand-primary'}`}>
           <span>⏱</span>
           <span>{String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}</span>
         </div>
@@ -143,7 +143,7 @@ function TestInterface({ onSubmit, onBack }) {
         {/* Question type badge */}
         <div className="flex items-center gap-2">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-            q.type === 'mcq' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+            q.type === 'mcq' ? 'bg-blue-100 text-blue-700' : 'bg-brand-light text-brand-primary'
           }`}>
             {q.type === 'mcq' ? 'MCQ' : 'Short Answer'} · {q.marks} mark{q.marks > 1 ? 's' : ''}
           </span>
@@ -151,7 +151,7 @@ function TestInterface({ onSubmit, onBack }) {
         </div>
 
         {/* Question */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-5">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-5">
           <p className="text-sm font-semibold text-gray-900 leading-relaxed">{q.question}</p>
         </div>
 
@@ -162,15 +162,15 @@ function TestInterface({ onSubmit, onBack }) {
               <button
                 key={idx}
                 onClick={() => setAnswer(idx)}
-                className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left font-medium text-sm transition-all active:scale-98 ${
+                className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left font-medium text-sm transition-all active:scale-98 ${
                   answers[q.id] === idx
-                    ? 'border-purple-500 bg-purple-50 text-purple-800'
+                    ? 'border-brand-primary bg-brand-light text-brand-primary'
                     : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                 }`}
               >
                 <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-all ${
                   answers[q.id] === idx
-                    ? 'bg-purple-600 border-purple-600 text-white'
+                    ? 'bg-brand-primary border-brand-primary text-white'
                     : 'border-gray-300 text-gray-500'
                 }`}>
                   {['A','B','C','D'][idx]}
@@ -183,7 +183,7 @@ function TestInterface({ onSubmit, onBack }) {
 
         {/* Short answer */}
         {q.type === 'short' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <textarea
               value={answers[q.id] || ''}
               onChange={e => setAnswer(e.target.value)}
@@ -209,7 +209,7 @@ function TestInterface({ onSubmit, onBack }) {
             if (current + 1 < questions.length) setCurrent(c => c + 1)
             else setShowSubmitModal(true)
           }}
-          className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 rounded-xl text-sm active:scale-95"
+          className="flex-1 bg-gradient-to-r from-brand-primary to-brand-mid text-white font-bold py-3 rounded-xl text-sm active:scale-95"
         >
           {current + 1 < questions.length ? 'Next →' : 'Submit Test →'}
         </button>
@@ -242,7 +242,7 @@ function TestInterface({ onSubmit, onBack }) {
             </div>
             <button
               onClick={() => { setShowNav(false); setShowSubmitModal(true) }}
-              className="w-full mt-4 bg-purple-600 text-white font-bold py-3 rounded-xl"
+              className="w-full mt-4 bg-brand-primary text-white font-bold py-3 rounded-xl"
             >
               Submit Test
             </button>
@@ -254,7 +254,7 @@ function TestInterface({ onSubmit, onBack }) {
       {showSubmitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowSubmitModal(false)} />
-          <div className="relative bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl">
+          <div className="relative bg-white rounded-xl p-6 w-full max-w-xs shadow-2xl">
             <div className="text-2xl text-center mb-2">⚠️</div>
             <h3 className="text-center font-black text-gray-900 mb-2">Ready to submit?</h3>
             <p className="text-center text-sm text-gray-500 mb-4">
@@ -271,7 +271,7 @@ function TestInterface({ onSubmit, onBack }) {
               </button>
               <button
                 onClick={() => { clearInterval(timerRef.current); onSubmit(answers) }}
-                className="flex-1 bg-purple-600 text-white font-bold py-3 rounded-xl text-sm"
+                className="flex-1 bg-brand-primary text-white font-bold py-3 rounded-xl text-sm"
               >
                 Submit
               </button>
@@ -287,7 +287,7 @@ function TestInterface({ onSubmit, onBack }) {
 function EvaluatingScreen() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-6">
-      <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center shadow-2xl animate-pulse-slow">
+      <div className="w-20 h-20 bg-gradient-to-br from-brand-primary to-brand-mid rounded-full flex items-center justify-center shadow-2xl animate-pulse-slow">
         <span className="text-4xl">🤖</span>
       </div>
       <div className="text-center">
@@ -296,7 +296,7 @@ function EvaluatingScreen() {
       </div>
       <div className="flex gap-2">
         {[0, 1, 2].map(i => (
-          <div key={i} className="w-3 h-3 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+          <div key={i} className="w-3 h-3 bg-brand-pale rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
         ))}
       </div>
     </div>

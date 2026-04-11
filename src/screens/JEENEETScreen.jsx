@@ -9,13 +9,13 @@ export default function JEENEETScreen({ onNavigate }) {
   return (
     <div className="pb-24 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="bg-gradient-to-br from-slate-800 via-slate-900 to-black px-4 pt-12 pb-8 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-brand-dark to-brand-primary px-4 pt-12 pb-8 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.3),_transparent_60%)]" />
         <button onClick={() => onNavigate('home')} className="text-white/60 mb-4 block relative">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         </button>
         <div className="relative">
-          <div className="text-purple-400 text-xs font-bold tracking-widest uppercase mb-2">🚀 Advanced Tracks</div>
+          <div className="text-brand-pale text-xs font-bold tracking-widest uppercase mb-2">🚀 Advanced Tracks</div>
           <h1 className="text-white font-black text-3xl leading-tight">JEE / NEET<br />Foundation</h1>
           <p className="text-white/60 text-sm mt-2 leading-relaxed">
             Take your CBSE mastery to the next level.<br />
@@ -26,7 +26,7 @@ export default function JEENEETScreen({ onNavigate }) {
 
       {/* Unlock status */}
       {!isUnlocked && (
-        <div className="mx-4 mt-4 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center gap-3">
+        <div className="mx-4 mt-4 bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center gap-3">
           <span className="text-2xl">🔒</span>
           <div className="flex-1">
             <div className="font-bold text-amber-800 text-sm">Unlocks at Level 7 (Top Achiever)</div>
@@ -46,7 +46,7 @@ export default function JEENEETScreen({ onNavigate }) {
         <TrackCard track={neet} unlocked={isUnlocked} onNavigate={onNavigate} />
 
         {/* What's different section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-black text-gray-900 text-sm mb-3">How is this different from CBSE?</h2>
           <div className="space-y-3">
             {[
@@ -56,7 +56,7 @@ export default function JEENEETScreen({ onNavigate }) {
               { icon: '🔗', title: 'Cross-subject links', desc: 'How Maths shows up in Physics problems' },
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">{item.icon}</div>
+                <div className="w-8 h-8 bg-brand-light rounded-lg flex items-center justify-center flex-shrink-0">{item.icon}</div>
                 <div>
                   <div className="text-sm font-semibold text-gray-800">{item.title}</div>
                   <div className="text-xs text-gray-400">{item.desc}</div>
@@ -67,13 +67,13 @@ export default function JEENEETScreen({ onNavigate }) {
         </div>
 
         {/* CTA */}
-        <div className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-2xl p-5 text-center">
+        <div className="bg-gradient-to-br from-brand-dark to-brand-primary rounded-xl p-5 text-center">
           <div className="text-3xl mb-2">🎓</div>
           <h3 className="text-white font-black text-lg mb-1">Start your foundation now</h3>
-          <p className="text-purple-300 text-sm mb-4">Students who start JEE prep in Class 10 score 30% higher on average.</p>
+          <p className="text-brand-pale text-sm mb-4">Students who start JEE prep in Class 10 score 30% higher on average.</p>
           <button
             onClick={() => onNavigate('practice')}
-            className={`w-full font-black py-3 rounded-2xl text-sm transition-all active:scale-95 ${
+            className={`w-full font-black py-3 rounded-xl text-sm transition-all active:scale-95 ${
               isUnlocked
                 ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-white'
                 : 'bg-white/10 text-white/40 cursor-not-allowed'
@@ -89,7 +89,7 @@ export default function JEENEETScreen({ onNavigate }) {
 
 function TrackCard({ track, unlocked, onNavigate }) {
   return (
-    <div className={`rounded-2xl overflow-hidden shadow-md ${!unlocked ? 'opacity-70' : ''}`}>
+    <div className={`rounded-xl overflow-hidden shadow-md ${!unlocked ? 'opacity-70' : ''}`}>
       <div className={`bg-gradient-to-r ${track.color} px-4 py-4`}>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-2xl">{track.icon}</span>

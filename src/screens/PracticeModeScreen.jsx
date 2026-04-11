@@ -60,7 +60,7 @@ function MCQSession({ onComplete, onNavigate }) {
         </button>
         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-brand-primary to-violet-400 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-brand-primary to-brand-pale rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -71,13 +71,13 @@ function MCQSession({ onComplete, onNavigate }) {
       <div className="flex-1 px-4 flex flex-col">
         {/* Subject chip */}
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-bold text-brand-primary bg-violet-100 px-3 py-1 rounded-full">{q.subject}</span>
+          <span className="text-xs font-bold text-brand-primary bg-brand-light px-3 py-1 rounded-full">{q.subject}</span>
           <span className="text-xs text-brand-slate bg-white px-2 py-1 rounded-full border border-gray-200">{q.difficulty}</span>
           <span className="ml-auto text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">+{q.xp || 10} XP</span>
         </div>
 
         {/* Question */}
-        <div className="bg-white rounded-3xl px-5 py-5 shadow-card mb-5">
+        <div className="bg-white rounded-xl px-5 py-5 shadow-card mb-5">
           <p className="text-base font-bold text-brand-navy leading-relaxed">{q.question}</p>
         </div>
 
@@ -86,7 +86,7 @@ function MCQSession({ onComplete, onNavigate }) {
           {q.options.map((opt, idx) => {
             let style = 'bg-white border-2 border-gray-200 text-brand-navy'
             if (!submitted) {
-              if (selected === idx) style = 'bg-violet-50 border-2 border-brand-primary text-brand-primary shadow-sm'
+              if (selected === idx) style = 'bg-brand-light border-2 border-brand-primary text-brand-primary shadow-sm'
             } else {
               if (idx === q.correct) style = 'bg-emerald-50 border-2 border-brand-success text-emerald-800'
               else if (idx === selected && selected !== q.correct) style = 'bg-amber-50 border-2 border-amber-300 text-amber-800'
@@ -97,7 +97,7 @@ function MCQSession({ onComplete, onNavigate }) {
               <button
                 key={idx}
                 onClick={() => !submitted && setSelected(idx)}
-                className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl text-left font-semibold text-sm transition-all active:scale-[0.98] ${style}`}
+                className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl text-left font-semibold text-sm transition-all active:scale-[0.98] ${style}`}
               >
                 <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black border-2 transition-all ${
                   !submitted
@@ -125,7 +125,7 @@ function MCQSession({ onComplete, onNavigate }) {
           <button
             onClick={handleSubmit}
             disabled={selected === null}
-            className={`w-full py-4 rounded-2xl font-black text-base transition-all active:scale-95 ${
+            className={`w-full py-4 rounded-xl font-black text-base transition-all active:scale-95 ${
               selected !== null
                 ? 'bg-brand-primary text-white shadow-action'
                 : 'bg-gray-200 text-gray-400'
@@ -154,7 +154,7 @@ function MCQSession({ onComplete, onNavigate }) {
           </div>
           <button
             onClick={handleNext}
-            className={`w-full py-3.5 rounded-2xl font-black text-sm mb-4 transition-all active:scale-95 ${
+            className={`w-full py-3.5 rounded-xl font-black text-sm mb-4 transition-all active:scale-95 ${
               isCorrect ? 'bg-white text-emerald-700' : 'bg-white text-amber-800'
             }`}
           >
@@ -198,7 +198,7 @@ function PracticeComplete({ score, total, onNavigate }) {
         </div>
 
         {/* AI insight */}
-        <div className="bg-white rounded-3xl p-4 mb-6 shadow-card text-left">
+        <div className="bg-white rounded-xl p-4 mb-6 shadow-card text-left">
           <div className="flex items-center gap-2 mb-2">
             <AIOrb size="xs" state="idle" />
             <span className="text-xs font-bold text-brand-primary">AI Insight</span>
@@ -215,13 +215,13 @@ function PracticeComplete({ score, total, onNavigate }) {
         <div className="flex gap-3">
           <button
             onClick={() => onNavigate('practice')}
-            className="flex-1 bg-white border-2 border-gray-200 text-brand-navy font-bold py-3.5 rounded-2xl text-sm active:scale-95"
+            className="flex-1 bg-white border-2 border-gray-200 text-brand-navy font-bold py-3.5 rounded-xl text-sm active:scale-95"
           >
             Try again
           </button>
           <button
             onClick={() => onNavigate('home')}
-            className="flex-1 bg-brand-primary text-white font-bold py-3.5 rounded-2xl text-sm shadow-action active:scale-95"
+            className="flex-1 bg-brand-primary text-white font-bold py-3.5 rounded-xl text-sm shadow-action active:scale-95"
           >
             Home →
           </button>
@@ -247,7 +247,7 @@ function ModeSelector({ onSelectMode, onNavigate }) {
       <div className="px-4 mb-5">
         <button
           onClick={() => onSelectMode('mcq')}
-          className="w-full bg-gradient-to-br from-brand-primary to-violet-700 rounded-3xl p-5 text-left shadow-action relative overflow-hidden"
+          className="w-full bg-gradient-to-br from-brand-primary to-brand-mid rounded-xl p-5 text-left shadow-action relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
           <div className="flex items-center gap-2 mb-2">
@@ -256,7 +256,7 @@ function ModeSelector({ onSelectMode, onNavigate }) {
           </div>
           <h2 className="text-white font-black text-lg leading-snug mb-1">Power Formulas need work.</h2>
           <p className="text-white/70 text-sm mb-3">5 quick questions. Takes ~4 minutes. Let's fix this gap.</p>
-          <div className="bg-white text-brand-primary font-black text-sm py-2.5 rounded-2xl text-center">
+          <div className="bg-white text-brand-primary font-black text-sm py-2.5 rounded-xl text-center">
             Start now →
           </div>
         </button>
@@ -265,15 +265,15 @@ function ModeSelector({ onSelectMode, onNavigate }) {
       <div className="px-4 space-y-3">
         {[
           { id: 'mcq', icon: '⚡', label: 'Quick MCQ', desc: '5–10 questions, instant feedback', bg: 'bg-amber-50', text: 'text-amber-700' },
-          { id: 'descriptive', icon: '✍️', label: 'Written Answer', desc: 'AI evaluates your CBSE answer', bg: 'bg-violet-50', text: 'text-violet-700' },
+          { id: 'descriptive', icon: '✍️', label: 'Written Answer', desc: 'AI evaluates your CBSE answer', bg: 'bg-brand-light', text: 'text-brand-primary' },
           { id: 'coding', icon: '💻', label: 'Coding Practice', desc: 'Python problems with AI feedback', bg: 'bg-cyan-50', text: 'text-cyan-700' },
         ].map(m => (
           <button
             key={m.id}
             onClick={() => onSelectMode(m.id)}
-            className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 shadow-card hover:shadow-card-hover transition-shadow active:scale-[0.98]"
+            className="w-full flex items-center gap-4 bg-white rounded-xl p-4 shadow-card hover:shadow-card-hover transition-shadow active:scale-[0.98]"
           >
-            <div className={`w-12 h-12 ${m.bg} rounded-2xl flex items-center justify-center text-2xl`}>{m.icon}</div>
+            <div className={`w-12 h-12 ${m.bg} rounded-xl flex items-center justify-center text-2xl`}>{m.icon}</div>
             <div className="flex-1 text-left">
               <p className={`font-bold text-sm ${m.text}`}>{m.label}</p>
               <p className="text-xs text-brand-slate mt-0.5">{m.desc}</p>
@@ -315,17 +315,17 @@ function DescriptiveSession({ onNavigate }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 space-y-4">
-        <div className="bg-white rounded-2xl shadow-card px-4 py-4">
+        <div className="bg-white rounded-xl shadow-card px-4 py-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-bold text-brand-slate uppercase">Question</span>
-            <span className="ml-auto text-xs font-bold text-brand-primary bg-violet-50 px-2 py-0.5 rounded-full">{q.marks} marks</span>
+            <span className="ml-auto text-xs font-bold text-brand-primary bg-brand-light px-2 py-0.5 rounded-full">{q.marks} marks</span>
           </div>
           <p className="text-sm font-semibold text-brand-navy leading-relaxed">{q.question}</p>
         </div>
 
         {!evaluated ? (
           <>
-            <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+            <div className="bg-white rounded-xl shadow-card overflow-hidden">
               <label className="block px-4 pt-3 text-xs font-bold text-brand-slate uppercase tracking-wider">Your Answer</label>
               <textarea
                 value={answer}
@@ -339,7 +339,7 @@ function DescriptiveSession({ onNavigate }) {
             <button
               onClick={handleSubmit}
               disabled={answer.trim().length < 20 || loading}
-              className={`w-full font-bold py-4 rounded-2xl text-sm transition-all active:scale-95 ${
+              className={`w-full font-bold py-4 rounded-xl text-sm transition-all active:scale-95 ${
                 answer.trim().length >= 20 && !loading
                   ? 'bg-brand-primary text-white shadow-action'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -355,7 +355,7 @@ function DescriptiveSession({ onNavigate }) {
           </>
         ) : (
           <div className="space-y-3 animate-slide-up">
-            <div className="bg-white rounded-2xl shadow-card p-4">
+            <div className="bg-white rounded-xl shadow-card p-4">
               <div className="flex items-center gap-3 mb-3">
                 <AIOrb size="sm" state="idle" />
                 <div>
@@ -381,8 +381,8 @@ function DescriptiveSession({ onNavigate }) {
             </div>
 
             <div className="flex gap-3">
-              <button onClick={() => { setEvaluated(false); setAnswer('') }} className="flex-1 bg-white border-2 border-gray-200 text-brand-navy font-bold py-3 rounded-2xl text-sm active:scale-95">Try again</button>
-              <button onClick={() => onNavigate('home')} className="flex-1 bg-brand-primary text-white font-bold py-3 rounded-2xl text-sm shadow-action active:scale-95">Home →</button>
+              <button onClick={() => { setEvaluated(false); setAnswer('') }} className="flex-1 bg-white border-2 border-gray-200 text-brand-navy font-bold py-3 rounded-xl text-sm active:scale-95">Try again</button>
+              <button onClick={() => onNavigate('home')} className="flex-1 bg-brand-primary text-white font-bold py-3 rounded-xl text-sm shadow-action active:scale-95">Home →</button>
             </div>
           </div>
         )}
@@ -450,7 +450,7 @@ function CodingSession({ onNavigate }) {
         )}
 
         {submitted && (
-          <div className="mx-4 my-4 bg-gray-800 border border-emerald-500/30 rounded-2xl p-4 animate-slide-up">
+          <div className="mx-4 my-4 bg-gray-800 border border-emerald-500/30 rounded-xl p-4 animate-slide-up">
             <div className="flex items-center gap-2 mb-2">
               <AIOrb size="xs" state="celebrating" />
               <span className="font-bold text-emerald-400 text-sm">Correct! +15 XP</span>

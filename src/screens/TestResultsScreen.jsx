@@ -23,7 +23,7 @@ export default function TestResultsScreen({ onNavigate }) {
       <XPToast xp={result.xpEarned} message="Test completed!" visible={showXP} onDone={() => setShowXP(false)} />
 
       {/* Score hero */}
-      <div className="bg-gradient-to-br from-purple-700 via-indigo-700 to-violet-800 px-4 pt-12 pb-8">
+      <div className="bg-gradient-to-br from-brand-dark via-brand-primary to-brand-dark px-4 pt-12 pb-8">
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => onNavigate('home')} className="text-white/70">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
@@ -69,7 +69,7 @@ export default function TestResultsScreen({ onNavigate }) {
 
       <div className="px-4 space-y-4 mt-4">
         {/* Section breakdown */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 pt-4 pb-2">
             <h2 className="font-black text-gray-900 text-sm">Section Breakdown</h2>
           </div>
@@ -102,9 +102,9 @@ export default function TestResultsScreen({ onNavigate }) {
         </div>
 
         {/* AI Insights */}
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-purple-200 rounded-2xl p-4">
+        <div className="bg-gradient-to-br from-brand-light to-brand-light border border-brand-pale/30 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-brand-primary to-brand-mid rounded-xl flex items-center justify-center">
               <span>🤖</span>
             </div>
             <span className="font-black text-gray-900 text-sm">AI Analysis</span>
@@ -130,11 +130,11 @@ export default function TestResultsScreen({ onNavigate }) {
             </div>
 
             <div className="bg-white rounded-xl p-3">
-              <div className="text-xs font-bold text-purple-700 mb-1">🚀 Recommended next step:</div>
+              <div className="text-xs font-bold text-brand-primary mb-1">🚀 Recommended next step:</div>
               <div className="text-xs text-gray-700">{result.aiInsights.recommendation}</div>
               <button
                 onClick={() => onNavigate('practice')}
-                className="mt-2 text-xs font-bold text-purple-600 hover:text-purple-700"
+                className="mt-2 text-xs font-bold text-purple-600 hover:text-brand-primary"
               >
                 Start Recommended Practice →
               </button>
@@ -143,7 +143,7 @@ export default function TestResultsScreen({ onNavigate }) {
         </div>
 
         {/* Question review */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 pt-4 pb-3 border-b border-gray-100">
             <h2 className="font-black text-gray-900 text-sm">Question Review</h2>
             <p className="text-xs text-gray-400 mt-0.5">Tap any question to see explanation</p>
@@ -188,13 +188,13 @@ export default function TestResultsScreen({ onNavigate }) {
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => onNavigate('test')}
-            className="bg-white border-2 border-gray-200 text-gray-700 font-bold py-3 rounded-2xl text-sm hover:border-gray-300 active:scale-95"
+            className="bg-white border-2 border-gray-200 text-gray-700 font-bold py-3 rounded-xl text-sm hover:border-gray-300 active:scale-95"
           >
             🔄 Reattempt
           </button>
           <button
             onClick={() => onNavigate('practice')}
-            className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 rounded-2xl text-sm shadow-md active:scale-95"
+            className="bg-gradient-to-r from-brand-primary to-brand-mid text-white font-bold py-3 rounded-xl text-sm shadow-md active:scale-95"
           >
             ⚡ Practice Weak Areas
           </button>

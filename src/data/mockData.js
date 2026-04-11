@@ -424,15 +424,19 @@ export const progressData = {
 
 // ─── BADGES ───────────────────────────────────────────────────────────────────
 export const badges = [
-  { id: 'b1', name: 'First Doubt', icon: '💬', desc: 'Asked your first doubt', unlocked: true, color: 'purple' },
-  { id: 'b2', name: 'Curious Mind', icon: '🧠', desc: 'Asked 10 doubts in a week', unlocked: true, color: 'blue' },
-  { id: 'b3', name: 'Snap & Learn', icon: '📸', desc: 'Uploaded a photo doubt', unlocked: true, color: 'pink' },
-  { id: 'b4', name: 'Practice Champion', icon: '🏆', desc: '50 practice questions', unlocked: true, color: 'yellow' },
-  { id: 'b5', name: 'Perfect Score', icon: '⭐', desc: '100% on any test', unlocked: false, color: 'gold' },
-  { id: 'b6', name: 'Speed Runner', icon: '⚡', desc: 'Finish quiz in half the time', unlocked: false, color: 'cyan' },
-  { id: 'b7', name: '7-Day Streak', icon: '🔥', desc: 'Studied 7 days in a row', unlocked: true, color: 'orange' },
-  { id: 'b8', name: 'Night Owl', icon: '🦉', desc: 'Studied after 10 PM', unlocked: true, color: 'indigo' },
-  { id: 'b9', name: 'Concept Legend', icon: '🎓', desc: 'Reach Level 8', unlocked: false, color: 'purple' },
+  { id: 'b1', name: 'First Doubt', icon: '💬', desc: 'Asked your first doubt', unlocked: true, progress: 1, total: 1, color: 'purple' },
+  { id: 'b2', name: 'Curious Mind', icon: '🧠', desc: 'Asked 10 doubts', unlocked: true, progress: 12, total: 10, color: 'blue' },
+  { id: 'b3', name: 'Snap & Learn', icon: '📸', desc: 'Uploaded a photo doubt', unlocked: true, progress: 1, total: 1, color: 'pink' },
+  { id: 'b4', name: 'Practice Champion', icon: '🏆', desc: 'Answer 50 questions', unlocked: true, progress: 50, total: 50, color: 'yellow' },
+  { id: 'b5', name: 'Perfect Score', icon: '⭐', desc: '100% on any test', unlocked: false, progress: 80, total: 100, color: 'gold' },
+  { id: 'b6', name: 'Speed Runner', icon: '⚡', desc: 'Finish quiz in half the time', unlocked: false, progress: 0, total: 1, color: 'cyan' },
+  { id: 'b7', name: '7-Day Streak', icon: '🔥', desc: '7 days in a row', unlocked: true, progress: 7, total: 7, color: 'orange' },
+  { id: 'b8', name: 'Night Owl', icon: '🦉', desc: 'Studied after 10 PM', unlocked: true, progress: 1, total: 1, color: 'indigo' },
+  { id: 'b9', name: '14-Day Streak', icon: '🔥', desc: '14 days in a row', unlocked: false, progress: 7, total: 14, color: 'orange' },
+  { id: 'b10', name: 'Topic Master', icon: '💪', desc: '100% mastery on any topic', unlocked: false, progress: 80, total: 100, color: 'green' },
+  { id: 'b11', name: 'Subject Star', icon: '🌟', desc: '80%+ across all chapters', unlocked: false, progress: 3, total: 15, color: 'gold' },
+  { id: 'b12', name: 'Challenge Champ', icon: '🎯', desc: 'Complete 5 daily challenges', unlocked: false, progress: 2, total: 5, color: 'teal' },
+  { id: 'b13', name: 'Concept Legend', icon: '🎓', desc: 'Reach Level 8', unlocked: false, progress: 6, total: 8, color: 'purple' },
 ]
 
 // ─── LEVELS ───────────────────────────────────────────────────────────────────
@@ -590,6 +594,30 @@ export const jeeNeetPreviewData = {
   },
 }
 
+// ─── DAILY GOAL ──────────────────────────────────────────────────────────────
+export const dailyGoal = {
+  target: 50,
+  current: 35,
+  breakdown: { doubts: 10, practice: 15, revision: 10, test: 0 },
+  streakAtRisk: true, // student hasn't hit goal today yet
+}
+
+// ─── WEAK TOPICS (AI-detected) ──────────────────────────────────────────────
+export const weakTopics = [
+  { topic: 'Power & Energy (P=VI)', subject: 'Physics', chapter: 'Electricity', accuracy: 35, attempts: 6, icon: '⚡', color: 'blue' },
+  { topic: 'Periodic Classification', subject: 'Chemistry', chapter: 'Periodic Table', accuracy: 42, attempts: 4, icon: '🧪', color: 'orange' },
+  { topic: 'Arithmetic Progressions', subject: 'Mathematics', chapter: 'AP', accuracy: 0, attempts: 0, icon: '📐', color: 'purple' },
+]
+
+// ─── REVISION CARDS (for 2-min revision) ────────────────────────────────────
+export const revisionCards = [
+  { front: "What is Ohm's Law?", back: 'V = I × R — Voltage equals Current times Resistance', topic: "Ohm's Law", subject: 'Physics' },
+  { front: 'What happens to current when resistance doubles?', back: 'Current halves (I = V/R, V is constant)', topic: "Ohm's Law", subject: 'Physics' },
+  { front: 'Series circuit: how does total resistance work?', back: 'R_total = R₁ + R₂ + R₃ (resistances add up)', topic: 'Circuits', subject: 'Physics' },
+  { front: 'Parallel circuit: what stays the same?', back: 'Voltage stays the same across all branches', topic: 'Circuits', subject: 'Physics' },
+  { front: 'Formula for electric power?', back: 'P = V × I = I²R = V²/R', topic: 'Power', subject: 'Physics' },
+]
+
 // ─── DAILY CHALLENGES ─────────────────────────────────────────────────────────
 export const dailyChallenges = [
   {
@@ -603,6 +631,7 @@ export const dailyChallenges = [
     difficulty: 'Medium',
     icon: '⚡',
     color: 'blue',
+    bestScore: '4/5 in 52s',
   },
   {
     id: 'dc2',
@@ -615,7 +644,66 @@ export const dailyChallenges = [
     difficulty: 'Hard',
     icon: '📐',
     color: 'purple',
+    bestScore: null,
   },
+]
+
+// ─── RECENT WINS ─────────────────────────────────────────────────────────────
+export const recentWins = [
+  { id: 'w1', badge: '🔥', title: '7-Day Streak', when: 'Today', color: 'orange' },
+  { id: 'w2', badge: '🧠', title: 'Curious Mind', when: 'Yesterday', color: 'blue' },
+  { id: 'w3', badge: '📸', title: 'Snap & Learn', when: '3 days ago', color: 'pink' },
+]
+
+// ─── TEACHER AI ALERTS ───────────────────────────────────────────────────────
+export const teacherAIAlerts = [
+  {
+    id: 'ta1',
+    type: 'struggle',
+    icon: '⚠️',
+    severity: 'high',
+    message: '8 students scored below 40% on Ohm\'s Law this week',
+    action: 'Generate remedial worksheet',
+    actionScreen: 'worksheet',
+    time: '2 hours ago',
+  },
+  {
+    id: 'ta2',
+    type: 'decline',
+    icon: '📉',
+    severity: 'medium',
+    message: 'Priya Patel\'s performance dropped 15% this week',
+    action: 'View student details',
+    actionScreen: 'students',
+    time: '5 hours ago',
+  },
+  {
+    id: 'ta3',
+    type: 'completion',
+    icon: '✅',
+    severity: 'low',
+    message: 'Class 10B completed Chapter 12 — Electricity',
+    action: 'Generate chapter test',
+    actionScreen: 'test-generator',
+    time: 'Yesterday',
+  },
+  {
+    id: 'ta4',
+    type: 'streak',
+    icon: '🔥',
+    severity: 'low',
+    message: 'Ananya Singh hit a 21-day streak — consider recognition',
+    action: 'View student',
+    actionScreen: 'students',
+    time: 'Yesterday',
+  },
+]
+
+// ─── TEACHER SPOTLIGHT STUDENTS ──────────────────────────────────────────────
+export const spotlightStudents = [
+  { name: 'Rohan Gupta', avatar: 'RG', insight: 'Scored 45% — hasn\'t practiced in 5 days', status: 'At risk', action: 'Assign practice set', color: 'red' },
+  { name: 'Meera Patel', avatar: 'MP', insight: 'Struggling with Series Circuits specifically', status: 'Needs help', action: 'Send targeted worksheet', color: 'amber' },
+  { name: 'Sneha Reddy', avatar: 'SR', insight: 'Dropped from 75% to 58% in 2 weeks', status: 'Declining', action: 'Review performance', color: 'amber' },
 ]
 
 // ─── PARENT SUMMARY ───────────────────────────────────────────────────────────

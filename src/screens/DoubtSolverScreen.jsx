@@ -9,6 +9,15 @@ const SAMPLE_QUESTIONS = [
   { q: "How do I solve quadratic equations?", icon: '📐' },
 ]
 
+const QUICK_ACTIONS = [
+  { icon: '📖', label: 'Explain a concept', prompt: 'Explain ' },
+  { icon: '✏️', label: 'Solve a problem', prompt: 'Solve this: ' },
+  { icon: '⚡', label: 'Quiz me on a topic', prompt: 'Quiz me on ' },
+  { icon: '🔄', label: 'Help me revise', prompt: 'Revise ' },
+  { icon: '✅', label: 'Check my answer', prompt: 'Check if this is correct: ' },
+  { icon: '📝', label: 'Prep for a test', prompt: 'Help me prepare for a test on ' },
+]
+
 // Parse AI text into step cards
 function parseSteps(text) {
   if (!text) return []
@@ -42,21 +51,21 @@ function parseSteps(text) {
 function StepCard({ step, index, total }) {
   if (step.type === 'tip') {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
         <p className="text-xs text-amber-700 leading-relaxed">{step.content}</p>
       </div>
     )
   }
   if (step.type === 'intro') {
     return (
-      <div className="bg-white rounded-2xl px-4 py-3 shadow-card border border-white">
+      <div className="bg-white rounded-xl px-4 py-3 shadow-card border border-white">
         <p className="text-sm text-brand-navy leading-relaxed">{step.content}</p>
       </div>
     )
   }
   // step card
   return (
-    <div className="bg-white rounded-2xl px-4 py-3.5 shadow-card border border-white animate-step-reveal" style={{ animationDelay: `${index * 120}ms` }}>
+    <div className="bg-white rounded-xl px-4 py-3.5 shadow-card border border-white animate-step-reveal" style={{ animationDelay: `${index * 120}ms` }}>
       <div className="flex items-center gap-2 mb-2">
         <div className="w-5 h-5 bg-brand-primary/10 rounded-full flex items-center justify-center">
           <span className="text-[10px] font-black text-brand-primary">{step.number}</span>
@@ -85,7 +94,7 @@ function InlineQuiz({ onAnswer }) {
   const isCorrect = submitted && options[selected]?.correct
 
   return (
-    <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4">
+    <div className="bg-brand-light border border-brand-pale/30 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-xs font-bold text-brand-primary">Quick quiz ⚡</span>
       </div>
@@ -218,7 +227,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion }) {
           </button>
           <div className="flex items-center gap-2">
             <AIOrb size="xs" state={loading ? 'thinking' : 'idle'} />
-            <span className="font-black text-brand-navy text-base">Ask a Doubt</span>
+            <span className="font-black text-brand-navy text-base">Ask AI</span>
           </div>
           <span className="ml-auto text-xs text-brand-slate bg-white px-2.5 py-1 rounded-full border border-gray-200 font-semibold">Physics</span>
         </div>
@@ -227,23 +236,50 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion }) {
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {empty && (
-          <div className="flex flex-col items-center pt-6 animate-fade-in">
+          <div className="flex flex-col items-center pt-4 animate-fade-in">
             <AIOrb size="lg" state="idle" className="mb-4" />
-            <h2 className="font-black text-brand-navy text-lg text-center mb-1">What's your doubt?</h2>
-            <p className="text-brand-slate text-sm text-center mb-5 max-w-xs">Type any question from your syllabus — I'll explain it step by step.</p>
+            <h2 className="font-black text-brand-navy text-lg text-center mb-1">What do you need help with?</h2>
+            <p className="text-brand-slate text-sm text-center mb-4 max-w-xs">Ask me anything from your syllabus, or pick an action below</p>
 
-            <div className="w-full space-y-2">
-              {SAMPLE_QUESTIONS.map((sq, i) => (
+            {/* Quick action grid */}
+            <div className="w-full grid grid-cols-3 gap-2 mb-4">
+              {QUICK_ACTIONS.map((action, i) => (
                 <button
                   key={i}
-                  onClick={() => sendMessage(sq.q)}
-                  className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-3 text-left shadow-card hover:shadow-card-hover transition-shadow active:scale-[0.98]"
+                  onClick={() => { setInput(action.prompt); inputRef.current?.focus() }}
+                  className="flex flex-col items-center gap-1.5 bg-white rounded-xl px-2 py-3 shadow-card hover:shadow-card-hover transition-shadow active:scale-95"
                 >
-                  <span className="text-xl">{sq.icon}</span>
-                  <span className="text-sm text-brand-navy font-medium flex-1">{sq.q}</span>
-                  <span className="text-brand-slate text-lg">›</span>
+                  <span className="text-xl">{action.icon}</span>
+                  <span className="text-[10px] text-brand-navy font-semibold text-center leading-tight">{action.label}</span>
                 </button>
               ))}
+            </div>
+
+            {/* Photo upload */}
+            <button className="w-full flex items-center gap-3 bg-brand-light border border-brand-pale/30 rounded-xl px-4 py-3 mb-4 active:scale-[0.98] transition-transform">
+              <span className="text-xl">📸</span>
+              <div className="text-left">
+                <p className="text-sm font-bold text-brand-navy">Snap a problem from your textbook</p>
+                <p className="text-[11px] text-brand-slate">Take a photo and I'll solve it</p>
+              </div>
+            </button>
+
+            {/* Recent / sample questions */}
+            <div className="w-full">
+              <p className="text-[11px] font-bold text-brand-slate uppercase tracking-wider mb-2 px-1">Try asking</p>
+              <div className="space-y-2">
+                {SAMPLE_QUESTIONS.map((sq, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(sq.q)}
+                    className="w-full flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 text-left shadow-card hover:shadow-card-hover transition-shadow active:scale-[0.98]"
+                  >
+                    <span className="text-lg">{sq.icon}</span>
+                    <span className="text-sm text-brand-navy font-medium flex-1">{sq.q}</span>
+                    <span className="text-brand-slate text-lg">›</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -251,7 +287,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion }) {
         {messages.map((msg, i) => (
           <div key={msg.id || i} className={`flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
             {msg.role === 'student' ? (
-              <div className="max-w-[78%] bg-gradient-to-br from-brand-primary to-violet-700 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+              <div className="max-w-[78%] bg-gradient-to-br from-brand-primary to-brand-mid text-white rounded-xl rounded-tr-sm px-4 py-3 shadow-sm">
                 <p className="text-sm leading-relaxed">{msg.text}</p>
               </div>
             ) : (
@@ -275,15 +311,15 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion }) {
                 {i === messages.length - 1 && !showQuiz && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {[
-                      { key: 'simpler', label: 'Simpler 🧠' },
-                      { key: 'exam',    label: 'Exam answer 📝' },
-                      { key: 'quiz',    label: 'Quiz me ⚡' },
-                      { key: 'harder',  label: 'Harder 🎯' },
+                      { key: 'simpler', label: 'Explain simpler 🧠' },
+                      { key: 'exam',    label: 'Show exam answer 📝' },
+                      { key: 'quiz',    label: 'Quiz me on this ⚡' },
+                      { key: 'harder',  label: 'Give me harder 🎯' },
                     ].map(chip => (
                       <button
                         key={chip.key}
                         onClick={() => handleChip(chip.key)}
-                        className="text-xs bg-white border border-gray-200 text-brand-primary font-semibold px-3 py-1.5 rounded-full hover:bg-violet-50 hover:border-brand-primary/30 transition-colors active:scale-95 shadow-sm"
+                        className="text-xs bg-white border border-gray-200 text-brand-primary font-semibold px-3 py-1.5 rounded-full hover:bg-brand-light hover:border-brand-primary/30 transition-colors active:scale-95 shadow-sm"
                       >
                         {chip.label}
                       </button>
@@ -298,7 +334,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion }) {
         {loading && (
           <div className="flex items-center gap-2 animate-fade-in">
             <AIOrb size="xs" state="thinking" />
-            <div className="bg-white rounded-2xl shadow-card border border-white">
+            <div className="bg-white rounded-xl shadow-card border border-white">
               <TypingDots />
             </div>
           </div>
@@ -309,7 +345,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion }) {
 
       {/* Input bar */}
       <div className="bg-white/90 backdrop-blur-sm border-t border-white/60 px-4 py-3 pb-5 flex-shrink-0">
-        <div className="flex items-center gap-2 bg-brand-bg rounded-2xl border border-gray-200 px-4 py-2">
+        <div className="flex items-center gap-2 bg-brand-bg rounded-xl border border-gray-200 px-4 py-2">
           <textarea
             ref={inputRef}
             value={input}

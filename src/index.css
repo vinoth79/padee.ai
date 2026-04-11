@@ -3,18 +3,111 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Brand tokens — Forest Teal + Coral Orange */
+    --brand-teal:        #0D9488;
+    --brand-teal-dark:   #0F766E;
+    --brand-teal-darker: #134E4A;
+    --brand-teal-light:  #CCFBF1;
+    --brand-teal-pale:   #F0FDFA;
+
+    --brand-coral:       #EA580C;
+    --brand-coral-dark:  #C2410C;
+    --brand-coral-light: #FFF7ED;
+    --brand-coral-pale:  #FFEDD5;
+
+    --brand-amber:       #D97706;
+    --brand-amber-light: #FEF3C7;
+    --brand-amber-dark:  #B45309;
+
+    --brand-emerald:       #059669;
+    --brand-emerald-light: #ECFDF5;
+    --brand-emerald-dark:  #065F46;
+
+    /* Page backgrounds */
+    --bg-page:        #F8F7F4;
+    --bg-landing:     #F0FDFA;
+    --bg-card:        #FFFFFF;
+    --bg-surface:     #F9FAFB;
+
+    /* Text */
+    --text-primary:   #111827;
+    --text-secondary: #4B5563;
+    --text-muted:     #9CA3AF;
+    --text-hint:      #6B7280;
+
+    /* Borders */
+    --border-default: #E5E7EB;
+    --border-teal:    #99F6E4;
+    --border-teal-md: #5EEAD4;
+
+    /* Navbar */
+    --navbar-bg:      #FFFFFF;
+    --navbar-border:  #E5E7EB;
+
+    /* Nav active */
+    --nav-active-bg:   #ECFDF5;
+    --nav-active-text: #0F766E;
+    --nav-inactive:    #6B7280;
+
+    /* User avatar */
+    --avatar-bg:      #CCFBF1;
+    --avatar-border:  #5EEAD4;
+    --avatar-text:    #0F766E;
+
+    /* Subject colours */
+    --subj-physics-bg:      #EFF6FF;
+    --subj-physics-border:  #BFDBFE;
+    --subj-physics-text:    #1D4ED8;
+    --subj-physics-accent:  #2563EB;
+
+    --subj-chemistry-bg:    #FFF7ED;
+    --subj-chemistry-border:#FED7AA;
+    --subj-chemistry-text:  #C2410C;
+    --subj-chemistry-accent:#EA580C;
+
+    --subj-maths-bg:        #F5F3FF;
+    --subj-maths-border:    #DDD6FE;
+    --subj-maths-text:      #5B21B6;
+    --subj-maths-accent:    #7C3AED;
+
+    --subj-biology-bg:      #ECFDF5;
+    --subj-biology-border:  #A7F3D0;
+    --subj-biology-text:    #065F46;
+    --subj-biology-accent:  #059669;
+
+    --subj-cs-bg:           #ECFEFF;
+    --subj-cs-border:       #A5F3FC;
+    --subj-cs-text:         #0E7490;
+    --subj-cs-accent:       #0891B2;
+
+    --subj-english-bg:      #FFF1F2;
+    --subj-english-border:  #FECDD3;
+    --subj-english-text:    #BE123C;
+    --subj-english-accent:  #E11D48;
+
+    --subj-social-bg:       #FFFBEB;
+    --subj-social-border:   #FDE68A;
+    --subj-social-text:     #92400E;
+    --subj-social-accent:   #D97706;
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
+  }
+  html {
+    font-size: 16px;
   }
   html, body {
     height: 100%;
     overscroll-behavior: none;
   }
   body {
-    background: #E8E5F5;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg-page);
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+    font-size: 16px;
   }
   #root {
     height: 100%;
@@ -24,28 +117,26 @@
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-
-  /* Safe area for devices with notch */
   .pt-safe { padding-top: env(safe-area-inset-top, 44px); }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 }
 
-/* ─── AI Orb ─────────────────────────────────────────────────────────────── */
+/* ─── AI Orb — Forest Teal identity ──────────────────────────────────────── */
 .ai-orb {
-  background: radial-gradient(circle at 35% 35%, #a78bfa, #7c3aed 40%, #4c1d95 80%);
-  box-shadow: 0 0 24px rgba(124,58,237,0.5), 0 0 48px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.2);
+  background: radial-gradient(circle at 35% 35%, #99F6E4, #14B8A6 40%, #134E4A 80%);
+  box-shadow: 0 0 24px rgba(13,148,136,0.5), 0 0 48px rgba(13,148,136,0.25), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 .ai-orb-sm {
-  background: radial-gradient(circle at 35% 35%, #c4b5fd, #7c3aed 60%, #4c1d95);
-  box-shadow: 0 0 12px rgba(124,58,237,0.4);
+  background: radial-gradient(circle at 35% 35%, #CCFBF1, #14B8A6 60%, #134E4A);
+  box-shadow: 0 0 12px rgba(13,148,136,0.4);
 }
 .ai-orb-thinking {
-  background: radial-gradient(circle at 35% 35%, #c4b5fd, #7c3aed 40%, #4c1d95 80%);
-  box-shadow: 0 0 28px rgba(124,58,237,0.6), 0 0 56px rgba(124,58,237,0.3);
+  background: radial-gradient(circle at 35% 35%, #CCFBF1, #14B8A6 40%, #134E4A 80%);
+  box-shadow: 0 0 28px rgba(13,148,136,0.6), 0 0 56px rgba(13,148,136,0.3);
 }
 
 /* ─── Score ring ──────────────────────────────────────────────────────────── */
-.score-ring-track { fill: none; stroke: #e5e7eb; }
+.score-ring-track { fill: none; stroke: #E5E7EB; }
 .score-ring-fill  { fill: none; stroke-linecap: round; transition: stroke-dashoffset 1.5s cubic-bezier(0.4,0,0.2,1); }
 
 /* ─── Step card reveal ────────────────────────────────────────────────────── */
@@ -58,9 +149,9 @@
   background: rgba(255,255,255,0.92);
 }
 
-/* ─── Gradient text ───────────────────────────────────────────────────────── */
+/* ─── Gradient text — teal ───────────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+  background: linear-gradient(135deg, #0D9488, #5EEAD4);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -76,17 +167,9 @@
 /* ─── XP Toast ────────────────────────────────────────────────────────────── */
 .xp-toast { animation: xpFloat 2.2s ease-out forwards; }
 
-/* ─── Streaks bar ─────────────────────────────────────────────────────────── */
-@keyframes fillStreak {
-  from { width: 0; }
-  to { width: 100%; }
-}
-
 /* ─── Practice option press ──────────────────────────────────────────────── */
 .option-btn { transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease; }
 .option-btn:active { transform: scale(0.985); }
 
-/* ─── Smooth slide screens ───────────────────────────────────────────────── */
-.screen-enter {
-  animation: slideUp 0.25s ease-out;
-}
+/* ─── Screen transitions ─────────────────────────────────────────────────── */
+.screen-enter { animation: slideUp 0.2s ease-out; }

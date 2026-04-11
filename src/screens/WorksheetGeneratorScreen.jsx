@@ -53,14 +53,14 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
 
   return (
     <div className="pb-6 bg-gray-50 min-h-screen">
-      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-4 pt-6 pb-6">
+      <div className="bg-gradient-to-br from-brand-primary to-brand-mid px-4 pt-6 pb-6">
         <h1 className="text-white font-black text-2xl">Create Worksheet</h1>
         <p className="text-blue-200 text-sm mt-1">AI generates in seconds</p>
       </div>
 
       <div className="px-4 mt-4 space-y-4">
         {/* Class + Subject */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h3 className="font-bold text-gray-700 text-sm mb-3">Class & Subject</h3>
           <div className="flex flex-wrap gap-2 mb-3">
             {['8','9','10','11','12'].map(cls => (
@@ -68,7 +68,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
                 key={cls}
                 onClick={() => setConfig(prev => ({ ...prev, class: cls, chapter: '' }))}
                 className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-                  config.class === cls ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                  config.class === cls ? 'bg-brand-primary border-brand-primary text-white' : 'border-gray-200 text-gray-600 hover:border-blue-300'
                 }`}
               >
                 Class {cls}
@@ -78,14 +78,14 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
           <select
             value={config.subject}
             onChange={e => setConfig(prev => ({ ...prev, subject: e.target.value, chapter: '' }))}
-            className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 outline-none focus:border-blue-400"
+            className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 outline-none focus:border-brand-primary"
           >
             {(SUBJECTS_BY_CLASS[config.class] || []).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
         {/* Chapter */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h3 className="font-bold text-gray-700 text-sm mb-3">Chapter</h3>
           <div className="space-y-2">
             {chapters.map(ch => (
@@ -94,7 +94,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
                 onClick={() => setConfig(prev => ({ ...prev, chapter: ch }))}
                 className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
                   config.chapter === ch
-                    ? 'bg-blue-50 border-blue-400 text-blue-800'
+                    ? 'bg-blue-50 border-brand-primary text-blue-800'
                     : 'border-gray-200 text-gray-700 hover:border-blue-300'
                 }`}
               >
@@ -105,7 +105,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
         </div>
 
         {/* Question types */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h3 className="font-bold text-gray-700 text-sm mb-3">Question Types</h3>
           <div className="flex flex-wrap gap-2">
             {QUESTION_TYPES.map(type => (
@@ -114,7 +114,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
                 onClick={() => toggleType(type)}
                 className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
                   config.questionTypes.includes(type)
-                    ? 'bg-blue-600 border-blue-600 text-white'
+                    ? 'bg-brand-primary border-brand-primary text-white'
                     : 'border-gray-200 text-gray-600 hover:border-blue-300'
                 }`}
               >
@@ -125,7 +125,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
         </div>
 
         {/* Difficulty + Count */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h3 className="font-bold text-gray-700 text-sm mb-3">Settings</h3>
 
           <div className="mb-4">
@@ -136,7 +136,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
                   key={d}
                   onClick={() => setConfig(prev => ({ ...prev, difficulty: d }))}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                    config.difficulty === d ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-200 text-gray-600'
+                    config.difficulty === d ? 'bg-brand-primary border-brand-primary text-white' : 'border-gray-200 text-gray-600'
                   }`}
                 >
                   {d}
@@ -153,7 +153,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
               type="range" min={5} max={30} step={5}
               value={config.totalQuestions}
               onChange={e => setConfig(prev => ({ ...prev, totalQuestions: Number(e.target.value) }))}
-              className="w-full accent-blue-600"
+              className="w-full accent-teal-600"
             />
             <div className="flex justify-between text-xs text-gray-400 mt-1">
               <span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30</span>
@@ -167,7 +167,7 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
             </div>
             <button
               onClick={() => setConfig(prev => ({ ...prev, cbseFormat: !prev.cbseFormat }))}
-              className={`w-12 h-6 rounded-full transition-colors ${config.cbseFormat ? 'bg-blue-600' : 'bg-gray-200'}`}
+              className={`w-12 h-6 rounded-full transition-colors ${config.cbseFormat ? 'bg-brand-primary' : 'bg-gray-200'}`}
             >
               <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${config.cbseFormat ? 'translate-x-6' : ''}`} />
             </button>
@@ -178,9 +178,9 @@ export default function WorksheetGeneratorScreen({ onNavigate }) {
         <button
           onClick={handleGenerate}
           disabled={!config.chapter || config.questionTypes.length === 0}
-          className={`w-full font-black py-4 rounded-2xl text-base transition-all active:scale-95 ${
+          className={`w-full font-black py-4 rounded-xl text-base transition-all active:scale-95 ${
             config.chapter && config.questionTypes.length > 0
-              ? 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg hover:shadow-xl'
+              ? 'bg-gradient-to-r from-brand-primary to-brand-mid text-white shadow-lg hover:shadow-xl'
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
         >
@@ -203,7 +203,7 @@ function GeneratingScreen({ progress }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 gap-6">
-      <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-2xl animate-pulse-slow">
+      <div className="w-20 h-20 bg-gradient-to-br from-brand-primary to-brand-mid rounded-full flex items-center justify-center shadow-2xl animate-pulse-slow">
         <span className="text-4xl">✨</span>
       </div>
       <div className="text-center">
@@ -213,7 +213,7 @@ function GeneratingScreen({ progress }) {
       <div className="w-full max-w-xs">
         <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-300"
+            className="h-full bg-gradient-to-r from-brand-primary to-brand-mid rounded-full transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -251,7 +251,7 @@ function WorksheetPreview({ config, onNavigate, onRegen }) {
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${
-                tab === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+                tab === t ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
               {t === 'worksheet' ? '📄 Student Paper' : '✅ Answer Key'}
@@ -261,7 +261,7 @@ function WorksheetPreview({ config, onNavigate, onRegen }) {
       </div>
 
       <div className="px-4 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
           <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
             {tab === 'worksheet' ? worksheet : worksheet + '\n\n---\n\n**ANSWER KEY**\n\nSection A:\n1. (b) 2 A\n2. (c) 18 Ω\n3. (c) Watt\n\nSection B:\n4. Ohm\'s Law states that V ∝ I (at constant temp). V = IR.\n5. R = V²/P = (220)²/100 = 484 Ω. I = P/V = 100/220 ≈ 0.45 A\n6. Parallel: same voltage across each, if one fails others work; series: if one fails all stop.'}
           </pre>
@@ -270,7 +270,7 @@ function WorksheetPreview({ config, onNavigate, onRegen }) {
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={handleCopy}
-            className={`py-3 rounded-2xl text-sm font-bold border-2 transition-all active:scale-95 ${
+            className={`py-3 rounded-xl text-sm font-bold border-2 transition-all active:scale-95 ${
               copied ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-white text-gray-700'
             }`}
           >
@@ -278,14 +278,14 @@ function WorksheetPreview({ config, onNavigate, onRegen }) {
           </button>
           <button
             onClick={() => alert('PDF download simulated!')}
-            className="py-3 rounded-2xl text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-md active:scale-95"
+            className="py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-brand-primary to-brand-mid text-white shadow-md active:scale-95"
           >
             📥 Download PDF
           </button>
         </div>
         <button
           onClick={() => onNavigate('test-generator')}
-          className="w-full mt-3 py-3 rounded-2xl text-sm font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors active:scale-95"
+          className="w-full mt-3 py-3 rounded-xl text-sm font-bold bg-brand-light text-brand-primary border border-brand-pale/30 hover:bg-brand-light transition-colors active:scale-95"
         >
           Add to Test →
         </button>

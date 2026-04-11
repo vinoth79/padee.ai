@@ -1,12 +1,12 @@
 export default function SubjectPill({ subject, size = 'sm' }) {
   const colorMap = {
-    Physics: 'bg-blue-100 text-blue-700 border-blue-200',
-    Chemistry: 'bg-orange-100 text-orange-700 border-orange-200',
-    Mathematics: 'bg-purple-100 text-purple-700 border-purple-200',
-    Biology: 'bg-green-100 text-green-700 border-green-200',
-    'Computer Science': 'bg-cyan-100 text-cyan-700 border-cyan-200',
-    English: 'bg-pink-100 text-pink-700 border-pink-200',
-    'Social Science': 'bg-yellow-100 text-yellow-700 border-yellow-200',
+    Physics:            'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]',
+    Chemistry:          'bg-[#FFF7ED] text-[#C2410C] border-[#FED7AA]',
+    Mathematics:        'bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]',
+    Biology:            'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]',
+    'Computer Science': 'bg-[#ECFEFF] text-[#0E7490] border-[#A5F3FC]',
+    English:            'bg-[#FFF1F2] text-[#BE123C] border-[#FECDD3]',
+    'Social Science':   'bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]',
   }
   const iconMap = {
     Physics: '⚡', Chemistry: '🧪', Mathematics: '📐',

@@ -6,7 +6,7 @@ export default function ScoreRing({ percent, size = 80, strokeWidth = 7 }) {
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (animated / 100) * circumference
 
-  const color = percent >= 80 ? '#22c55e' : percent >= 60 ? '#f59e0b' : '#ef4444'
+  const color = percent >= 80 ? '#059669' : percent >= 60 ? '#D97706' : '#DC2626'
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimated(percent), 100)
@@ -17,7 +17,7 @@ export default function ScoreRing({ percent, size = 80, strokeWidth = 7 }) {
     <svg width={size} height={size} className="transform -rotate-90">
       <circle
         cx={size / 2} cy={size / 2} r={radius}
-        fill="none" stroke="#e5e7eb" strokeWidth={strokeWidth}
+        fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth}
       />
       <circle
         cx={size / 2} cy={size / 2} r={radius}

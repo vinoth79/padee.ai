@@ -63,7 +63,7 @@ export default function ChapterViewScreen({ subject: initialSubject, onNavigate 
         </div>
 
         {/* Progress summary */}
-        <div className="mt-4 bg-white/10 rounded-2xl px-4 py-3 flex items-center justify-between">
+        <div className="mt-4 bg-white/10 rounded-xl px-4 py-3 flex items-center justify-between">
           <div>
             <div className="text-white font-bold text-base">{sub.completed}/{sub.chapters} chapters</div>
             <div className="text-white/70 text-xs">completed</div>
@@ -76,7 +76,7 @@ export default function ChapterViewScreen({ subject: initialSubject, onNavigate 
       </div>
 
       {/* AI Suggestion */}
-      <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
+      <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
         <span className="text-xl">🤖</span>
         <div className="flex-1">
           <div className="text-amber-800 text-sm font-bold">AI suggests</div>
@@ -95,7 +95,7 @@ export default function ChapterViewScreen({ subject: initialSubject, onNavigate 
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Chapters</h2>
 
         {chapters.map(chapter => (
-          <div key={chapter.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div key={chapter.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             {/* Chapter header */}
             <button
               className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-gray-50 transition-colors"
@@ -132,7 +132,7 @@ export default function ChapterViewScreen({ subject: initialSubject, onNavigate 
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => onNavigate('doubt')}
-                        className="text-xs bg-purple-50 text-purple-700 border border-purple-200 font-semibold px-2 py-1 rounded-lg hover:bg-purple-100 transition-colors"
+                        className="text-xs bg-brand-light text-brand-primary border border-brand-pale/30 font-semibold px-2 py-1 rounded-lg hover:bg-brand-light transition-colors"
                       >
                         Ask
                       </button>
@@ -158,7 +158,7 @@ export default function ChapterViewScreen({ subject: initialSubject, onNavigate 
               </button>
               <button
                 onClick={() => onNavigate('test')}
-                className="flex-1 text-xs font-semibold bg-purple-50 text-purple-700 py-2 rounded-xl hover:bg-purple-100 transition-colors active:scale-95"
+                className="flex-1 text-xs font-semibold bg-brand-light text-brand-primary py-2 rounded-xl hover:bg-brand-light transition-colors active:scale-95"
               >
                 📋 Test
               </button>

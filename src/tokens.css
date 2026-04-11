@@ -1,0 +1,88 @@
+:root {
+  /* Brand — Forest Teal */
+  --teal:           #0D9488;
+  --teal-dark:      #0F766E;
+  --teal-darker:    #134E4A;
+  --teal-light:     #CCFBF1;
+  --teal-pale:      #F0FDFA;
+  --teal-border:    #5EEAD4;
+
+  /* Brand — Coral Orange */
+  --coral:          #EA580C;
+  --coral-dark:     #C2410C;
+  --coral-light:    #FFF7ED;
+  --coral-pale:     #FFEDD5;
+
+  /* Amber */
+  --amber:          #D97706;
+  --amber-light:    #FEF3C7;
+  --amber-dark:     #B45309;
+  --amber-border:   #FCD34D;
+
+  /* Emerald */
+  --emerald:        #059669;
+  --emerald-light:  #ECFDF5;
+  --emerald-dark:   #065F46;
+  --emerald-border: #A7F3D0;
+
+  /* Navy */
+  --navy:           #0F1729;
+  --navy-surface:   #1E293B;
+
+  /* Backgrounds */
+  --bg-page:        #F8F7F4;
+  --bg-white:       #FFFFFF;
+  --bg-surface:     #F9FAFB;
+  --bg-landing:     #F0FDFA;
+
+  /* Text */
+  --text-primary:   #111827;
+  --text-secondary: #4B5563;
+  --text-muted:     #6B7280;
+  --text-hint:      #9CA3AF;
+
+  /* Borders */
+  --border:         #E5E7EB;
+  --border-md:      #D1D5DB;
+
+  /* Subject colours */
+  --physics-bg:     #EFF6FF;
+  --physics-border: #BFDBFE;
+  --physics-text:   #1D4ED8;
+  --physics-accent: #2563EB;
+
+  --chemistry-bg:   #FFF7ED;
+  --chemistry-border:#FED7AA;
+  --chemistry-text: #C2410C;
+  --chemistry-accent:#EA580C;
+
+  --maths-bg:       #F5F3FF;
+  --maths-border:   #DDD6FE;
+  --maths-text:     #5B21B6;
+  --maths-accent:   #7C3AED;
+
+  --biology-bg:     #ECFDF5;
+  --biology-border: #A7F3D0;
+  --biology-text:   #065F46;
+  --biology-accent: #059669;
+
+  --cs-bg:          #ECFEFF;
+  --cs-border:      #A5F3FC;
+  --cs-text:        #0E7490;
+  --cs-accent:      #0891B2;
+
+  --english-bg:     #FFF1F2;
+  --english-border: #FECDD3;
+  --english-text:   #BE123C;
+  --english-accent: #E11D48;
+
+  --social-bg:      #FFFBEB;
+  --social-border:  #FDE68A;
+  --social-text:    #92400E;
+  --social-accent:  #D97706;
+
+  --ca-bg:          #F5F3FF;
+  --ca-border:      #DDD6FE;
+  --ca-text:        #5B21B6;
+  --ca-accent:      #7C3AED;
+}

@@ -55,7 +55,7 @@ export default function LiveClassScreen({ onNavigate }) {
             </div>
             <button
               onClick={() => setSessionActive(true)}
-              className="w-full bg-green-400 text-green-900 font-black py-3 rounded-2xl text-sm hover:bg-green-300 transition-colors active:scale-95"
+              className="w-full bg-green-400 text-green-900 font-black py-3 rounded-xl text-sm hover:bg-green-300 transition-colors active:scale-95"
             >
               🎓 Start Live Session
             </button>
@@ -86,12 +86,12 @@ export default function LiveClassScreen({ onNavigate }) {
                 key={action.id}
                 onClick={() => handleAction(action.id)}
                 disabled={!sessionActive || loading !== null}
-                className={`flex flex-col items-start p-4 rounded-2xl border-2 transition-all active:scale-95 ${
+                className={`flex flex-col items-start p-4 rounded-xl border-2 transition-all active:scale-95 ${
                   !sessionActive
                     ? 'bg-gray-100 border-gray-200 opacity-50 cursor-not-allowed'
                     : loading === action.id
-                    ? 'bg-purple-100 border-purple-300 cursor-wait'
-                    : 'bg-white border-gray-200 hover:border-purple-300 hover:shadow-md shadow-sm'
+                    ? 'bg-brand-light border-brand-pale cursor-wait'
+                    : 'bg-white border-gray-200 hover:border-brand-pale hover:shadow-md shadow-sm'
                 }`}
               >
                 <div className="text-2xl mb-2">
@@ -108,7 +108,7 @@ export default function LiveClassScreen({ onNavigate }) {
 
         {/* Custom input */}
         {sessionActive && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Custom Request</label>
             <CustomInput topic={topic} onResult={(result) => setHistory(prev => [result, ...prev])} />
           </div>
@@ -135,7 +135,7 @@ export default function LiveClassScreen({ onNavigate }) {
         )}
 
         {!sessionActive && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
             <div className="text-3xl mb-2">🎓</div>
             <div className="font-bold text-amber-800 text-sm">Start a live session to begin</div>
             <div className="text-amber-700 text-xs mt-1">Enter your topic and tap "Start Live Session" above</div>
@@ -176,7 +176,7 @@ function CustomInput({ topic, onResult }) {
         onClick={handleSend}
         disabled={!text.trim() || loading}
         className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
-          text.trim() && !loading ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-400'
+          text.trim() && !loading ? 'bg-brand-primary text-white' : 'bg-gray-200 text-gray-400'
         }`}
       >
         {loading ? '...' : '→'}
@@ -188,12 +188,12 @@ function CustomInput({ topic, onResult }) {
 function ContentCard({ item }) {
   const [expanded, setExpanded] = useState(false)
   const icons = { mcq: '❓', explain: '💡', poll: '📊', summary: '📝', custom: '🤖' }
-  const colors = { mcq: 'bg-blue-50 border-blue-200', explain: 'bg-purple-50 border-purple-200', poll: 'bg-orange-50 border-orange-200', summary: 'bg-green-50 border-green-200', custom: 'bg-gray-50 border-gray-200' }
+  const colors = { mcq: 'bg-blue-50 border-blue-200', explain: 'bg-brand-light border-brand-pale/30', poll: 'bg-orange-50 border-orange-200', summary: 'bg-green-50 border-green-200', custom: 'bg-gray-50 border-gray-200' }
 
   const preview = item.content.substring(0, 120) + (item.content.length > 120 ? '...' : '')
 
   return (
-    <div className={`rounded-2xl border p-4 ${colors[item.type] || 'bg-gray-50 border-gray-200'}`}>
+    <div className={`rounded-xl border p-4 ${colors[item.type] || 'bg-gray-50 border-gray-200'}`}>
       <div className="flex items-start gap-2 mb-2">
         <span className="text-lg">{icons[item.type] || '📄'}</span>
         <div className="flex-1">

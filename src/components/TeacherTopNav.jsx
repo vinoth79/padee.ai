@@ -12,7 +12,7 @@ export default function TeacherTopNav({ active, onNavigate, teacher }) {
       <div className="px-4 pt-3 pb-0">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-primary to-brand-mid flex items-center justify-center text-white text-xs font-bold">
               {teacher?.avatar || 'T'}
             </div>
             <div>
@@ -32,7 +32,7 @@ export default function TeacherTopNav({ active, onNavigate, teacher }) {
               onClick={() => onNavigate(tab.id)}
               className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-t-lg border-b-2 transition-all ${
                 active === tab.id
-                  ? 'border-purple-600 text-purple-700 bg-purple-50'
+                  ? 'border-brand-primary text-brand-primary bg-brand-light'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >

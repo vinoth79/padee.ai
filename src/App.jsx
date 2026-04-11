@@ -22,18 +22,26 @@ import StudentPerformanceScreen from './screens/StudentPerformanceScreen'
 
 // Components
 import BottomNav from './components/BottomNav'
-import AIBar from './components/AIBar'
 import AIOrb from './components/AIOrb'
-import { teacherProfile } from './data/mockData'
+import { studentProfile, dailyGoal } from './data/mockData'
 
-const ALL_STUDENT_SCREENS = ['home', 'learn', 'me', 'doubt', 'practice', 'test', 'test-results', 'chapters', 'challenge', 'jee-neet', 'parent-summary']
+const ALL_STUDENT_SCREENS = ['home', 'learn', 'me', 'doubt', 'ask-ai', 'practice', 'test', 'test-results', 'chapters', 'challenge', 'jee-neet', 'parent-summary', 'tests', 'progress', 'profile']
 const TEACHER_SCREENS = ['teacher-dashboard', 'worksheet', 'test-generator', 'live-class', 'students']
 const HIDE_NAV_SCREENS = ['test', 'splash', 'onboarding']
 
 const SIDEBAR_NAV = [
-  { id: 'today', label: 'Today',   icon: '✨', screen: 'home' },
-  { id: 'learn', label: 'Learn',   icon: '📚', screen: 'learn' },
-  { id: 'me',    label: 'Me',      icon: '👤', screen: 'me' },
+  { id: 'home',     label: 'Home',     icon: HomeIcon,     screen: 'home' },
+  { id: 'ask-ai',   label: 'Ask AI',   icon: AskAIIcon,    screen: 'ask-ai' },
+  { id: 'learn',    label: 'Learn',    icon: LearnIcon,     screen: 'learn' },
+  { id: 'tests',    label: 'Tests',    icon: TestsIcon,     screen: 'test' },
+  { id: 'progress', label: 'Progress', icon: ProgressIcon,  screen: 'me' },
+]
+
+const TEACHER_NAV = [
+  { id: 'command',  label: 'Command Center', screen: 'teacher-dashboard' },
+  { id: 'actions',  label: 'Actions',        screen: 'worksheet' },
+  { id: 'students', label: 'Students',       screen: 'students' },
+  { id: 'live',     label: 'Live Class',     screen: 'live-class' },
 ]
 
 export default function App() {
@@ -56,24 +64,35 @@ export default function App() {
   const isTeacherScreen = TEACHER_SCREENS.includes(screen)
   const isStudentScreen = ALL_STUDENT_SCREENS.includes(screen)
   const showNav = isStudentScreen && !HIDE_NAV_SCREENS.includes(screen)
-  const showAIBar = showNav && screen !== 'doubt'
-  const isFullscreen = HIDE_NAV_SCREENS.includes(screen) // splash/onboarding/test = full bleed
+  const isFullscreen = HIDE_NAV_SCREENS.includes(screen)
 
   const activeTab = (() => {
-    if (screen === 'home') return 'today'
+    if (screen === 'home') return 'home'
+    if (['ask-ai', 'doubt'].includes(screen)) return 'ask-ai'
     if (['learn', 'chapters'].includes(screen)) return 'learn'
-    if (['me', 'progress', 'jee-neet', 'parent-summary'].includes(screen)) return 'me'
+    if (['test', 'test-results', 'tests'].includes(screen)) return 'tests'
+    if (['me', 'progress', 'jee-neet', 'parent-summary', 'profile'].includes(screen)) return 'progress'
     return null
   })()
 
-  const navTabToScreen = (tabId) => ({ today: 'home', learn: 'learn', me: 'me' }[tabId] || tabId)
+  const activeTeacherTab = (() => {
+    if (screen === 'teacher-dashboard') return 'command'
+    if (['worksheet', 'test-generator'].includes(screen)) return 'actions'
+    if (screen === 'students') return 'students'
+    if (screen === 'live-class') return 'live'
+    return 'command'
+  })()
+
+  const student = studentProfile
+  const goal = dailyGoal
+  const goalPercent = Math.min(100, Math.round((goal.current / goal.target) * 100))
 
   const renderScreen = () => (
     <>
       {screen === 'splash'          && <SplashScreen onDone={handleSplashDone} />}
       {screen === 'onboarding'      && <OnboardingScreen onComplete={handleOnboardingComplete} />}
       {screen === 'home'            && <StudentHomeScreen onNavigate={navigate} />}
-      {screen === 'doubt'           && <DoubtSolverScreen onNavigate={navigate} initialQuestion={navParams.question} />}
+      {(screen === 'doubt' || screen === 'ask-ai') && <DoubtSolverScreen onNavigate={navigate} initialQuestion={navParams.question} />}
       {screen === 'learn'           && <LearnScreen onNavigate={navigate} />}
       {screen === 'practice'        && <PracticeModeScreen onNavigate={navigate} />}
       {screen === 'challenge'       && <PracticeModeScreen onNavigate={navigate} />}
@@ -91,224 +110,366 @@ export default function App() {
     </>
   )
 
-  // ── Full-bleed screens (splash, onboarding, test) ───────────────────────────
+  // ── Full-bleed screens ────────────────────────────────────────────────────
   if (isFullscreen) {
-    return (
-      <div className="min-h-screen bg-brand-dark">
-        {renderScreen()}
-      </div>
-    )
+    return <div className="min-h-screen bg-brand-dark">{renderScreen()}</div>
   }
 
-  // ── Teacher screens ──────────────────────────────────────────────────────────
+  // ── Teacher screens ───────────────────────────────────────────────────────
   if (isTeacherScreen) {
     return (
       <div className="min-h-screen bg-brand-bg">
-        <div className="max-w-4xl mx-auto relative">
-          <div className="fixed top-4 right-4 z-50">
-            <button
-              onClick={() => navigate('home')}
-              className="text-xs font-semibold text-brand-slate bg-white px-3 py-1.5 rounded-full shadow-card border border-gray-200 hover:text-brand-primary transition-colors"
-            >
-              ← Student view
-            </button>
+        {/* Teacher top nav */}
+        <div className="sticky top-0 z-30 bg-white border-b border-gray-200">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="flex items-center justify-between h-14">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <AIOrb size="xs" state="idle" />
+                  <span className="font-extrabold text-brand-navy text-base tracking-tight">Padhi.ai</span>
+                  <span className="text-[10px] text-brand-slate bg-brand-light px-1.5 py-0.5 rounded font-medium">Teacher</span>
+                </div>
+                <nav className="hidden sm:flex items-center gap-1">
+                  {TEACHER_NAV.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => navigate(item.screen)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                        activeTeacherTab === item.id
+                          ? 'bg-brand-primary/10 text-brand-primary'
+                          : 'text-brand-slate hover:text-brand-navy hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+              <button
+                onClick={() => navigate('home')}
+                className="text-xs font-semibold text-brand-slate bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:text-brand-primary transition-colors"
+              >
+                ← Student view
+              </button>
+            </div>
           </div>
-          {renderScreen()}
-          <DemoShortcuts onNavigate={navigate} />
         </div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          {renderScreen()}
+        </div>
+        <DemoShortcuts onNavigate={navigate} />
       </div>
     )
   }
 
-  // ── Student screens: responsive layout ──────────────────────────────────────
+  // ── Student screens: desktop-first responsive ─────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-100 md:bg-slate-100">
+    <div className="min-h-screen bg-brand-bg">
 
-      {/* ── DESKTOP: sidebar + content ── */}
-      <div className="hidden md:flex md:h-screen md:overflow-hidden">
+      {/* ═══ DESKTOP (≥1024px): Full sidebar + top bar + content ═══ */}
+      <div className="hidden lg:flex h-screen overflow-hidden">
 
-        {/* Left sidebar */}
+        {/* Left sidebar (220px) */}
         {showNav && (
-          <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 z-20">
-            {/* Logo */}
-            <div className="px-5 py-5 border-b border-gray-100">
+          <aside className="w-[220px] flex-shrink-0 bg-white border-r border-gray-200/80 flex flex-col h-screen">
+            {/* Brand */}
+            <div className="px-5 pt-5 pb-4">
               <div className="flex items-center gap-2.5">
                 <AIOrb size="xs" state="idle" />
-                <span className="font-black text-brand-navy text-lg tracking-tight">AI Tutor</span>
+                <span className="font-extrabold text-brand-navy text-lg tracking-tight">Padhi.ai</span>
               </div>
-              <p className="text-[10px] text-brand-slate mt-1 ml-0.5">CBSE Class 8–12</p>
+            </div>
+
+            {/* User card */}
+            <div className="px-4 pb-4">
+              <button onClick={() => navigate('me')} className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-brand-bg rounded-xl hover:bg-brand-light transition-colors">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#CCFBF1', border: '2px solid #5EEAD4', color: '#0F766E' }}>
+                  {student.avatar}
+                </div>
+                <div className="text-left flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-brand-navy truncate">{student.name.split(' ')[0]}</p>
+                  <p className="text-[10px] text-brand-slate">Class {student.class} · Lv {student.level}</p>
+                </div>
+              </button>
             </div>
 
             {/* Nav items */}
-            <nav className="flex-1 px-3 py-4 space-y-1">
+            <nav className="flex-1 px-3 space-y-0.5">
               {SIDEBAR_NAV.map(item => {
                 const isActive = activeTab === item.id
+                const Icon = item.icon
                 return (
                   <button
                     key={item.id}
                     onClick={() => navigate(item.screen)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                       isActive
-                        ? 'bg-brand-primary/10 text-brand-primary'
+                        ? 'bg-brand-primary/10 text-brand-primary font-semibold'
                         : 'text-brand-slate hover:bg-gray-50 hover:text-brand-navy'
                     }`}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <Icon active={isActive} />
                     <span>{item.label}</span>
                     {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-brand-primary" />}
                   </button>
                 )
               })}
 
-              <div className="pt-3 border-t border-gray-100 mt-3">
+              {/* Divider + secondary nav */}
+              <div className="pt-3 mt-3 border-t border-gray-100">
                 <button
                   onClick={() => navigate('practice')}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-brand-slate hover:bg-amber-50 hover:text-amber-700 transition-all"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-brand-slate hover:bg-amber-50 hover:text-amber-700 transition-all"
                 >
                   <span className="text-base">⚡</span>
                   <span>Practice</span>
                 </button>
-                <button
-                  onClick={() => navigate('test')}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-brand-slate hover:bg-teal-50 hover:text-teal-700 transition-all"
-                >
-                  <span className="text-base">📋</span>
-                  <span>Tests</span>
-                </button>
               </div>
             </nav>
 
-            {/* Bottom sidebar: AI input + teacher mode */}
-            <div className="px-3 pb-5 border-t border-gray-100 pt-3">
-              {showAIBar && (
-                <button
-                  onClick={() => navigate('doubt')}
-                  className="w-full flex items-center gap-2.5 bg-brand-bg rounded-2xl px-3 py-2.5 border border-violet-200/60 hover:border-brand-primary/30 transition-all group mb-1"
-                >
-                  <div className="w-6 h-6 ai-orb-sm rounded-full flex-shrink-0 flex items-center justify-center">
-                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full" />
-                  </div>
-                  <span className="text-xs text-brand-slate group-hover:text-brand-navy transition-colors truncate">Ask AI anything…</span>
-                </button>
-              )}
+            {/* Sidebar footer: XP bar + teacher link */}
+            <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-2">
+              {/* XP bar */}
+              <div className="px-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-semibold text-brand-slate">Lv {student.level} · {student.levelName}</span>
+                  <span className="text-[10px] font-bold font-mono" style={{ color: '#9CA3AF' }}>{student.xp} XP</span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#E5E7EB' }}>
+                  <div className="h-full rounded-full transition-all duration-700" style={{ background: '#0D9488', width: `${Math.round(((student.xp - 1600) / (2400 - 1600)) * 100)}%` }} />
+                </div>
+              </div>
               <button
                 onClick={() => navigate('teacher-dashboard')}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-brand-slate hover:text-brand-primary transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-brand-slate hover:text-brand-primary transition-colors"
               >
-                <span>🎓</span><span>Teacher mode</span>
+                🎓 Teacher mode
               </button>
             </div>
           </aside>
         )}
 
-        {/* Main content — scrollable */}
-        <main className={`flex-1 overflow-y-auto bg-brand-bg ${!showNav ? 'w-full' : ''}`}>
-          <div className="max-w-2xl mx-auto">
-            {renderScreen()}
-          </div>
+        {/* Main area: top bar + scrollable content */}
+        <div className="flex-1 flex flex-col h-screen overflow-hidden">
+          {/* Top bar */}
+          {showNav && (
+            <header className="flex-shrink-0 h-14 bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-brand-navy">{getGreeting()}, {student.name.split(' ')[0]}</p>
+                <p className="text-[11px] text-brand-slate">Today's Study Session</p>
+              </div>
+              <div className="flex items-center gap-4">
+                {/* Streak pill */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ background: '#FEF3C7', border: '1px solid #FCD34D' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#D97706"><path d="M12 23c-1.1 0-2-.9-2-2h4c0 1.1-.9 2-2 2zm-4-5V11c0-2.8 1.6-5.2 4-6.3V3c0-1.1.9-2 2-2s2 .9 2 2v1.7c2.4 1.1 4 3.5 4 6.3v7l2 2H2l2-2z"/></svg>
+                  <span className="text-xs font-bold" style={{ color: '#B45309' }}>{student.streak}</span>
+                  <span className="text-xs font-medium" style={{ color: '#D97706' }}>day streak</span>
+                </div>
+                {/* Daily goal ring */}
+                <div className="relative w-9 h-9">
+                  <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="15" fill="none" stroke="#CCFBF1" strokeWidth="3" />
+                    <circle cx="18" cy="18" r="15" fill="none" stroke="#0D9488" strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 15}`}
+                      strokeDashoffset={`${2 * Math.PI * 15 * (1 - goalPercent / 100)}`}
+                      className="transition-all duration-700"
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-brand-primary font-mono">{goalPercent}%</span>
+                </div>
+              </div>
+            </header>
+          )}
+
+          {/* Scrollable content */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="max-w-[1200px] mx-auto">
+              {renderScreen()}
+            </div>
+          </main>
+        </div>
+      </div>
+
+      {/* ═══ TABLET (640px–1023px): Collapsed sidebar (56px) ═══ */}
+      <div className="hidden sm:flex lg:hidden h-screen overflow-hidden">
+        {showNav && (
+          <aside className="w-14 flex-shrink-0 bg-white border-r border-gray-200/80 flex flex-col h-screen items-center py-4">
+            <div className="mb-4">
+              <AIOrb size="xs" state="idle" />
+            </div>
+            <nav className="flex-1 space-y-1">
+              {SIDEBAR_NAV.map(item => {
+                const isActive = activeTab === item.id
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => navigate(item.screen)}
+                    title={item.label}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+                      isActive ? 'bg-brand-primary/10' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon active={isActive} />
+                  </button>
+                )
+              })}
+            </nav>
+            <button onClick={() => navigate('teacher-dashboard')} title="Teacher mode" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-50 text-sm">
+              🎓
+            </button>
+          </aside>
+        )}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto">{renderScreen()}</div>
         </main>
       </div>
 
-      {/* ── MOBILE: stacked layout with fixed bottom nav ── */}
-      <div className="md:hidden">
+      {/* ═══ MOBILE (<640px): Bottom tab bar ═══ */}
+      <div className="sm:hidden">
         {renderScreen()}
-
-        {showAIBar && (
-          <AIBar onAsk={() => navigate('doubt')} currentScreen={screen} />
-        )}
-
         {showNav && (
           <BottomNav
             active={activeTab}
-            onNavigate={(tab) => navigate(navTabToScreen(tab))}
+            onNavigate={(tab) => navigate(
+              tab === 'home' ? 'home' : tab === 'ask-ai' ? 'ask-ai' : tab === 'learn' ? 'learn' : 'me'
+            )}
           />
         )}
       </div>
 
-      {/* Demo shortcut — always visible */}
-      {!HIDE_NAV_SCREENS.includes(screen) && (
-        <DemoShortcuts onNavigate={navigate} />
-      )}
+      {/* Demo shortcut */}
+      {!HIDE_NAV_SCREENS.includes(screen) && <DemoShortcuts onNavigate={navigate} />}
     </div>
   )
 }
 
-// ─── DEMO SHORTCUTS ───────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+// ─── Nav Icons (shared across sidebar + bottom nav) ──────────────────────────
+function HomeIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"
+        fill={active ? 'rgba(13,148,136,0.1)' : 'none'}
+        stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9 21V12h6v9" stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+function AskAIIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M12 3c5 0 9 3.6 9 8s-4 8-9 8c-1 0-2-.1-3-.4L4 21l1.7-4.3C4 15.2 3 13.2 3 11c0-4.4 4-8 9-8z"
+        fill={active ? 'rgba(13,148,136,0.1)' : 'none'}
+        stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="8.5" cy="11" r="1" fill={active ? '#0D9488' : '#9ca3af'}/>
+      <circle cx="12" cy="11" r="1" fill={active ? '#0D9488' : '#9ca3af'}/>
+      <circle cx="15.5" cy="11" r="1" fill={active ? '#0D9488' : '#9ca3af'}/>
+    </svg>
+  )
+}
+function LearnIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+        fill={active ? 'rgba(13,148,136,0.1)' : 'none'}
+        stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  )
+}
+function TestsIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <rect x="4" y="2" width="16" height="20" rx="2"
+        fill={active ? 'rgba(13,148,136,0.1)' : 'none'}
+        stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8"/>
+      <path d="M8 7h8M8 11h8M8 15h5" stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  )
+}
+function ProgressIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke={active ? '#0D9488' : '#9ca3af'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+        fill="none"/>
+    </svg>
+  )
+}
+
+// ─── DEMO SHORTCUTS ──────────────────────────────────────────────────────────
 function DemoShortcuts({ onNavigate }) {
   const [open, setOpen] = useState(false)
-
   const shortcuts = [
     { divider: true, label: 'Student' },
-    { label: '🏠 Home',                 screen: 'home' },
-    { label: '📚 Learn',                screen: 'learn' },
-    { label: '💬 Ask a Doubt',          screen: 'doubt' },
-    { label: '⚡ Practice',             screen: 'practice' },
-    { label: '📋 Take a Test',          screen: 'test' },
-    { label: '📊 Test Results',         screen: 'test-results' },
-    { label: '🏅 Me / Progress',        screen: 'me' },
-    { label: '🚀 JEE/NEET Preview',    screen: 'jee-neet' },
-    { label: '👪 Parent Summary',       screen: 'parent-summary' },
+    { label: '🏠 Home',              screen: 'home' },
+    { label: '✨ Ask AI',            screen: 'ask-ai' },
+    { label: '📚 Learn',             screen: 'learn' },
+    { label: '⚡ Practice',          screen: 'practice' },
+    { label: '📋 Take a Test',       screen: 'test' },
+    { label: '📊 Test Results',      screen: 'test-results' },
+    { label: '🏅 Progress',          screen: 'me' },
+    { label: '🚀 JEE/NEET Preview',  screen: 'jee-neet' },
+    { label: '👪 Parent Summary',    screen: 'parent-summary' },
     { divider: true, label: 'Teacher' },
-    { label: '🎓 Teacher Dashboard',    screen: 'teacher-dashboard' },
-    { label: '📄 Worksheet Generator',  screen: 'worksheet' },
-    { label: '📋 Test Generator',       screen: 'test-generator' },
-    { label: '🎙 Live Class Mode',      screen: 'live-class' },
-    { label: '👥 Student Performance',  screen: 'students' },
+    { label: '🎓 Command Center',    screen: 'teacher-dashboard' },
+    { label: '📄 Worksheet Generator', screen: 'worksheet' },
+    { label: '📋 Test Generator',    screen: 'test-generator' },
+    { label: '🎙 Live Class',        screen: 'live-class' },
+    { label: '👥 Student Performance', screen: 'students' },
   ]
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-40 right-4 md:bottom-6 md:right-6 z-50 bg-gradient-to-br from-brand-primary to-violet-700 text-white text-xs font-black px-3 py-2 rounded-full shadow-lg flex items-center gap-1.5 active:scale-95 hover:shadow-xl transition-all"
-      >
-        <span>🗺</span>
-        <span>Demo</span>
+      <button onClick={() => setOpen(true)}
+        className="fixed bottom-24 sm:bottom-6 right-4 z-50 bg-brand-primary text-white text-xs font-bold px-3 py-2 rounded-full shadow-action flex items-center gap-1.5 active:scale-95 hover:shadow-lg transition-all">
+        🗺 Demo
       </button>
-
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center" onClick={() => setOpen(false)}>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-          <div
-            className="relative w-full md:w-96 md:max-h-[80vh] bg-white rounded-t-3xl md:rounded-3xl p-5 max-h-[80vh] overflow-y-auto shadow-2xl animate-slide-up md:animate-scale-in"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center" onClick={() => setOpen(false)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full sm:w-96 sm:max-h-[80vh] bg-white rounded-t-2xl sm:rounded-xl p-5 max-h-[80vh] overflow-y-auto shadow-2xl animate-slide-up sm:animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="font-black text-brand-navy text-lg">Demo Navigation</h3>
+                <h3 className="font-bold text-brand-navy text-lg">Demo Navigation</h3>
                 <p className="text-xs text-brand-slate mt-0.5">Jump to any screen</p>
               </div>
               <button onClick={() => setOpen(false)} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200">×</button>
             </div>
-
             <div className="space-y-1.5">
               {shortcuts.map((s, i) => {
                 if (s.divider) return (
                   <div key={i} className="flex items-center gap-3 mt-4 mb-2">
                     <div className="flex-1 h-px bg-gray-200" />
-                    <span className="text-xs font-bold text-brand-slate uppercase tracking-wider">{s.label}</span>
+                    <span className="text-[10px] font-bold text-brand-slate uppercase tracking-wider">{s.label}</span>
                     <div className="flex-1 h-px bg-gray-200" />
                   </div>
                 )
-                const isTeacher = ['teacher-dashboard','worksheet','test-generator','live-class','students'].includes(s.screen)
+                const isTeacher = TEACHER_SCREENS.includes(s.screen)
                 return (
-                  <button
-                    key={i}
-                    onClick={() => { onNavigate(s.screen); setOpen(false) }}
-                    className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98] ${
-                      isTeacher ? 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100' : 'bg-violet-50 text-violet-900 hover:bg-violet-100'
-                    }`}
-                  >
+                  <button key={i} onClick={() => { onNavigate(s.screen); setOpen(false) }}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-[0.98] ${
+                      isTeacher ? 'bg-brand-light text-brand-primary hover:bg-brand-light/80' : 'bg-gray-50 text-brand-navy hover:bg-gray-100'
+                    }`}>
                     {s.label}
                   </button>
                 )
               })}
             </div>
-
-            <p className="text-center text-xs text-brand-slate mt-5 pt-3 border-t border-gray-100">AI Tutor Prototype · CBSE Classes 8–12</p>
+            <p className="text-center text-[10px] text-brand-slate mt-5 pt-3 border-t border-gray-100">Padhi.ai Prototype · CBSE Classes 8–12</p>
           </div>
         </div>
       )}
     </>
   )
 }
+
+export { HomeIcon, AskAIIcon, LearnIcon, TestsIcon, ProgressIcon }

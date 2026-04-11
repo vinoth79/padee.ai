@@ -4,11 +4,11 @@ import ScoreRing from '../components/ScoreRing'
 import AIOrb from '../components/AIOrb'
 
 const SUBJECT_GRADIENTS = {
-  physics:     { from: 'from-blue-500',    to: 'to-indigo-600',  light: 'bg-blue-50',    text: 'text-blue-700' },
-  chemistry:   { from: 'from-orange-400',  to: 'to-amber-600',   light: 'bg-amber-50',   text: 'text-amber-700' },
-  mathematics: { from: 'from-violet-500',  to: 'to-purple-700',  light: 'bg-violet-50',  text: 'text-violet-700' },
-  biology:     { from: 'from-emerald-400', to: 'to-green-600',   light: 'bg-emerald-50', text: 'text-emerald-700' },
-  cs:          { from: 'from-cyan-400',    to: 'to-sky-600',     light: 'bg-cyan-50',    text: 'text-cyan-700' },
+  physics:     { from: 'from-blue-500',     to: 'to-blue-700',    light: 'bg-[#EFF6FF]',  text: 'text-[#1D4ED8]' },
+  chemistry:   { from: 'from-orange-500',   to: 'to-orange-700',  light: 'bg-[#FFF7ED]',  text: 'text-[#C2410C]' },
+  mathematics: { from: 'from-purple-500',   to: 'to-purple-700',  light: 'bg-[#F5F3FF]',  text: 'text-[#5B21B6]' },
+  biology:     { from: 'from-emerald-500',  to: 'to-emerald-700', light: 'bg-[#ECFDF5]',  text: 'text-[#065F46]' },
+  cs:          { from: 'from-cyan-500',     to: 'to-cyan-700',    light: 'bg-[#ECFEFF]',  text: 'text-[#0E7490]' },
 }
 
 const MASTERY_COLORS = {
@@ -39,7 +39,7 @@ function ChapterRow({ chapter, gradient, onPractice, onAsk }) {
   const statusColor = chapter.status === 'completed' ? 'text-brand-success' : chapter.status === 'in-progress' ? 'text-brand-xp' : 'text-gray-400'
 
   return (
-    <div className="bg-white rounded-2xl shadow-card border border-white overflow-hidden">
+    <div className="bg-white rounded-xl shadow-card border border-white overflow-hidden">
       <button
         onClick={() => hasTopic && setOpen(!open)}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
@@ -78,7 +78,7 @@ function ChapterRow({ chapter, gradient, onPractice, onAsk }) {
                   <div className="flex gap-2">
                     <button
                       onClick={() => onAsk(topic.name)}
-                      className="text-[10px] font-bold text-brand-primary bg-violet-50 px-2.5 py-1 rounded-full border border-violet-200 active:scale-95 transition-all"
+                      className="text-[10px] font-bold text-brand-primary bg-brand-light px-2.5 py-1 rounded-full border border-brand-pale/30 active:scale-95 transition-all"
                     >
                       Ask AI
                     </button>
@@ -124,7 +124,7 @@ export default function LearnScreen({ onNavigate }) {
               <button
                 key={sub.id}
                 onClick={() => setActiveSubject(sub.id)}
-                className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-4 py-3 rounded-2xl transition-all active:scale-95 ${
+                className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl transition-all active:scale-95 ${
                   isActive
                     ? `bg-gradient-to-br ${sg.from} ${sg.to} shadow-action`
                     : 'bg-white shadow-card border border-white'
@@ -142,7 +142,7 @@ export default function LearnScreen({ onNavigate }) {
 
       {/* Subject hero */}
       <div className="px-4 mb-4">
-        <div className={`bg-gradient-to-br ${g.from} ${g.to} rounded-3xl p-4 relative overflow-hidden`}>
+        <div className={`bg-gradient-to-br ${g.from} ${g.to} rounded-xl p-4 relative overflow-hidden`}>
           <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/3 translate-x-1/3" />
           <div className="relative flex items-center gap-4">
             <span className="text-4xl">{subject.icon}</span>
@@ -166,14 +166,14 @@ export default function LearnScreen({ onNavigate }) {
       <div className="px-4 mb-4">
         <button
           onClick={() => onNavigate('doubt')}
-          className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-card"
+          className="w-full flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow-card"
         >
           <AIOrb size="xs" state="idle" />
           <div className="flex-1 text-left">
             <p className="text-xs text-brand-slate">AI suggests practicing next:</p>
             <p className="text-sm font-bold text-brand-navy">Power Formulas (P=VI) · Ch. 12</p>
           </div>
-          <span className="text-xs font-bold text-brand-primary bg-violet-50 px-2.5 py-1 rounded-full">Start →</span>
+          <span className="text-xs font-bold text-brand-primary bg-brand-light px-2.5 py-1 rounded-full">Start →</span>
         </button>
       </div>
 

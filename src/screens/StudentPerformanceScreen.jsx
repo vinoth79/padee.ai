@@ -21,7 +21,7 @@ export default function StudentPerformanceScreen({ onNavigate }) {
 
   return (
     <div className="pb-6 bg-gray-50 min-h-screen">
-      <div className="bg-gradient-to-br from-indigo-600 to-purple-700 px-4 pt-6 pb-6">
+      <div className="bg-gradient-to-br from-brand-primary to-brand-mid px-4 pt-6 pb-6">
         <h1 className="text-white font-black text-2xl">Student Performance</h1>
         <p className="text-indigo-200 text-sm mt-1">Track your class at a glance</p>
       </div>
@@ -34,7 +34,7 @@ export default function StudentPerformanceScreen({ onNavigate }) {
               key={cls}
               onClick={() => setSelectedClass(cls)}
               className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                selectedClass === cls ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 bg-white text-gray-600'
+                selectedClass === cls ? 'bg-brand-primary border-brand-primary text-white' : 'border-gray-200 bg-white text-gray-600'
               }`}
             >
               {cls}
@@ -43,11 +43,11 @@ export default function StudentPerformanceScreen({ onNavigate }) {
         </div>
 
         {/* Class overview */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-black text-gray-900 text-sm mb-3">{selectedClass} Overview</h2>
           <div className="grid grid-cols-3 gap-3 mb-4">
             {[
-              { value: classData.students, label: 'Students', icon: '👥', color: 'text-indigo-600' },
+              { value: classData.students, label: 'Students', icon: '👥', color: 'text-brand-primary' },
               { value: `${classData.avgScore}%`, label: 'Avg Score', icon: '📊', color: classData.avgScore >= 75 ? 'text-emerald-600' : 'text-amber-600' },
               { value: `${classData.participation}%`, label: 'Participation', icon: '✅', color: 'text-blue-600' },
             ].map((s, i) => (
@@ -70,7 +70,7 @@ export default function StudentPerformanceScreen({ onNavigate }) {
         </div>
 
         {/* Student list */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 pt-4 pb-3 border-b border-gray-100">
             <h2 className="font-black text-gray-900 text-sm">Student List</h2>
             <p className="text-xs text-gray-400 mt-0.5">Tap any student for detailed view</p>
@@ -82,7 +82,7 @@ export default function StudentPerformanceScreen({ onNavigate }) {
                 onClick={() => setSelectedStudent(student)}
                 className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors text-left"
               >
-                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700 flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-brand-light flex items-center justify-center text-xs font-bold text-brand-primary flex-shrink-0">
                   {student.name.split(' ').map(n => n[0]).join('')}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -106,7 +106,7 @@ export default function StudentPerformanceScreen({ onNavigate }) {
         </div>
 
         {/* Download report */}
-        <button onClick={() => alert('Report downloaded!')} className="w-full bg-white border-2 border-gray-200 text-gray-700 font-bold py-3 rounded-2xl text-sm hover:border-gray-300 transition-colors active:scale-95">
+        <button onClick={() => alert('Report downloaded!')} className="w-full bg-white border-2 border-gray-200 text-gray-700 font-bold py-3 rounded-xl text-sm hover:border-gray-300 transition-colors active:scale-95">
           📥 Download Class Report
         </button>
       </div>
@@ -124,7 +124,7 @@ function StudentDetail({ student, classData, onBack }) {
 
   return (
     <div className="pb-6 bg-gray-50 min-h-screen">
-      <div className="bg-gradient-to-br from-indigo-600 to-purple-700 px-4 pt-6 pb-6">
+      <div className="bg-gradient-to-br from-brand-primary to-brand-mid px-4 pt-6 pb-6">
         <button onClick={onBack} className="text-white/70 mb-4 block">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         </button>
@@ -144,7 +144,7 @@ function StudentDetail({ student, classData, onBack }) {
 
       <div className="px-4 mt-4 space-y-4">
         {/* Score summary */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-black text-gray-900 text-sm mb-3">Test History</h2>
           <div className="space-y-3">
             {testHistory.map((t, i) => (
@@ -165,7 +165,7 @@ function StudentDetail({ student, classData, onBack }) {
         </div>
 
         {/* AI Summary */}
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-purple-200 rounded-2xl p-4">
+        <div className="bg-gradient-to-br from-brand-light to-brand-light border border-brand-pale/30 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">🤖</span>
             <span className="font-black text-gray-900 text-sm">AI Insight</span>
@@ -176,12 +176,12 @@ function StudentDetail({ student, classData, onBack }) {
         </div>
 
         {/* Top doubts */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-black text-gray-900 text-sm mb-3">Recent Doubts Asked</h2>
           <div className="space-y-2">
             {doubtsAsked.map((d, i) => (
               <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
-                <span className="text-purple-400">💬</span>
+                <span className="text-brand-pale">💬</span>
                 <span>{d}</span>
               </div>
             ))}
@@ -189,7 +189,7 @@ function StudentDetail({ student, classData, onBack }) {
         </div>
 
         {/* Weak area */}
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
           <div className="font-bold text-orange-800 text-sm mb-2">⚠️ Needs Attention</div>
           <p className="text-xs text-orange-700">{student.weak} — hasn't been practiced in 5 days. Consider assigning a targeted worksheet.</p>
           <button className="mt-2 text-xs font-bold text-orange-700 border border-orange-300 px-3 py-1.5 rounded-lg hover:bg-orange-100 transition-colors">

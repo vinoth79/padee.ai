@@ -126,7 +126,7 @@ export default function App() {
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
                   <AIOrb size="xs" state="idle" />
-                  <span className="font-extrabold text-brand-navy text-base tracking-tight">Padhi.ai</span>
+                  <span className="font-extrabold text-brand-navy text-base tracking-tight">Padee.ai</span>
                   <span className="text-[10px] text-brand-slate bg-brand-light px-1.5 py-0.5 rounded font-medium">Teacher</span>
                 </div>
                 <nav className="hidden sm:flex items-center gap-1">
@@ -176,7 +176,7 @@ export default function App() {
             <div className="px-5 pt-5 pb-4">
               <div className="flex items-center gap-2.5">
                 <AIOrb size="xs" state="idle" />
-                <span className="font-extrabold text-brand-navy text-lg tracking-tight">Padhi.ai</span>
+                <span className="font-extrabold text-brand-navy text-lg tracking-tight">Padee.ai</span>
               </div>
             </div>
 
@@ -464,7 +464,7 @@ function DemoShortcuts({ onNavigate }) {
                 )
               })}
             </div>
-            <p className="text-center text-[10px] text-brand-slate mt-5 pt-3 border-t border-gray-100">Padhi.ai Prototype · CBSE Classes 8–12</p>
+            <p className="text-center text-[10px] text-brand-slate mt-5 pt-3 border-t border-gray-100">Padee.ai Prototype · CBSE Classes 8–12</p>
           </div>
         </div>
       )}

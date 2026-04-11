@@ -50,7 +50,7 @@ const UserContext = createContext<UserContextValue | null>(null)
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserState>(() => {
     try {
-      const saved = localStorage.getItem('padhi-user')
+      const saved = localStorage.getItem('padee-user')
       return saved ? { ...defaults, ...JSON.parse(saved) } : defaults
     } catch {
       return defaults
@@ -58,7 +58,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
-    localStorage.setItem('padhi-user', JSON.stringify(user))
+    localStorage.setItem('padee-user', JSON.stringify(user))
   }, [user])
 
   const value: UserContextValue = {

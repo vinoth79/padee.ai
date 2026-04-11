@@ -31,7 +31,7 @@ export default function TeacherLayout() {
               <div className="w-5 h-5 rounded-[5px] flex items-center justify-center" style={{ background: '#0D9488' }}>
                 <div className="w-[7px] h-[7px] rounded-full" style={{ background: '#99F6E4' }} />
               </div>
-              <span className="font-bold text-[14px]" style={{ color: '#111827' }}>Padhi.ai</span>
+              <span className="font-bold text-[14px]" style={{ color: '#111827' }}>Padee.ai</span>
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ background: '#ECFDF5', color: '#0F766E' }}>Teacher</span>
             </div>
           </div>

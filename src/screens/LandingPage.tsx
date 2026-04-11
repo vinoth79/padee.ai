@@ -30,7 +30,7 @@ export default function LandingPage() {
             <div className="w-6 h-6 rounded-[7px] flex items-center justify-center" style={{ background: '#0D9488' }}>
               <div className="w-[9px] h-[9px] rounded-full" style={{ background: '#99F6E4' }} />
             </div>
-            <span className="font-bold text-[16px]" style={{ color: '#111827' }}>Padhi.ai</span>
+            <span className="font-bold text-[16px]" style={{ color: '#111827' }}>Padee.ai</span>
           </div>
           <div className="hidden md:flex items-center gap-6">
             {['School Learning', 'JEE', 'NEET', 'CA Foundation', 'For Schools'].map(link => (
@@ -78,7 +78,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="text-[16px] leading-[1.65] max-w-md" style={{ color: '#4B5563' }}>
-                Padhi.ai is your AI-powered study companion for CBSE, IGCSE, JEE, NEET, and CA Foundation.
+                Padee.ai is your AI-powered study companion for CBSE, IGCSE, JEE, NEET, and CA Foundation.
                 Get doubts solved instantly, practice at your level, and know exactly where to improve — on any device, any time.
               </p>
 
@@ -206,7 +206,7 @@ export default function LandingPage() {
 
       {/* ═══ FOOTER ═══ */}
       <footer className="bg-white py-6 text-center" style={{ borderTop: '0.5px solid #E5E7EB' }}>
-        <p className="text-[12px]" style={{ color: '#9CA3AF' }}>Padhi.ai · AI-powered learning for every Indian student · © 2026</p>
+        <p className="text-[12px]" style={{ color: '#9CA3AF' }}>Padee.ai · AI-powered learning for every Indian student · © 2026</p>
       </footer>
     </div>
   )

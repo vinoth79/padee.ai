@@ -56,7 +56,7 @@ export default function StudentLayout() {
               <div className="w-6 h-6 rounded-[7px] flex items-center justify-center" style={{ background: '#0D9488' }}>
                 <div className="w-[9px] h-[9px] rounded-full" style={{ background: '#99F6E4' }} />
               </div>
-              <span className="font-bold text-[16px]" style={{ color: '#111827' }}>Padhi.ai</span>
+              <span className="font-bold text-[16px]" style={{ color: '#111827' }}>Padee.ai</span>
             </div>
           </div>
 

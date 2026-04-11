@@ -22,7 +22,7 @@ export default function SplashScreen({ onDone }) {
 
         {/* App name */}
         <div className="text-center">
-          <h1 className="text-4xl font-extrabold text-white tracking-tight">Padhi.ai</h1>
+          <h1 className="text-4xl font-extrabold text-white tracking-tight">Padee.ai</h1>
           <p className="text-brand-pale text-sm font-medium mt-1 tracking-wide">Your AI-powered CBSE study partner</p>
         </div>
       </div>

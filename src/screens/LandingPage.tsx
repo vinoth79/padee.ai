@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BookOpen, Stethoscope, Calculator, Video, ArrowRight, Zap, Camera, Menu, X } from 'lucide-react'
+import { BookOpen, Stethoscope, Calculator, ArrowRight, Zap, Camera, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 
 const TRACKS = [
@@ -8,7 +8,6 @@ const TRACKS = [
   { name: 'JEE Prep', desc: 'Main + Advanced. Physics, Chemistry, Maths.', icon: Zap, bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8', iconBg: '#DBEAFE' },
   { name: 'NEET / Medical', desc: 'NEET · AIIMS · JIPMER. Full syllabus coverage.', icon: Stethoscope, bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46', iconBg: '#D1FAE5' },
   { name: 'CA Foundation', desc: 'Accounts, Law, Economics, Maths.', icon: Calculator, bg: '#F5F3FF', border: '#DDD6FE', text: '#5B21B6', iconBg: '#EDE9FE' },
-  { name: 'Live Tutoring', desc: 'Book AI or human tutors. Any subject, any time.', icon: Video, bg: '#FFF7ED', border: '#FED7AA', text: '#C2410C', iconBg: '#FFEDD5' },
 ]
 
 const CHIPS = ['CBSE Classes 8–12', 'IGCSE Cambridge', 'JEE Main + Advanced', 'NEET · AIIMS · JIPMER', 'CA Foundation']
@@ -38,9 +37,9 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/onboarding/class')}
+            <button onClick={() => navigate('/login')}
               className="text-[14px] font-semibold px-4 py-2 rounded-lg transition-all active:scale-95" style={{ background: '#EA580C', color: '#FFF7ED' }}>
-              Start free
+              Log in
             </button>
             <button className="md:hidden" onClick={() => setMobileMenu(!mobileMenu)}>
               {mobileMenu ? <X size={20} color="#6B7280" /> : <Menu size={20} color="#6B7280" />}
@@ -93,16 +92,15 @@ export default function LandingPage() {
 
               {/* CTAs */}
               <div className="flex flex-wrap gap-3 pt-1">
-                <button onClick={() => navigate('/onboarding/class')}
+                <button onClick={() => navigate('/login')}
                   className="text-[15px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95 flex items-center gap-2" style={{ background: '#EA580C', color: '#FFF7ED' }}>
-                  Start my free study session <ArrowRight size={14} />
+                  Student Login <ArrowRight size={14} />
                 </button>
-                <button onClick={() => navigate('/teacher')}
+                <button onClick={() => navigate('/login')}
                   className="text-[14px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95" style={{ color: '#374151', border: '0.5px solid #D1D5DB' }}>
-                  I'm a teacher →
+                  Teacher Login →
                 </button>
               </div>
-              <p className="text-[12px]" style={{ color: '#9CA3AF' }}>Takes 30 seconds · No credit card required</p>
             </motion.div>
 
             {/* Right: Product preview */}
@@ -121,10 +119,7 @@ export default function LandingPage() {
                   <p className="text-[10px] font-semibold mb-1" style={{ color: '#818CF8' }}>NEET · 47 DAYS TO EXAM</p>
                   <p className="text-sm font-semibold mb-1" style={{ color: '#F1F5F9' }}>Organic Chemistry is your weakest at 43%.</p>
                   <p className="text-xs mb-3" style={{ color: '#94A3B8' }}>I've prepared a 20-question targeted set — takes 15 minutes.</p>
-                  <div className="flex gap-2">
-                    <button className="flex-1 text-xs font-semibold py-2 rounded-lg" style={{ background: '#0D9488', color: '#F0FDFA' }}>Fix Organic Chem now →</button>
-                    <button className="text-xs font-medium py-2 px-3 rounded-lg" style={{ border: '1px solid #334155', color: '#94A3B8' }}>Full plan</button>
-                  </div>
+                  <button className="w-full text-xs font-semibold py-2 rounded-lg" style={{ background: '#0D9488', color: '#F0FDFA' }}>Fix Organic Chem now →</button>
                 </div>
 
                 {/* Mini cards row */}
@@ -163,14 +158,14 @@ export default function LandingPage() {
       {/* ═══ 5-TRACK SECTION ═══ */}
       <section className="bg-white" style={{ borderTop: '0.5px solid #E5E7EB' }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-9 lg:py-[36px]">
-          <p className="text-[11px] font-bold tracking-[0.15em] text-center mb-6" style={{ color: '#9CA3AF' }}>5 LEARNING TRACKS — ONE PLATFORM</p>
-          <motion.div className="grid grid-cols-2 lg:grid-cols-5 gap-3"
+          <p className="text-[11px] font-bold tracking-[0.15em] text-center mb-6" style={{ color: '#9CA3AF' }}>4 LEARNING TRACKS — ONE PLATFORM</p>
+          <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-3"
             variants={stagger} initial="hidden" whileInView="visible" viewport={{ once: true }}>
             {TRACKS.map(track => {
               const Icon = track.icon
               return (
                 <motion.button key={track.name} variants={fadeUp}
-                  onClick={() => navigate('/onboarding/class')}
+                  onClick={() => navigate('/login')}
                   className="rounded-[10px] p-4 text-left transition-all active:scale-[0.98]" style={{ background: track.bg, border: `0.5px solid ${track.border}` }}>
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-3" style={{ background: track.iconBg }}>
                     <Icon size={18} color={track.text} />
@@ -189,16 +184,16 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-7 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
             <h2 className="text-[18px] font-bold" style={{ color: '#111827' }}>Ready to study smarter?</h2>
-            <p className="text-[14px]" style={{ color: '#4B5563' }}>Join thousands of students already learning with AI.</p>
+            <p className="text-[14px]" style={{ color: '#4B5563' }}>Your AI study companion for CBSE, JEE, NEET, and CA.</p>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => navigate('/onboarding/class')}
+            <button onClick={() => navigate('/login')}
               className="text-[15px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95" style={{ background: '#EA580C', color: '#FFF7ED' }}>
-              Get started free →
+              Start Learning →
             </button>
-            <button onClick={() => navigate('/teacher')}
+            <button onClick={() => navigate('/login')}
               className="text-[15px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95" style={{ background: '#0D9488', color: '#F0FDFA' }}>
-              For schools
+              For Schools →
             </button>
           </div>
         </div>

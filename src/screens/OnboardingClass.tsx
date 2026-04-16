@@ -13,13 +13,17 @@ export default function OnboardingClass() {
   const handleSelect = (cls: number) => {
     setSelected(cls)
     user.updateUser({ studentClass: cls })
-    setTimeout(() => navigate('/onboarding/subjects'), 300)
   }
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
       <motion.div className="w-full max-w-md"
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+
+        <button onClick={() => navigate('/login')}
+          className="text-xs font-medium mb-4 flex items-center gap-1 transition-colors hover:text-teal-600" style={{ color: '#9CA3AF' }}>
+          ← Back to login
+        </button>
 
         <p className="text-sm font-medium mb-1" style={{ color: '#9CA3AF' }}>Step 1 of 3</p>
         <h1 className="text-[22px] font-bold mb-1" style={{ color: '#111827' }}>What class are you in?</h1>

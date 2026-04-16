@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, ClipboardList, Users, Radio, GraduationCap, ArrowLeft } from 'lucide-react'
+import { LayoutDashboard, FileText, ClipboardList, Users, Radio, LogOut } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 
 const NAV_SECTIONS = [
   {
@@ -36,7 +37,14 @@ function getActiveId(pathname: string) {
 export default function TeacherSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { signOut } = useAuth()
   const activeId = getActiveId(location.pathname)
+
+  async function handleLogout() {
+    await signOut()
+    localStorage.removeItem('padee-user')
+    navigate('/login', { replace: true })
+  }
 
   return (
     <aside className="w-[220px] flex-shrink-0 bg-white flex flex-col h-screen" style={{ borderRight: '0.5px solid #E5E7EB' }}>
@@ -89,10 +97,10 @@ export default function TeacherSidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-3 pb-4 pt-3 space-y-1" style={{ borderTop: '0.5px solid #E5E7EB' }}>
-        <button onClick={() => navigate('/home')}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors hover:bg-gray-50" style={{ color: '#6B7280' }}>
-          <ArrowLeft size={14} color="#9CA3AF" /> Student view
+      <div className="px-3 pb-4 pt-3" style={{ borderTop: '0.5px solid #E5E7EB' }}>
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors hover:bg-red-50 hover:text-red-600" style={{ color: '#9CA3AF' }}>
+          <LogOut size={14} /> Log out
         </button>
       </div>
     </aside>

@@ -1,0 +1,925 @@
+
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 1   |   April 2026   |   padee.ai 
+ 
+PADEE.AI 
+Product Requirements Document 
+Version 4.2  --  Quality Control + Agent Architecture + Open Source Model Strategy 
+ 
+v4.2  |  April 2026  |  Confidential 
+ 
+v4.0 
+RAG + LLM-agnostic + 
+Cost model 
+v4.1 
+Class 8-12 all subjects + 
+Pricing + Break-even 
+v4.2 (this) 
+Quality control + Agent architecture + OSS models 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 2   |   April 2026   |   padee.ai 
+ 
+ 
+What Changed from v4.1 to v4.2 
+Three architectural decisions added. The core product, RAG architecture, LLM routing, and roadmap from 
+v4.1 are unchanged. 
+ 
+NEW IN v4.2 
+Section 6 -- AI Quality Control Framework 
+Six-layer quality control pipeline added. Layer 1-3 are preventive (RAG, structured prompts, memory 
+context). Layer 4-5 are reactive feedback loops (student ratings, teacher review queue). Layer 6 is an 
+automated evaluation agent (Phase 2) that scores every response before showing it. Quality metrics 
+defined. Fine-tuning quality data pipeline added for Phase 3. 
+ 
+NEW IN v4.2 
+Section 7 -- Agent Architecture 
+Formal decision framework for when to use agents vs simple LLM calls. Three agentic patterns defined (tool 
+use, multi-step, self-check). Task-to-approach mapping for all 8 Padee task types. One agent addition for 
+Phase 1: worksheet validation loop. JEE/NEET complex solver agent scoped to Phase 3. 
+ 
+CHANGED IN v4.2 
+Section 5 -- LLM strategy updated with open source model analysis 
+Before: LiteLLM routing table without comparative OSS analysis or self-hosting guidance 
+After: Full open source model comparison table with costs and quality ratings. Self-hosting break-even 
+analysis (not viable until 1M+ students). Fine-tuning roadmap: fine-tune Llama-3.1-8B on student data at 
+Phase 3 for domain-specific quality at 10x lower cost. Photo doubt model changed from GPT-4o-mini to 
+Llama-3.2-11B Vision (40% cheaper). 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 3   |   April 2026   |   padee.ai 
+ 
+ 
+1. Product Overview 
+Padee.ai is an AI-first K12 learning platform for India. CBSE Classes 8-12 all subjects from Phase 1, 
+powered by RAG over uploaded NCERT content. LLM-agnostic via LiteLLM. Cost target: 
+Rs.500/student/year. AI quality controlled through six layers. Agents used selectively where multi-step 
+reasoning justifies cost. 
+ 
+Product 
+Padee.ai 
+Domain 
+padee.ai (live) 
+Phase 1 scope 
+CBSE Class 8-12, all 
+subjects 
+Cost ceiling 
+Rs.500/student/year 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 4   |   April 2026   |   padee.ai 
+ 
+ 
+2. Complete Feature List (updated in v4.2) 
+Full feature list from v4.1 is unchanged except for the additions below. New features marked with a star are 
+added in v4.2. 
+ 
+2A. Core AI + Quality Control (updated) 
+Feature Description Phase Priority 
+Ask AI -- text doubt RAG-grounded streaming response 
+via dual-loop solver. Grounded in 
+NCERT. Student memory injected. 
+1 P0 
+Ask AI -- photo doubt Llama-3.2-11B Vision (replaces 
+GPT-4o-mini) -- 40% cheaper, 
+comparable quality for textbook 
+images 
+1 P0 
+Thumbs up/down signal * After every AI response. Logged to 
+PostHog. Drives helpful_rate metric 
+per subject and chapter. 
+1 P0 
+Report incorrect answer * One-tap flag on any AI response. 
+Goes to teacher review queue. 
+Triggers prompt audit if rate 
+exceeds 5%. 
+1 P0 
+Teacher review queue * Simple /admin/flagged panel. 
+Teacher marks response 
+correct/wrong. Corrections become 
+labelled training data. 
+1 P0 
+Quality metrics dashboard * helpful_rate, flag_rate, 
+regeneration_rate, correction_rate 
+tracked in PostHog. Alert 
+thresholds defined. 
+1 P0 
+Worksheet validation agent * Generate questions -> validate 
+each for NCERT accuracy (Llama-
+8B check) -> regenerate failures. 
+Phase 1 agent addition. 
+1 P0 
+Automated eval agent Llama-8B scores every doubt 
+response before showing: NCERT-
+aligned? Addresses question? 
+Keywords present? 
+2 P0 
+Fine-tuning pipeline Collect quality-labelled responses 
+from teacher review. Fine-tune 
+Llama-3.1-8B on student data at 
+Phase 3. 
+3 P0 
+Custom fine-tuned model Fine-tuned Llama-8B replaces 80% 
+of API calls at 10x lower cost with 
+higher CBSE-specific accuracy 
+3 P1 
+ 
+2B. Platform & Infrastructure (updated model routing) 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 5   |   April 2026   |   padee.ai 
+Feature Description Phase Priority 
+LiteLLM abstraction Single interface to all providers. 
+Model per task from .env. Zero 
+code changes to switch. 
+1 P0 
+Model routing by task * Text doubts: Llama-70B. Photo 
+doubts: Llama-3.2-11B Vision. 
+Validation: Llama-8B. Worksheet: 
+GPT-4o-mini. 
+1 P0 
+Semantic cache (pgvector) Cache AI responses by question 
+embedding. 50%+ cost reduction 
+on repeated doubts. 
+1 P0 
+NCERT RAG store All NCERT PDFs indexed in 
+Supabase pgvector. Admin upload 
+panel at padee.ai/admin. 
+1 P0 
+Daily usage cap 10 doubts/day free tier. Hard cap 
+server-side for cost control. 
+1 P0 
+Response length limits max_tokens per task type. 500 
+simple doubts, 800 complex, 2000 
+worksheets. 
+1 P0 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 6   |   April 2026   |   padee.ai 
+ 
+ 
+3. DeepTutor Feature Incorporation (unchanged from 
+v4.1) 
+Four features from DeepTutor (HKUDS/DeepTutor, 10.3k GitHub stars). All four in Phase 1. 
+ 
+Feature Padee implementation Effort 
+Dual-loop solver Analyse loop -> Solve loop. Two sequential LLM calls. 
+Targets the specific misconception, not the general 
+topic. 
+2 days 
+Visual explain chip Explain visually action chip -> LLM generates self-
+contained HTML with inline SVG. Sandboxed iframe in 
+chat. 
+3 days 
+CBSE Paper Mimic Upload board exam PDF -> text extracted -> LLM 
+clones question style and mark distribution. 
+3 days 
+Persistent memory studentMemory.ts reads Supabase, formats profile, 
+injected into every LLM prompt. 1 file + 3 lines per 
+route. 
+1 day 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 7   |   April 2026   |   padee.ai 
+ 
+ 
+4. RAG Architecture -- NCERT-Grounded Answers 
+(unchanged from v4.1) 
+Every AI answer grounded in uploaded NCERT content -- not LLM training memory. Student asks doubt -> 
+question embedded -> NCERT chunks retrieved from pgvector -> injected into prompt. Syllabus updates: re-
+upload one PDF. 
+ 
+Step What happens 
+1 -- Student 
+asks 
+Types question or uploads photo of textbook page 
+2 -- Check 
+cache 
+Embed question -> search response_cache for 92%+ similarity match -> return cached if found 
+(no LLM call) 
+3 -- Retrieve 
+NCERT 
+Embed question -> cosine search ncert_chunks table -> top 4 passages by subject + class 
+filter 
+4 -- Inject 
+context 
+System prompt + student memory + NCERT passages + question. Instruction: Answer using 
+ONLY this NCERT content. 
+5 -- Stream 
+response 
+LLM streams response word by word. Cached on completion. XP awarded. Doubt saved to 
+DB. 
+6 -- Quality 
+signal 
+Student sees thumbs up/down. Flag button. Rating feeds helpful_rate metric. 
+ 
+NCERT corpus: ~48 PDFs, ~10,200 pages, ~5M tokens. One-time embedding cost: approximately Rs.8 
+($0.10). Syllabus update: re-upload changed PDF, old chunks replaced automatically. 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 8   |   April 2026   |   padee.ai 
+ 
+ 
+5. LLM-Agnostic Architecture + Open Source Model 
+Strategy 
+LiteLLM provides a single interface to all LLM providers. Model selection is per-task via environment 
+variables. No code changes to switch any model. 
+ 
+5A. Open source model comparison (updated in v4.2) 
+All models below are open source or open-weight. Costs shown are API prices -- you are not paying for the 
+model, only for compute. 
+ 
+Model Provider Cost per 1K 
+tokens 
+Padee task Quality vs GPT-4o 
+Llama-3.1-70B Groq Rs.0.049 in / 
+Rs.0.066 out 
+Simple CBSE doubts, 
+practice gen 
+90% for CBSE 
+tasks 
+Llama-3.1-8B Groq Rs.0.004 in / 
+Rs.0.007 out 
+Home curation, 
+validation, JSON tasks 
+80% for structured 
+tasks 
+Llama-3.2-11B Vision * Groq Rs.0.015 in / 
+Rs.0.015 out 
+Photo doubts -- 
+replaces GPT-4o-mini 
+85% for textbook 
+images 
+Qwen-2.5-72B Together.ai Rs.0.034 in / 
+Rs.0.034 out 
+Hindi AI responses 
+(Phase 4) 
+92% for Hindi tasks 
+Gemma-2-9B Groq Rs.0.017 in / 
+Rs.0.017 out 
+Agent validation steps, 
+scoring 
+82% for 
+classification 
+Fine-tuned Llama-8B * Self-hosted 
+(Phase 3) 
+Fixed server cost 
+only 
+All CBSE doubts post-
+50K dataset 
+Can exceed GPT-
+4o on CBSE tasks 
+GPT-4o-mini OpenAI Rs.0.013 in / 
+Rs.0.050 out 
+Worksheet gen, 
+evaluation fallback 
+Baseline 100% 
+Claude Sonnet Anthropic Rs.0.252 in / 
+Rs.1.26 out 
+JEE advanced solving 
+(Phase 3 only) 
+105% -- best 
+reasoning 
+ 
+5B. Updated model routing (.env config) 
+Photo doubt model changed from GPT-4o-mini to Llama-3.2-11B Vision. 40% cheaper on output tokens. 
+Comparable quality for reading printed textbook questions. 
+ 
+# Padee.ai LLM routing -- all task assignments configurable 
+ 
+LLM_DOUBT_SIMPLE=groq/llama-3.1-70b-versatile 
+LLM_DOUBT_VISION=groq/llama-3.2-11b-vision-preview   # CHANGED from gpt-4o-mini 
+LLM_DOUBT_COMPLEX=claude-sonnet-4-20250514            # Phase 3 only 
+LLM_PRACTICE_GEN=groq/llama-3.1-8b-instant 
+LLM_EVALUATION=gpt-4o-mini 
+LLM_WORKSHEET=gpt-4o-mini 
+LLM_HOME_CURATOR=groq/llama-3.1-8b-instant 
+LLM_VISUAL_EXPLAIN=gpt-4o-mini 
+LLM_VALIDATION=groq/llama-3.1-8b-instant             # NEW -- worksheet validation agent 
+LLM_QUALITY_EVAL=groq/gemma2-9b-it                   # Phase 2 -- automated quality gate 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 9   |   April 2026   |   padee.ai 
+LLM_HINDI=together_ai/Qwen/Qwen2.5-72B-Instruct      # Phase 4 
+ 
+EMBEDDING_MODEL=text-embedding-3-small 
+LLM_FALLBACK=gpt-4o-mini 
+ 
+5C. Self-hosting analysis -- when does it make sense? 
+Self-hosting is not economically viable until approximately 1 million students. Cloud API providers benefit 
+from GPU pools at a scale Padee cannot match. Use API providers until then. 
+ 
+Server configuration Monthly cost Model capacity Break-even student count 
+AWS g4dn.xlarge (1x T4 
+GPU) 
+Rs.44,000 Llama-8B, 5,000 req/hour 1.2 million students 
+AWS g4dn.4xlarge (2x 
+T4) 
+Rs.1.4 lakh Llama-70B, 2,000 
+req/hour 
+3.7 million students 
+AWS p3.2xlarge (V100) Rs.2.6 lakh Llama-70B, 3,000 
+req/hour 
+6.8 million students 
+ 
+At 50,000 students, API costs via Groq are approximately Rs.15,000/month. A g4dn.xlarge server costs 
+Rs.44,000/month. API access is 3x cheaper at this scale. Self-hosting only makes sense beyond 1 million 
+students. 
+ 
+5D. Fine-tuning roadmap -- Phase 3 (the real open source play) 
+Fine-tuning a small open source model on proprietary student data is the most important open source 
+decision Padee will make. It converts the data flywheel into a model quality advantage. 
+ 
+Phase Action Outcome 
+Phase 1 (now) Collect all doubt sessions + teacher 
+corrections in DB. Tag each response as 
+helpful/correct/wrong from student and 
+teacher signals. 
+Builds the labelled training dataset. Target: 
+10,000+ labelled pairs by Month 6. 
+Phase 2 (M5-9) Clean and structure the dataset. Remove 
+low-quality responses. Create CBSE-specific 
+instruction-following pairs. 
+Clean training dataset ready. 20,000+ high-
+quality pairs. 
+Phase 3 (M10-
+15) 
+Fine-tune Llama-3.1-8B on the dataset using 
+QLoRA. Estimated cost: $500 on cloud GPU. 
+Deploy via Together.ai or Modal. 
+Custom Padee model outperforms base 
+Llama-70B on CBSE tasks. Cost: 
+Rs.0.003/1K tokens (10x cheaper than Groq 
+70B). 
+Phase 3+ Iterative fine-tuning as more data 
+accumulates. Model improves with every 
+student session. 
+Proprietary model that no competitor can 
+replicate. This is the technical expression of 
+the data flywheel moat. 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 10   |   April 2026   |   padee.ai 
+ 
+ 
+6. AI Quality Control Framework (new in v4.2) 
+Six layers of quality control. Layers 1-3 are preventive -- they reduce the probability of a bad response before 
+the LLM call. Layers 4-6 are reactive -- they detect and correct bad responses after they occur, and feed 
+corrections back into the system. 
+ 
+6A. The six layers 
+ 
+Layer Name Mechanism Phase Cost 
+1 RAG grounding Every prompt includes retrieved 
+NCERT passages. LLM instructed: 
+Answer using ONLY this content. 
+Structural prevention of 
+hallucination. If NCERT does not 
+say it, the AI cannot say it. 
+1 Already built -- no extra 
+cost 
+2 Structured prompt + 
+temperature 
+System prompt enforces: step-by-
+step format, CBSE keywords, max 
+400 words, NCERT terminology. 
+Temperature 0.3 for factual 
+content. 0.7 only for analogies and 
+examples. 
+1 Already built -- no extra 
+cost 
+3 Student memory 
+context 
+Knowing class level, subject, recent 
+confusion, and weak topics narrows 
+the answer space. Context-
+grounded responses are more 
+accurate than context-free calls. 
+1 Already built -- no extra 
+cost 
+4 Student signal loop Thumbs up/down and Report 
+incorrect on every response. 
+helpful_rate tracked per subject 
+and chapter. Below 65% triggers 
+prompt review. This is the most 
+important feedback signal. 
+1 Rs.0 per response -- 
+student effort 
+5 Teacher review queue Flagged responses appear at 
+/admin/flagged. Teacher marks 
+correct/wrong/partial. Corrections 
+stored as labelled data. 8%+ 
+correction rate on a topic triggers 
+NCERT chunk audit. 
+1 Rs.0 per response -- 
+teacher effort 
+6 Automated eval agent Llama-8B (Gemma-2-9B) scores 
+every response before showing: (1) 
+NCERT-aligned? (2) Answers 
+actual question? (3) Keywords 
+present? Score below 6/10 triggers 
+regeneration with a better model. 
+2 Rs.0.0025 per response 
+(~Rs.0.75/student/month) 
+ 
+6B. Quality metrics to track from day one 
+ 
+Metric How measured Alert threshold Action when triggered 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 11   |   April 2026   |   padee.ai 
+helpful_rate per subject Thumbs up / total 
+responses in PostHog 
+Below 65% Review and update doubtTutor.ts 
+system prompt for that subject 
+flag_rate (incorrect) Report button clicks / total 
+responses 
+Above 5% Immediate prompt and NCERT 
+chunk audit for that chapter 
+regeneration_rate Simpler mode + Exam 
+answer chip taps / total 
+Above 40% First response quality insufficient -- 
+fix prompt depth and structure 
+teacher_correction_rate Wrong marks / teacher-
+reviewed responses 
+Above 8% NCERT chunks may be wrong or 
+incomplete -- re-upload that chapter 
+avg_response_tokens Token count logged per 
+response 
+Above 600 
+tokens 
+Prompt not enforcing conciseness -
+- add explicit word limit instruction 
+worksheet_rejection_rate Questions failing 
+validation / total 
+generated 
+Above 15% Worksheet prompt quality issue -- 
+review practiceGen.ts for that 
+subject 
+ 
+6C. Quality improvement flywheel 
+Quality compounds over time through a structured data collection and correction loop. 
+ 
+Stage What happens 
+Collect Every response stored with student signal (helpful/flagged) and teacher correction if reviewed 
+Analyse Monthly: identify lowest-performing subjects, chapters, and prompt versions. PostHog 
+dashboard. 
+Improve 
+prompts 
+Update system prompts for underperforming areas. A/B test new vs old. Track helpful_rate 
+change. 
+Update NCERT 
+chunks 
+High correction rate on a topic = chunk quality issue. Re-extract or manually curate better 
+chunks. 
+Fine-tune 
+(Phase 3) 
+Accumulated labelled data used to fine-tune Llama-8B. Better model on same NCERT content. 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 12   |   April 2026   |   padee.ai 
+ 
+ 
+7. Agent Architecture (new in v4.2) 
+An agent is an LLM that can plan a sequence of actions, call tools, inspect results, and iterate until a task is 
+complete. More powerful than a single LLM call. Also more expensive, slower, and more complex to debug. 
+Use agents only where the extra loops justify the cost. 
+ 
+7A. Three agentic patterns -- use these before building full agents 
+These three patterns give 80% of agent value at 20% of the complexity. Implement these in Phase 1. Full 
+autonomous agents in Phase 3. 
+ 
+Pattern How it works Padee use case 
+Tool use LLM can call external functions: NCERT 
+search, calculator, formula lookup, DB 
+query. Returns results and incorporates 
+them into response. 
+Doubt solver calls NCERT RAG retrieval 
+as a tool. Math questions call a symbolic 
+calculator for verification. 
+Multi-step (already built) Two sequential LLM calls where the 
+second has the context of the first. 
+Analyse then Solve. DeepTutor dual-
+loop. 
+All text doubts: Call 1 identifies concept 
+and misconception. Call 2 explains 
+targeting that specific gap. 
+Self-check Generate response -> pass to cheap 
+model for validation -> regenerate if 
+validation fails. The validator does not 
+need to be smart, just accurate on a 
+narrow check. 
+Worksheet generation: generate 15 
+questions -> Llama-8B validates each for 
+NCERT accuracy -> regenerate failures. 
+ 
+7B. Task decision matrix -- agents vs simple calls 
+ 
+Task Current approach Use 
+agent? 
+Reasoning Phase 
+Simple CBSE doubt Single call + RAG No NCERT has the answer. 
+One call with good context 
+is sufficient and faster. 
+Phase 1 
+Multi-step derivation Dual-loop (already) Agentic 
+pattern 
+Two calls justified. Analyse 
+first, then explain targeting 
+the specific gap. 
+Phase 1 
+Worksheet generation Single prompt, 
+unvalidated 
+Add self-
+check now 
+Generate -> validate each 
+question -> regenerate 
+failures. Prevents wrong 
+questions reaching 
+teachers. One extra cheap 
+call per question. 
+Phase 1 
+Photo doubt solving Vision model + 
+RAG 
+No Vision model reads image, 
+RAG provides context. 
+Single call with good inputs 
+produces accurate 
+responses. 
+Phase 1 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 13   |   April 2026   |   padee.ai 
+MCQ practice generation Single JSON 
+prompt 
+No Llama-8B generates 
+accurate structured MCQs 
+on known NCERT topics. 
+Add JSON validation but no 
+agent loop. 
+Phase 1 
+Student diagnosis Simple DB query 
+on accuracy 
+Phase 2 Agent analyses 30+ 
+sessions, identifies root 
+misconception patterns 
+across subjects. More 
+accurate than surface DB 
+query but adds cost. 
+Phase 2 
+Automated quality gate Not built yet Phase 2 Cheap LLM scores every 
+response on 3 criteria 
+before showing. Score 
+below 6/10 triggers 
+regeneration. Adds 
+Rs.0.0025 per response. 
+Phase 2 
+JEE/NEET complex 
+solving 
+Not in Phase 1 Full agent 
+in Phase 3 
+Multi-step derivation 
+requires: plan steps -> solve 
+each -> check intermediate -
+> verify final. Errors in JEE 
+solutions are high-trust 
+violations. 
+Phase 3 
+ 
+7C. Worksheet validation agent -- Phase 1 implementation 
+The one agent pattern worth adding in Phase 1. A teacher who receives one factually incorrect question 
+loses trust permanently. The validation step costs approximately Rs.0.08 per worksheet and prevents this. 
+ 
+// server/routes/ai.ts -- worksheet route (updated) 
+ 
+app.post('/api/ai/worksheet', async (c) => { 
+  const body = await c.req.json() 
+  const prompt = getWorksheetPrompt(body) 
+ 
+  // Step 1: Generate worksheet questions 
+  const raw = await llmComplete(MODEL.worksheet, [{role:'user',content:prompt}], 4096) 
+  const worksheet = JSON.parse(raw) 
+ 
+  // Step 2: Validate each question (self-check agent loop) 
+  const validated = [] 
+  for (const section of worksheet.sections) { 
+    const checkedQuestions = [] 
+    for (const q of section.questions) { 
+      const checkPrompt = `Is this question factually correct and NCERT-aligned for 
+        Class ${body.className} ${body.subject}? 
+        Question: ${q.question} 
+        Answer: ${q.answer} 
+        Reply with ONLY: VALID or INVALID: <reason>` 
+      const check = await llmComplete(MODEL.validation, 
+[{role:'user',content:checkPrompt}], 100) 
+      if (check.startsWith('VALID')) { 
+        checkedQuestions.push(q) 
+      } else { 
+        // Regenerate this question only 
+        const regenPrompt = `Generate one replacement question. ${check} -- fix this 
+issue.` 
+        const replacement = await llmComplete(MODEL.worksheet, 
+[{role:'user',content:regenPrompt}], 300) 
+        checkedQuestions.push(JSON.parse(replacement)) 
+      } 
+    } 
+    validated.push({...section, questions: checkedQuestions}) 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 14   |   April 2026   |   padee.ai 
+  } 
+ 
+  return c.json({...worksheet, sections: validated}) 
+}) 
+ 
+Validation model: Llama-3.1-8B (Rs.0.004/1K tokens). At 15 questions per worksheet, average 100 tokens 
+per validation call = Rs.0.006 per worksheet for validation. Negligible cost, high trust value. 
+ 
+7D. JEE/NEET complex solver agent -- Phase 3 design 
+Phase 3 introduces a full multi-step agent for JEE and NEET problem solving. This is the only Padee use 
+case that genuinely requires autonomous agent loops. 
+ 
+Step Agent action Model 
+1 -- Classify Identify problem type: derivation, numerical, 
+conceptual, multi-concept. Determines tool 
+set needed. 
+Llama-8B (cheap classifier) 
+2 -- Plan Break problem into numbered sub-steps. 
+Identify which formulae and concepts are 
+needed. 
+Llama-70B or Claude 
+3 -- Solve step-
+by-step 
+Execute each sub-step. Call calculator tool 
+for numerical steps. Call NCERT RAG for 
+formula retrieval. 
+Claude Sonnet (best reasoning) 
+4 -- Self-check Verify: Does each step follow from the 
+previous? Does the final answer have correct 
+units? Is it physically plausible? 
+Llama-70B (cheaper verification) 
+5 -- Format Format as CBSE/JEE answer with step 
+numbers, formula citations, and working 
+shown. 
+GPT-4o-mini 
+ 
+Estimated cost per JEE complex problem: Rs.0.50-1.50 (4-5 LLM calls, mixed models). Justified for JEE 
+students who pay Rs.1,500/year and for whom correct solutions are non-negotiable. 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 15   |   April 2026   |   padee.ai 
+ 
+ 
+8. Phase 1 Build Scope (updated in v4.2) 
+Phase 1 now includes three quality control additions: student signal buttons, teacher review queue, and 
+worksheet validation agent. The tech stack table is updated with quality monitoring tools. 
+ 
+8A. Phase 1 IN scope -- updated 
+ 
+IN Phase 1 (complete list) 
+* CBSE Class 8-12, all core subjects via 
+NCERT RAG 
+* Ask AI -- text doubt (dual-loop, RAG, 
+streaming) 
+* Ask AI -- photo doubt (Llama-3.2-11B 
+Vision) 
+* Visual explain chip 
+* Persistent student memory injection 
+* Semantic response cache (pgvector) 
+* LiteLLM model routing 
+* MCQ practice engine 
+* Basic test mode + AI results insights 
+* Student dashboard -- all 10 modules 
+* XP + streak system (Supabase) 
+* Thumbs up/down signal on every AI 
+response [NEW] 
+* Report incorrect answer button [NEW] 
+* Teacher review queue at /admin/flagged 
+[NEW] 
+* Quality metrics in PostHog dashboard 
+[NEW] 
+* Worksheet generator with validation 
+agent [NEW] 
+* CBSE Paper Mimic (PDF upload) 
+* Teacher command centre 
+* Admin panel for NCERT PDF ingestion 
+* Login / signup (Supabase Auth) 
+* Daily usage cap (10 doubts/day free tier) 
+* Deployed to padee.ai with HTTPS 
+* PostHog + Sentry monitoring 
+OUT of Phase 1 (unchanged) 
+* IGCSE curriculum (Phase 2) 
+* JEE / NEET / CA Foundation tracks 
+(Phase 3) 
+* Automated evaluation agent (Phase 2) 
+* Student diagnosis agent (Phase 2) 
+* JEE/NEET complex solver agent (Phase 
+3) 
+* React Native mobile app (Phase 2) 
+* Push notifications (Phase 2) 
+* Full test series (Phase 2) 
+* Human tutoring marketplace (Phase 3) 
+* Hindi language UI (Phase 4) 
+* Fine-tuning pipeline (Phase 3) 
+* NEET / JEE full mock tests (Phase 3) 
+* NEP compliance reports (Phase 4) 
+* White-label product (Phase 4) 
+ 
+8B. Updated tech stack for Phase 1 
+ 
+Layer Technology Notes 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 16   |   April 2026   |   padee.ai 
+Frontend React 18 + Vite 4 (existing 
+prototype) 
+Do not rebuild. Wire backend only. 
+Backend Hono + TypeScript (server/ 
+folder) 
+Port 3001, proxied via Vite in dev. 
+LLM layer LiteLLM Any model, any provider. Config via .env. 
+Photo doubts Llama-3.2-11B Vision via Groq 
+[UPDATED] 
+Replaces GPT-4o-mini. 40% cheaper output 
+tokens. 
+Vector store Supabase pgvector NCERT chunks + semantic response cache. 
+Embeddings OpenAI text-embedding-3-small Rs.0.0017/1K tokens. Full NCERT corpus: ~Rs.8 
+one-time. 
+Quality signals PostHog [NEW] helpful_rate, flag_rate, correction_rate tracked per 
+subject. 
+Error monitoring Sentry Production error alerts. 
+Teacher review queue Supabase DB + /admin route 
+[NEW] 
+Flagged responses table. Teacher marks 
+correct/wrong. 
+Database + Auth Supabase PostgreSQL Auth, DB, pgvector, storage all in one. 
+Frontend deploy Vercel padee.ai. Zero-config. 
+Backend deploy Railway api.padee.ai. Env vars in dashboard. 
+ 
+8C. Phase 1 success gate (unchanged) 
+Do not proceed to Phase 2 until all six are true. Behaviour, not opinion. 
+ 
+Metric Threshold Why 
+Weekly active students 500+ Minimum signal product is being used 
+Day 3 return rate >40% unprompted Core habit formation signal 
+Doubt resolution rating >3.5 / 5 average NCERT-grounded answers must be 
+accurate 
+Teacher worksheet repeat >60% generate 2+ Teacher adoption beyond novelty 
+Willingness to pay >30% say yes to 
+Rs.299/month 
+Business viability signal 
+Day 7 return rate >25% unprompted Strongest habit signal available 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 17   |   April 2026   |   padee.ai 
+ 
+ 
+9. Four-Phase Roadmap (updated agent + quality 
+milestones) 
+ 
+Phase 1  Months 1-4 
+CBSE 8-12 + RAG + 
+Quality signals + 
+Worksheet validation agent 
++ LiteLLM OSS routing 
+Phase 2  Months 5-9 
+IGCSE + Foundation tracks 
++ Automated quality gate 
+agent + Student diagnosis 
+agent + Mobile app 
+Phase 3  Months 10-
+15 
+JEE/NEET/CA full + JEE 
+agent solver + Fine-tuned 
+Llama-8B model + Human 
+tutoring + B2B 
+Phase 4  Months 16-
+24 
+State boards + Hindi UI 
+(Qwen-2.5-72B) + Offline 
+mode + NEP reports + 
+Scale to 50K+ 
+ 
+10. Competitive Moats (updated with quality and agent 
+moats) 
+Eight moats. The first six are unchanged from v4.1. Two new moats added relating to quality control 
+infrastructure and agent architecture. 
+ 
+Moat Description Defensibility 
+1 Data flywheel Every doubt, every answer rating, every teacher correction 
+builds proprietary knowledge. After 12 months: Padee 
+knows which NCERT lines confuse students most. No 
+competitor can replicate this without the same students. 
+Compounds -- cannot be 
+bought 
+2 NCERT 
+accuracy 
+Answers from uploaded, current NCERT content. Syllabus 
+updates: re-upload one PDF. Competitors on training 
+memory are immediately stale when CBSE revises. 
+Updated faster than 
+competitors 
+3 Lifecycle lock-
+in 
+Class 8 through competitive exam on one platform. 4 years 
+of XP, streak, badges, AI context. Switching cost grows with 
+every session. 
+Grows with time 
+4 Curriculum 
+depth 
+CBSE + IGCSE + NEP + JEE + NEET + CA Foundation 
+content across all classes. New entrant with better model 
+but no curriculum is useless. 
+18 months to replicate 
+5 NEP 
+relationships 
+Schools mandated to adopt NEP 2020. Platform embedded 
+in NEP compliance reporting cannot be removed without 
+administrative disruption. 
+Institutional switching cost 
+6 LLM-agnostic Can switch to any better or cheaper model in one .env 
+change. Competitors locked to a single provider face pricing 
+risk and capability ceilings. 
+Permanent flexibility 
+7 Quality 
+infrastructure 
+[NEW] 
+Teacher correction data, student ratings, and automated 
+quality scores form a quality dataset no competitor can 
+acquire. This data directly drives the fine-tuning moat. 
+Converts to model moat 
+8 Fine-tuned 
+model [NEW] 
+Phase 3 Llama-8B fine-tuned on 50,000+ labelled student 
+sessions outperforms base GPT-4o on CBSE tasks at 10x 
+lower cost. Proprietary model that cannot be replicated 
+without the same data. 
+Technical + data moat 
+combined 
+ 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 18   |   April 2026   |   padee.ai 
+11. Design System (unchanged) 
+Option B -- Teal + Coral palette. Base font size 16px. Full spec in Padee_UI_Spec_v2.md. 
+ 
+Token Value Usage 
+--teal #0D9488 Brand primary -- nav active, AI orb, progress rings 
+--coral #EA580C Main CTAs, challenge buttons, urgency actions 
+--navy #0F1729 AI hero card background only 
+--amber #D97706 Streak flame, at-risk alerts, weak topic cards 
+--bg-page #F8F7F4 Warm white page background 
+Font base DM Sans 16px Increased from 14px. Fixes all small-text issues. 
+ 
+12. Success Metrics (updated with quality metrics) 
+ 
+Metric Phase 1 Phase 2 Phase 3 Phase 4 
+Weekly active students 500+ 5,000+ 20,000+ 50,000+ 
+Day 7 retention >25% >35% >40% >45% 
+Doubt helpful_rate [NEW] >65% per 
+subject 
+>72% >80% >85% 
+Flag rate (incorrect) [NEW] <5% <3% <2% <1% 
+Cache hit rate 0% to 40% 50%+ 60%+ 65%+ 
+AI cost/student/month Rs.25 M1 -> 
+Rs.15 M4 
+Rs.12 Rs.8 (fine-tuned 
+model) 
+<Rs.6 
+NCERT accuracy (human eval) >90% >92% >95% (fine-
+tuned) 
+>97% 
+School partnerships 3 pilot schools 25 schools 100 schools 500+ schools 
+ 
+13. Open Questions (updated) 
+ 
+1. Monetisation entry point: fully free to maximise student data for quality improvement, or freemium 
+with 10-doubt cap to test willingness to pay early? 
+2. Worksheet validation agent false positive rate: at what rejection rate does the regeneration loop 
+create teacher-visible delays? Need to test with real worksheets before setting threshold. 
+3. Fine-tuning trigger: what is the minimum labelled dataset size before fine-tuning Llama-8B produces 
+measurable quality improvement over the base model on CBSE tasks? Likely 5,000-10,000 pairs but 
+needs experiment. 
+
+Padee.ai   |   PRD v4.2   |   Confidential 
+Page 19   |   April 2026   |   padee.ai 
+4. Complexity routing threshold for JEE: how to detect whether a question is CBSE-level (route to 
+Llama-70B) vs JEE Advanced (route to Claude)? Options: keyword detection, chapter metadata, or a 
+lightweight 8B classifier call. 
+5. Teacher review queue incentive: should teachers be paid per correction reviewed, or is the value of 
+accurate AI for their students sufficient motivation? 
+6. Demo mode scope for school presentations: Class 10 CBSE Physics student (teacher-focused) or 
+Class 12 NEET student (parent-focused)? 
+ 
+Padee.ai PRD v4.2 -- Confidential -- April 2026 

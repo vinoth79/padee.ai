@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUser, Track } from '../context/UserContext'
+import { useAuth } from '../context/AuthContext'
+import { saveOnboarding } from '../services/api'
 import { BookOpen, Zap, Stethoscope, Calculator } from 'lucide-react'
 
 interface TrackOption {
@@ -43,20 +45,40 @@ const TRACKS: TrackOption[] = [
 export default function OnboardingTrack() {
   const navigate = useNavigate()
   const user = useUser()
+  const { token } = useAuth()
   const [selected, setSelected] = useState<Track>(user.activeTrack || 'school')
+  const [saving, setSaving] = useState(false)
 
-  const handleStart = () => {
-    user.updateUser({ activeTrack: selected, isOnboarded: true })
-    if (selected === 'neet') navigate('/dashboard/neet', { replace: true })
-    else if (selected === 'jee') navigate('/dashboard/jee', { replace: true })
-    else if (selected === 'ca') navigate('/dashboard/ca', { replace: true })
-    else navigate('/home', { replace: true })
+  const handleStart = async () => {
+    if (!token) return
+    setSaving(true)
+    try {
+      await saveOnboarding(token, {
+        className: user.studentClass,
+        subjects: user.selectedSubjects,
+        track: selected,
+      })
+      user.updateUser({ activeTrack: selected, isOnboarded: true })
+      navigate('/home', { replace: true })
+    } catch (err) {
+      console.error('Onboarding save failed:', err)
+      // Still navigate -- localStorage has the data, backend can sync later
+      user.updateUser({ activeTrack: selected, isOnboarded: true })
+      navigate('/home', { replace: true })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-16">
       <motion.div className="w-full max-w-xl"
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+
+        <button onClick={() => navigate('/onboarding/subjects')}
+          className="text-xs font-medium mb-4 flex items-center gap-1 transition-colors hover:text-teal-600" style={{ color: '#9CA3AF' }}>
+          ← Back
+        </button>
 
         <p className="text-sm font-medium mb-1" style={{ color: '#9CA3AF' }}>Step 3 of 3 · Class {user.studentClass}</p>
         <h1 className="text-[22px] font-bold mb-1" style={{ color: '#111827' }}>What's your main goal?</h1>
@@ -97,13 +119,29 @@ export default function OnboardingTrack() {
           })}
         </div>
 
-        <button onClick={handleStart}
-          className="w-full font-semibold py-3.5 rounded-[9px] text-base transition-all active:scale-95"
+        <button onClick={handleStart} disabled={saving}
+          className="w-full font-semibold py-3.5 rounded-[9px] text-base transition-all active:scale-95 disabled:opacity-60"
           style={{ background: '#EA580C', color: '#FFF7ED' }}>
-          Build my study plan →
+          {saving ? 'Setting up...' : 'Build my study plan →'}
         </button>
 
-        <p className="text-center text-[11px] mt-3" style={{ color: '#9CA3AF' }}>You can add another goal later from settings</p>
+        <button onClick={async () => {
+            // Skip: default to 'school' track per UI spec
+            if (!token) return
+            setSaving(true)
+            try {
+              await saveOnboarding(token, {
+                className: user.studentClass,
+                subjects: user.selectedSubjects,
+                track: 'school',
+              })
+            } catch {}
+            user.updateUser({ activeTrack: 'school', isOnboarded: true })
+            navigate('/home', { replace: true })
+          }}
+          className="w-full text-center text-[12px] mt-3 font-medium transition-colors hover:text-teal-600" style={{ color: '#9CA3AF' }}>
+          Skip — I'll choose later
+        </button>
       </motion.div>
     </div>
   )

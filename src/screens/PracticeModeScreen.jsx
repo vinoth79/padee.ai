@@ -1,490 +1,320 @@
 import { useState, useEffect } from 'react'
-import { mcqQuestions, descriptiveQuestions, codingQuestions } from '../data/mockData'
-import XPToast from '../components/XPToast'
-import Confetti from '../components/Confetti'
-import AIOrb from '../components/AIOrb'
-import ScoreRing from '../components/ScoreRing'
+import { useUser } from '../context/UserContext'
 
-// ─── MCQ SESSION — Duolingo feel ─────────────────────────────────────────────
-function MCQSession({ onComplete, onNavigate }) {
-  const questions = mcqQuestions
-  const [current, setCurrent] = useState(0)
+const SUBJECT_ICONS = {
+  Physics: '⚡', Chemistry: '🧪', Mathematics: '📐', Biology: '🌿',
+  'Computer Science': '💻', English: '📖',
+}
+
+function getToken() {
+  const key = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+  if (!key) return null
+  try {
+    const s = JSON.parse(localStorage.getItem(key))
+    return s?.access_token || s?.currentSession?.access_token || null
+  } catch { return null }
+}
+
+export default function PracticeModeScreen({ onNavigate, initialSubject }) {
+  const user = useUser()
+  const homeData = user.homeData
+
+  // Read subject from prop (URL ?subject=Chemistry) or daily challenge or default
+  const subject = initialSubject || homeData?.dailyChallenge?.subject || user.selectedSubjects?.[0] || 'Physics'
+  const questionCount = homeData?.dailyChallenge?.questionCount || 5
+  const className = user.studentClass || 10
+
+  // State machine: 'loading' → 'quiz' → 'results'
+  const [phase, setPhase] = useState('loading')
+  const [questions, setQuestions] = useState([])
+  const [currentIdx, setCurrentIdx] = useState(0)
   const [selected, setSelected] = useState(null)
   const [submitted, setSubmitted] = useState(false)
   const [answers, setAnswers] = useState([])
-  const [xpVisible, setXpVisible] = useState(false)
-  const [xpAmt, setXpAmt] = useState(0)
-  const [feedbackVisible, setFeedbackVisible] = useState(false)
+  const [error, setError] = useState('')
+  const [results, setResults] = useState(null)
+  const [saving, setSaving] = useState(false)
 
-  const q = questions[current]
-  const isCorrect = submitted && selected === q.correct
-  const progress = ((current) / questions.length) * 100
+  // Load questions: check pre-loaded cache first, then generate via API
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setPhase('loading')
 
-  const handleSubmit = () => {
+      // Check if home screen pre-loaded today's questions
+      const cacheKey = `padee-preloaded-practice-${subject}-${new Date().toISOString().split('T')[0]}`
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        try {
+          const preloaded = JSON.parse(cached)
+          if (Array.isArray(preloaded) && preloaded.length > 0) {
+            localStorage.removeItem(cacheKey) // consume once
+            setQuestions(preloaded)
+            setPhase('quiz')
+            return
+          }
+        } catch {}
+      }
+
+      // No cache — generate fresh
+      const token = getToken()
+      if (!token) { setError('Not authenticated'); setPhase('error'); return }
+      try {
+        const r = await fetch('/api/ai/practice', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: `CBSE Class ${className} ${subject}`, subject, className, count: questionCount }),
+        })
+        const data = await r.json()
+        if (cancelled) return
+        if (!r.ok || !data.questions?.length) {
+          setError(data.error || 'Failed to generate questions')
+          setPhase('error')
+          return
+        }
+        setQuestions(data.questions)
+        setPhase('quiz')
+      } catch (err) {
+        if (!cancelled) { setError(err.message || 'Failed'); setPhase('error') }
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [subject, className, questionCount])
+
+  const current = questions[currentIdx]
+  const isLast = currentIdx === questions.length - 1
+
+  function handleSelect(idx) {
+    if (submitted) return
+    setSelected(idx)
+  }
+
+  function handleCheck() {
     if (selected === null) return
-    const correct = selected === q.correct
     setSubmitted(true)
-    setFeedbackVisible(true)
-    setAnswers(prev => [...prev, { correct }])
-    if (correct) {
-      setXpAmt(q.xp || 10)
-      setXpVisible(true)
+    setAnswers(prev => [...prev, {
+      questionIdx: currentIdx,
+      selectedIdx: selected,
+      correct: selected === current.correctIndex,
+    }])
+  }
+
+  function handleNext() {
+    if (isLast) {
+      finishSession()
+    } else {
+      setCurrentIdx(prev => prev + 1)
+      setSelected(null)
+      setSubmitted(false)
     }
   }
 
-  const handleNext = () => {
-    setFeedbackVisible(false)
-    setTimeout(() => {
-      if (current + 1 >= questions.length) {
-        const score = answers.filter(a => a.correct).length + (isCorrect ? 1 : 0)
-        onComplete(score, questions.length)
-      } else {
-        setCurrent(c => c + 1)
-        setSelected(null)
-        setSubmitted(false)
-        setXpVisible(false)
-      }
-    }, 200)
+  async function finishSession() {
+    setSaving(true)
+    const allAnswers = [...answers]
+    const correct = allAnswers.filter(a => a.correct).length
+    const token = getToken()
+    try {
+      const r = await fetch('/api/ai/practice/complete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject,
+          className,
+          questions: questions.map((q, i) => ({
+            question: q.question,
+            options: q.options,
+            correctIndex: q.correctIndex,
+            studentAnswer: allAnswers.find(a => a.questionIdx === i)?.selectedIdx ?? null,
+            correct: allAnswers.find(a => a.questionIdx === i)?.correct ?? false,
+          })),
+          correctCount: correct,
+          totalQuestions: questions.length,
+        }),
+      })
+      const data = await r.json()
+      setResults({ accuracy: data.accuracy, xpAwarded: data.xpAwarded, correctCount: correct })
+      // Refresh user state → triggers level-up / badge celebration if unlocked
+      user.refreshUser?.()
+    } catch {
+      setResults({ accuracy: Math.round((correct / questions.length) * 100), xpAwarded: 0, correctCount: correct })
+    }
+    setSaving(false)
+    setPhase('results')
   }
 
-  const optionLabels = ['A', 'B', 'C', 'D']
-
-  return (
-    <div className="flex flex-col min-h-screen bg-brand-bg">
-      <XPToast xp={xpAmt} visible={xpVisible} onDone={() => setXpVisible(false)} />
-
-      {/* Top bar */}
-      <div className="px-4 pt-12 pb-4 flex items-center gap-3">
-        <button onClick={() => onNavigate('home')} className="w-8 h-8 flex items-center justify-center text-brand-slate">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-brand-primary to-brand-pale rounded-full transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <span className="text-xs font-bold text-brand-slate w-10 text-right">{current + 1}/{questions.length}</span>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 px-4 flex flex-col">
-        {/* Subject chip */}
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-bold text-brand-primary bg-brand-light px-3 py-1 rounded-full">{q.subject}</span>
-          <span className="text-xs text-brand-slate bg-white px-2 py-1 rounded-full border border-gray-200">{q.difficulty}</span>
-          <span className="ml-auto text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">+{q.xp || 10} XP</span>
-        </div>
-
-        {/* Question */}
-        <div className="bg-white rounded-xl px-5 py-5 shadow-card mb-5">
-          <p className="text-base font-bold text-brand-navy leading-relaxed">{q.question}</p>
-        </div>
-
-        {/* Options */}
-        <div className="space-y-3 flex-1">
-          {q.options.map((opt, idx) => {
-            let style = 'bg-white border-2 border-gray-200 text-brand-navy'
-            if (!submitted) {
-              if (selected === idx) style = 'bg-brand-light border-2 border-brand-primary text-brand-primary shadow-sm'
-            } else {
-              if (idx === q.correct) style = 'bg-emerald-50 border-2 border-brand-success text-emerald-800'
-              else if (idx === selected && selected !== q.correct) style = 'bg-amber-50 border-2 border-amber-300 text-amber-800'
-              else style = 'bg-white border-2 border-gray-100 text-gray-400'
-            }
-
-            return (
-              <button
-                key={idx}
-                onClick={() => !submitted && setSelected(idx)}
-                className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl text-left font-semibold text-sm transition-all active:scale-[0.98] ${style}`}
-              >
-                <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black border-2 transition-all ${
-                  !submitted
-                    ? selected === idx
-                      ? 'bg-brand-primary border-brand-primary text-white'
-                      : 'border-gray-300 text-gray-500'
-                    : idx === q.correct
-                      ? 'bg-brand-success border-brand-success text-white'
-                      : idx === selected && selected !== q.correct
-                        ? 'bg-amber-400 border-amber-400 text-white'
-                        : 'border-gray-200 text-gray-400'
-                }`}>
-                  {submitted && idx === q.correct ? '✓' : optionLabels[idx]}
-                </div>
-                <span>{opt}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Check button (pre-submit) */}
-      {!submitted && (
-        <div className="px-4 pb-36 pt-4">
-          <button
-            onClick={handleSubmit}
-            disabled={selected === null}
-            className={`w-full py-4 rounded-xl font-black text-base transition-all active:scale-95 ${
-              selected !== null
-                ? 'bg-brand-primary text-white shadow-action'
-                : 'bg-gray-200 text-gray-400'
-            }`}
-          >
-            Check
-          </button>
-        </div>
-      )}
-
-      {/* Feedback card + Continue — slides up, replaces Check button */}
-      {feedbackVisible && submitted && (
-        <div className={`fixed left-0 right-0 max-w-sm mx-auto animate-slide-up rounded-t-3xl px-5 pt-4 z-40 shadow-2xl ${
-          isCorrect ? 'bg-emerald-500' : 'bg-amber-400'
-        }`} style={{ bottom: '130px' }}>
-          <div className="flex items-start gap-3 mb-4">
-            <span className="text-2xl mt-0.5">{isCorrect ? '🎉' : '💡'}</span>
-            <div className="flex-1">
-              <p className={`font-black text-base ${isCorrect ? 'text-white' : 'text-amber-900'}`}>
-                {isCorrect ? 'Correct!' : 'Not quite this time'}
-              </p>
-              <p className={`text-xs mt-1 leading-relaxed ${isCorrect ? 'text-emerald-100' : 'text-amber-800'}`}>
-                {q.explanation?.substring(0, 100)}{q.explanation?.length > 100 ? '…' : ''}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleNext}
-            className={`w-full py-3.5 rounded-xl font-black text-sm mb-4 transition-all active:scale-95 ${
-              isCorrect ? 'bg-white text-emerald-700' : 'bg-white text-amber-800'
-            }`}
-          >
-            {current + 1 >= questions.length ? 'See results →' : 'Continue →'}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── PRACTICE COMPLETE ────────────────────────────────────────────────────────
-function PracticeComplete({ score, total, onNavigate }) {
-  const percent = Math.round((score / total) * 100)
-  const xp = 20 + (percent >= 80 ? 15 : percent >= 60 ? 8 : 0)
-
-  return (
-    <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center px-6">
-      <Confetti active={percent >= 80} />
-
-      <div className="w-full text-center">
-        {/* Score ring */}
-        <div className="flex justify-center mb-4 relative">
-          <div className="relative">
-            <ScoreRing percent={percent} size={100} strokeWidth={8} />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-xl font-black text-brand-navy">{score}/{total}</span>
-              <span className="text-[10px] text-brand-slate">correct</span>
-            </div>
-          </div>
-        </div>
-
-        <h1 className="text-2xl font-black text-brand-navy mb-1">
-          {percent >= 80 ? 'Excellent!' : percent >= 60 ? 'Good effort!' : 'Keep going!'}
-        </h1>
-        <p className="text-brand-slate text-sm mb-4">{percent}% accuracy</p>
-
-        <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-full px-4 py-2 mb-6">
-          <span>⚡</span>
-          <span className="font-black text-amber-800 text-sm">+{xp} XP earned</span>
-        </div>
-
-        {/* AI insight */}
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-card text-left">
-          <div className="flex items-center gap-2 mb-2">
-            <AIOrb size="xs" state="idle" />
-            <span className="text-xs font-bold text-brand-primary">AI Insight</span>
-          </div>
-          <p className="text-sm text-brand-navy leading-relaxed">
-            {percent >= 80
-              ? "You've got this topic down. Try the harder set or move to the next chapter."
-              : percent >= 60
-                ? "Solid attempt! Review the questions you missed — the pattern will click."
-                : "This topic needs more practice. Try the 'Simpler' mode to build confidence first."}
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={() => onNavigate('practice')}
-            className="flex-1 bg-white border-2 border-gray-200 text-brand-navy font-bold py-3.5 rounded-xl text-sm active:scale-95"
-          >
-            Try again
-          </button>
-          <button
-            onClick={() => onNavigate('home')}
-            className="flex-1 bg-brand-primary text-white font-bold py-3.5 rounded-xl text-sm shadow-action active:scale-95"
-          >
-            Home →
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── MODE SELECTOR ────────────────────────────────────────────────────────────
-function ModeSelector({ onSelectMode, onNavigate }) {
-  return (
-    <div className="min-h-screen bg-brand-bg pb-28">
-      <div className="px-5 pt-12 pb-5">
-        <button onClick={() => onNavigate('home')} className="text-brand-slate mb-4 block">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        </button>
-        <h1 className="text-2xl font-black text-brand-navy">Practice</h1>
-        <p className="text-brand-slate text-sm mt-0.5">Choose how to practice today</p>
-      </div>
-
-      {/* AI recommendation */}
-      <div className="px-4 mb-5">
-        <button
-          onClick={() => onSelectMode('mcq')}
-          className="w-full bg-gradient-to-br from-brand-primary to-brand-mid rounded-xl p-5 text-left shadow-action relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-          <div className="flex items-center gap-2 mb-2">
-            <AIOrb size="xs" state="idle" />
-            <span className="text-white/70 text-xs font-semibold">AI recommends</span>
-          </div>
-          <h2 className="text-white font-black text-lg leading-snug mb-1">Power Formulas need work.</h2>
-          <p className="text-white/70 text-sm mb-3">5 quick questions. Takes ~4 minutes. Let's fix this gap.</p>
-          <div className="bg-white text-brand-primary font-black text-sm py-2.5 rounded-xl text-center">
-            Start now →
-          </div>
-        </button>
-      </div>
-
-      <div className="px-4 space-y-3">
-        {[
-          { id: 'mcq', icon: '⚡', label: 'Quick MCQ', desc: '5–10 questions, instant feedback', bg: 'bg-amber-50', text: 'text-amber-700' },
-          { id: 'descriptive', icon: '✍️', label: 'Written Answer', desc: 'AI evaluates your CBSE answer', bg: 'bg-brand-light', text: 'text-brand-primary' },
-          { id: 'coding', icon: '💻', label: 'Coding Practice', desc: 'Python problems with AI feedback', bg: 'bg-cyan-50', text: 'text-cyan-700' },
-        ].map(m => (
-          <button
-            key={m.id}
-            onClick={() => onSelectMode(m.id)}
-            className="w-full flex items-center gap-4 bg-white rounded-xl p-4 shadow-card hover:shadow-card-hover transition-shadow active:scale-[0.98]"
-          >
-            <div className={`w-12 h-12 ${m.bg} rounded-xl flex items-center justify-center text-2xl`}>{m.icon}</div>
-            <div className="flex-1 text-left">
-              <p className={`font-bold text-sm ${m.text}`}>{m.label}</p>
-              <p className="text-xs text-brand-slate mt-0.5">{m.desc}</p>
-            </div>
-            <span className="text-brand-slate text-lg">›</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── DESCRIPTIVE SESSION ──────────────────────────────────────────────────────
-function DescriptiveSession({ onNavigate }) {
-  const q = descriptiveQuestions[0]
-  const [answer, setAnswer] = useState('')
-  const [evaluated, setEvaluated] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async () => {
-    if (!answer.trim()) return
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 2000))
-    setLoading(false)
-    setEvaluated(true)
+  function restart() {
+    setPhase('loading')
+    setQuestions([])
+    setCurrentIdx(0)
+    setAnswers([])
+    setResults(null)
+    setSelected(null)
+    setSubmitted(false)
   }
 
-  const score = 2
-  const total = 3
-  const percent = Math.round((score / total) * 100)
-
-  return (
-    <div className="min-h-screen bg-brand-bg flex flex-col pb-8">
-      <div className="px-4 pt-12 pb-4 flex items-center gap-3">
-        <button onClick={() => onNavigate('practice')} className="text-brand-slate">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        </button>
-        <h1 className="font-black text-brand-navy">Written Answer</h1>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 space-y-4">
-        <div className="bg-white rounded-xl shadow-card px-4 py-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold text-brand-slate uppercase">Question</span>
-            <span className="ml-auto text-xs font-bold text-brand-primary bg-brand-light px-2 py-0.5 rounded-full">{q.marks} marks</span>
+  // ═══ LOADING ═══
+  if (phase === 'loading') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        <div className="text-center">
+          <div className="text-4xl mb-4">{SUBJECT_ICONS[subject] || '📖'}</div>
+          <h1 className="text-xl font-bold mb-2" style={{ color: '#111827' }}>{subject} Practice</h1>
+          <p className="text-sm mb-6" style={{ color: '#6B7280' }}>Generating {questionCount} questions...</p>
+          <div className="flex justify-center gap-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="w-3 h-3 rounded-full animate-bounce" style={{ background: '#0D9488', animationDelay: `${i * 0.15}s` }} />
+            ))}
           </div>
-          <p className="text-sm font-semibold text-brand-navy leading-relaxed">{q.question}</p>
         </div>
+      </div>
+    )
+  }
 
-        {!evaluated ? (
-          <>
-            <div className="bg-white rounded-xl shadow-card overflow-hidden">
-              <label className="block px-4 pt-3 text-xs font-bold text-brand-slate uppercase tracking-wider">Your Answer</label>
-              <textarea
-                value={answer}
-                onChange={e => setAnswer(e.target.value)}
-                placeholder="Write your answer here..."
-                className="w-full px-4 pb-4 pt-2 text-sm text-brand-navy placeholder-brand-slate outline-none resize-none bg-transparent"
-                rows={7}
-              />
+  // ═══ ERROR ═══
+  if (phase === 'error') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-10 text-center">
+        <h1 className="text-xl font-bold mb-2" style={{ color: '#111827' }}>Something went wrong</h1>
+        <p className="text-sm text-red-600 mb-4">{error}</p>
+        <button onClick={restart} className="text-sm font-semibold underline" style={{ color: '#0D9488' }}>Try again</button>
+        <span className="mx-2 text-gray-300">|</span>
+        <button onClick={() => onNavigate('home')} className="text-sm font-semibold underline" style={{ color: '#6B7280' }}>Go home</button>
+      </div>
+    )
+  }
+
+  // ═══ RESULTS ═══
+  if (phase === 'results' && results) {
+    const pct = results.accuracy
+    const emoji = pct >= 80 ? '🎉' : pct >= 60 ? '👍' : pct >= 40 ? '💪' : '📚'
+    const msg = pct >= 80 ? 'Excellent work!' : pct >= 60 ? 'Good job!' : pct >= 40 ? 'Keep practising!' : 'Let\'s review this topic.'
+    return (
+      <div className="max-w-md mx-auto px-4 py-10">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border text-center">
+          <div className="text-5xl mb-3">{emoji}</div>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: '#111827' }}>{msg}</h1>
+          <p className="text-sm mb-6" style={{ color: '#6B7280' }}>{subject} Practice Complete</p>
+
+          <div className="relative w-28 h-28 mx-auto mb-4">
+            <svg className="-rotate-90 w-28 h-28" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#E5E7EB" strokeWidth="8" />
+              <circle cx="50" cy="50" r="42" fill="none"
+                stroke={pct >= 70 ? '#059669' : pct >= 50 ? '#D97706' : '#EF4444'}
+                strokeWidth="8" strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 42}`}
+                strokeDashoffset={`${2 * Math.PI * 42 * (1 - pct / 100)}`}
+                className="transition-all duration-1000" />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold font-mono" style={{ color: '#111827' }}>{pct}%</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="rounded-xl p-3" style={{ background: '#ECFDF5' }}>
+              <p className="text-lg font-bold font-mono" style={{ color: '#059669' }}>{results.correctCount}</p>
+              <p className="text-[11px]" style={{ color: '#065F46' }}>Correct</p>
             </div>
+            <div className="rounded-xl p-3" style={{ background: '#FEF2F2' }}>
+              <p className="text-lg font-bold font-mono" style={{ color: '#EF4444' }}>{questions.length - results.correctCount}</p>
+              <p className="text-[11px]" style={{ color: '#991B1B' }}>Wrong</p>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: '#F0FDFA' }}>
+              <p className="text-lg font-bold font-mono" style={{ color: '#0D9488' }}>+{results.xpAwarded}</p>
+              <p className="text-[11px]" style={{ color: '#115E59' }}>XP Earned</p>
+            </div>
+          </div>
 
-            <button
-              onClick={handleSubmit}
-              disabled={answer.trim().length < 20 || loading}
-              className={`w-full font-bold py-4 rounded-xl text-sm transition-all active:scale-95 ${
-                answer.trim().length >= 20 && !loading
-                  ? 'bg-brand-primary text-white shadow-action'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  AI is evaluating…
-                </span>
-              ) : 'Submit for AI Evaluation →'}
+          <div className="flex gap-3">
+            <button onClick={restart}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ border: '1px solid #CCFBF1', color: '#0F766E' }}>
+              Practice again
             </button>
-          </>
-        ) : (
-          <div className="space-y-3 animate-slide-up">
-            <div className="bg-white rounded-xl shadow-card p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <AIOrb size="sm" state="idle" />
-                <div>
-                  <p className="font-black text-brand-navy text-sm">AI Evaluation</p>
-                  <p className="text-xs text-brand-slate">CBSE marking scheme</p>
-                </div>
-                <div className="ml-auto text-right">
-                  <p className="text-2xl font-black text-brand-navy">{score}/{total}</p>
-                  <p className="text-xs text-brand-slate">marks</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="bg-emerald-50 rounded-xl p-3">
-                  <p className="text-xs font-bold text-emerald-700 mb-1">What you got right ✓</p>
-                  <p className="text-xs text-emerald-700">Correctly explained single current path in series circuits.</p>
-                </div>
-                <div className="bg-amber-50 rounded-xl p-3">
-                  <p className="text-xs font-bold text-amber-700 mb-1">What to add next time</p>
-                  <p className="text-xs text-amber-700">Mention that voltage divides in series. Use CBSE keyword: "potential difference".</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button onClick={() => { setEvaluated(false); setAnswer('') }} className="flex-1 bg-white border-2 border-gray-200 text-brand-navy font-bold py-3 rounded-xl text-sm active:scale-95">Try again</button>
-              <button onClick={() => onNavigate('home')} className="flex-1 bg-brand-primary text-white font-bold py-3 rounded-xl text-sm shadow-action active:scale-95">Home →</button>
-            </div>
+            <button onClick={() => onNavigate('home')}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: '#0D9488' }}>
+              Back to home
+            </button>
           </div>
-        )}
+        </div>
       </div>
-    </div>
-  )
-}
-
-// ─── CODING SESSION ───────────────────────────────────────────────────────────
-function CodingSession({ onNavigate }) {
-  const q = codingQuestions[0]
-  const [code, setCode] = useState(q.starterCode)
-  const [output, setOutput] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-  const [running, setRunning] = useState(false)
-
-  const handleRun = async () => {
-    setRunning(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setOutput('2 3 5 7 11 13 17 19 23 29 31 37 41 43 47 ')
-    setRunning(false)
+    )
   }
 
-  const handleSubmit = async () => {
-    setRunning(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setSubmitted(true)
-    setRunning(false)
-  }
+  // ═══ QUIZ ═══
+  const answeredCount = answers.length
+  const correctSoFar = answers.filter(a => a.correct).length
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
-      <div className="bg-gray-800 px-4 pt-12 pb-3 border-b border-gray-700 flex items-center gap-3">
-        <button onClick={() => onNavigate('practice')} className="text-gray-400">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        </button>
-        <h1 className="font-black text-white flex-1">Coding Practice</h1>
-        <span className="bg-cyan-500/20 text-cyan-400 text-xs font-bold px-2 py-1 rounded-full border border-cyan-500/30">Python</span>
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-lg font-bold" style={{ color: '#111827' }}>{SUBJECT_ICONS[subject] || '📖'} {subject}</h1>
+          <p className="text-xs" style={{ color: '#6B7280' }}>Question {currentIdx + 1} of {questions.length}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: '#ECFDF5', color: '#059669' }}>
+            {correctSoFar}/{answeredCount} correct
+          </span>
+          <button onClick={() => onNavigate('home')} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="bg-gray-800 px-4 py-4 border-b border-gray-700">
-          <p className="text-sm text-gray-200 leading-relaxed">{q.question}</p>
-          <div className="mt-2 bg-gray-900 rounded-xl p-3">
-            <p className="text-xs text-gray-400 font-mono">Expected: <span className="text-emerald-400">{q.sampleOutput}</span></p>
+      {/* Progress bar */}
+      <div className="h-1.5 rounded-full mb-6 overflow-hidden" style={{ background: '#E5E7EB' }}>
+        <div className="h-full rounded-full transition-all duration-300" style={{ background: '#0D9488', width: `${((answeredCount) / questions.length) * 100}%` }} />
+      </div>
+
+      {/* Question card */}
+      {current && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border mb-4">
+          <p className="text-[15px] font-semibold leading-relaxed mb-4" style={{ color: '#111827' }}>{current.question}</p>
+          <div className="space-y-2.5">
+            {current.options.map((opt, i) => {
+              const letter = String.fromCharCode(65 + i)
+              let bg = '#FFFFFF', border = '#E5E7EB', text = '#111827'
+              if (submitted) {
+                if (i === current.correctIndex) { bg = '#ECFDF5'; border = '#34D399'; text = '#065F46' }
+                else if (i === selected) { bg = '#FEF2F2'; border = '#FCA5A5'; text = '#991B1B' }
+                else { text = '#9CA3AF' }
+              } else if (i === selected) {
+                bg = '#F0FDFA'; border = '#5EEAD4'; text = '#0F766E'
+              }
+              return (
+                <button key={i} onClick={() => handleSelect(i)} disabled={submitted}
+                  className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all"
+                  style={{ background: bg, border: `2px solid ${border}`, color: text }}>
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                    style={{ border: `2px solid ${border}` }}>{letter}</span>
+                  <span className="text-sm font-medium">{opt}</span>
+                </button>
+              )
+            })}
           </div>
-        </div>
 
-        <div className="bg-gray-900 px-4 py-3">
-          <p className="text-xs text-gray-500 mb-2 font-mono">solution.py</p>
-          <textarea
-            value={code}
-            onChange={e => setCode(e.target.value)}
-            className="w-full bg-transparent text-emerald-300 font-mono text-xs leading-relaxed outline-none resize-none"
-            rows={12}
-            spellCheck={false}
-          />
-        </div>
-
-        {output && (
-          <div className="bg-gray-800 px-4 py-3 border-t border-gray-700 animate-slide-up">
-            <p className="text-xs text-gray-400 mb-1">Output:</p>
-            <p className="text-xs text-emerald-400 font-mono">{output}</p>
-          </div>
-        )}
-
-        {submitted && (
-          <div className="mx-4 my-4 bg-gray-800 border border-emerald-500/30 rounded-xl p-4 animate-slide-up">
-            <div className="flex items-center gap-2 mb-2">
-              <AIOrb size="xs" state="celebrating" />
-              <span className="font-bold text-emerald-400 text-sm">Correct! +15 XP</span>
+          {submitted && current.explanation && (
+            <div className="mt-4 p-3 rounded-xl text-xs"
+              style={{ background: selected === current.correctIndex ? '#ECFDF5' : '#FFFBEB', color: selected === current.correctIndex ? '#065F46' : '#92400E' }}>
+              {selected === current.correctIndex ? '✓ Correct! ' : `✗ Answer: ${String.fromCharCode(65 + current.correctIndex)}. `}
+              {current.explanation}
             </div>
-            <p className="text-sm text-gray-300">Your solution works. The √n optimization is efficient — O(n√n) overall.</p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      <div className="bg-gray-800 border-t border-gray-700 px-4 py-3 flex gap-3">
-        <button onClick={handleRun} disabled={running} className="flex-1 bg-gray-700 text-gray-200 font-bold py-3 rounded-xl text-sm active:scale-95">
-          {running ? '▶ Running…' : '▶ Run'}
+      {/* Action button */}
+      {!submitted ? (
+        <button onClick={handleCheck} disabled={selected === null}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-all"
+          style={selected !== null ? { background: '#0D9488', color: '#FFFFFF' } : { background: '#F3F4F6', color: '#9CA3AF' }}>
+          Check Answer
         </button>
-        <button onClick={handleSubmit} disabled={running || submitted} className={`flex-1 font-bold py-3 rounded-xl text-sm active:scale-95 ${submitted ? 'bg-emerald-600 text-white' : 'bg-cyan-500 text-white'}`}>
-          {submitted ? '✓ Submitted' : 'Submit →'}
+      ) : (
+        <button onClick={handleNext}
+          className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all" style={{ background: '#0D9488' }}>
+          {saving ? 'Saving results...' : isLast ? 'See Results →' : 'Next Question →'}
         </button>
-      </div>
+      )}
     </div>
   )
-}
-
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
-export default function PracticeModeScreen({ onNavigate }) {
-  const [mode, setMode] = useState(null)
-  const [completed, setCompleted] = useState(false)
-  const [score, setScore] = useState(0)
-  const [total, setTotal] = useState(0)
-
-  const handleComplete = (s, t) => { setScore(s); setTotal(t); setCompleted(true) }
-
-  if (completed) return <PracticeComplete score={score} total={total} onNavigate={onNavigate} />
-  if (!mode) return <ModeSelector onSelectMode={setMode} onNavigate={onNavigate} />
-  if (mode === 'mcq') return <MCQSession onComplete={handleComplete} onNavigate={onNavigate} />
-  if (mode === 'descriptive') return <DescriptiveSession onNavigate={onNavigate} />
-  if (mode === 'coding') return <CodingSession onNavigate={onNavigate} />
-  return null
 }

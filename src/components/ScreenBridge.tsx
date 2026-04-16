@@ -1,5 +1,5 @@
 import { useEffect, ComponentType } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '../hooks/useAppNavigate'
 import { useUser } from '../context/UserContext'
 
@@ -13,6 +13,7 @@ interface BridgeProps {
 export function ScreenBridge({ Component, redirectTo, autoRedirect, isOnboarding }: BridgeProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const appNavigate = useAppNavigate()
   const user = useUser()
 
@@ -59,7 +60,8 @@ export function ScreenBridge({ Component, redirectTo, autoRedirect, isOnboarding
   return (
     <Component
       onNavigate={onNavigate}
-      initialQuestion={location.state?.question}
+      initialQuestion={location.state?.question || searchParams.get('question')}
+      initialSubject={location.state?.subject || searchParams.get('subject')}
     />
   )
 }

@@ -1,8 +1,10 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useUser } from '../context/UserContext'
+import { useAuth } from '../context/AuthContext'
 import { HomeIcon, AskAIIcon, LearnIcon, TestsIcon, ProgressIcon } from '../components/icons/NavIcons'
-import { Flame, GraduationCap } from 'lucide-react'
+import { Flame, LogOut } from 'lucide-react'
+import CelebrationHost from '../components/celebrations/CelebrationHost'
 
 const NAV_ITEMS = [
   { id: 'home',     label: 'Home',     icon: HomeIcon,     path: '/home' },
@@ -40,11 +42,22 @@ export default function StudentLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const user = useUser()
+  const { signOut } = useAuth()
+
+  async function handleLogout() {
+    await signOut()
+    localStorage.removeItem('padee-user')
+    localStorage.removeItem('padee-ask-ai-messages')
+    localStorage.removeItem('padee-ask-ai-subject')
+    navigate('/login', { replace: true })
+  }
   const activeTab = getActiveTab(location.pathname)
   const goalPercent = Math.min(100, Math.round((user.dailyXPEarned / user.dailyGoal) * 100))
 
   return (
     <div className="min-h-screen" style={{ background: '#F8F7F4' }}>
+      {/* Celebration overlays (level-up / badge unlock) */}
+      <CelebrationHost />
 
       {/* ═══ DESKTOP: Sidebar + Top bar + Content ═══ */}
       <div className="hidden lg:flex h-screen overflow-hidden">
@@ -96,7 +109,7 @@ export default function StudentLayout() {
             </div>
           </nav>
 
-          {/* Footer: XP bar + teacher */}
+          {/* Footer: XP bar + logout */}
           <div className="px-4 pb-4 pt-3 space-y-2" style={{ borderTop: '0.5px solid #E5E7EB' }}>
             <div className="px-1">
               <div className="flex items-center justify-between mb-1">
@@ -104,12 +117,18 @@ export default function StudentLayout() {
                 <span className="text-[11px] font-semibold font-mono" style={{ color: '#9CA3AF' }}>{user.xp} XP</span>
               </div>
               <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#E5E7EB' }}>
-                <div className="h-full rounded-full transition-all duration-700" style={{ background: '#0D9488', width: `${Math.round(((user.xp - 1600) / (2400 - 1600)) * 100)}%` }} />
+                <div className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    background: '#0D9488',
+                    width: user.nextLevelMinXP
+                      ? `${Math.min(100, Math.round(((user.xp - user.levelMinXP) / (user.nextLevelMinXP - user.levelMinXP)) * 100))}%`
+                      : '100%',
+                  }} />
               </div>
             </div>
-            <button onClick={() => navigate('/teacher')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors" style={{ color: '#6B7280' }}>
-              <GraduationCap size={14} /> Teacher mode
+            <button onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-red-50 hover:text-red-600" style={{ color: '#9CA3AF' }}>
+              <LogOut size={14} /> Log out
             </button>
           </div>
         </aside>
@@ -175,9 +194,6 @@ export default function StudentLayout() {
               )
             })}
           </nav>
-          <button onClick={() => navigate('/teacher')} title="Teacher mode" className="w-10 h-10 flex items-center justify-center rounded-xl">
-            <GraduationCap size={18} color="#6B7280" />
-          </button>
         </aside>
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto">

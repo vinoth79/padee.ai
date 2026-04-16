@@ -7,6 +7,7 @@ const SCREEN_TO_PATH: Record<string, string> = {
   'learn': '/learn',
   'practice': '/practice',
   'challenge': '/practice',
+  'tests': '/tests',
   'test': '/tests/active',
   'test-results': '/tests/results',
   'me': '/progress',
@@ -23,7 +24,16 @@ const SCREEN_TO_PATH: Record<string, string> = {
 export function useAppNavigate() {
   const nav = useNavigate()
   return (screen: string, params?: Record<string, any>) => {
-    const path = SCREEN_TO_PATH[screen] || '/home'
+    let path = SCREEN_TO_PATH[screen] || '/home'
+    // Append params as URL query string for reliability (location.state is flaky across nested routes)
+    if (params) {
+      const qs = new URLSearchParams()
+      for (const [k, v] of Object.entries(params)) {
+        if (v != null) qs.set(k, String(v))
+      }
+      const qsStr = qs.toString()
+      if (qsStr) path += `?${qsStr}`
+    }
     nav(path, { state: params })
   }
 }

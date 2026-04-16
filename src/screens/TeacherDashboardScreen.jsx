@@ -1,4 +1,4 @@
-import { teacherProfile } from '../data/mockData'
+import { useUser } from '../context/UserContext'
 import TeacherAlertFeed from '../components/teacher/TeacherAlertFeed'
 import TeacherRightPanel from '../components/teacher/TeacherRightPanel'
 
@@ -10,14 +10,15 @@ function greet() {
 }
 
 export default function TeacherDashboardScreen({ onNavigate }) {
-  const teacher = teacherProfile
+  const user = useUser()
+  const firstName = (user.studentName || 'Teacher').split(' ')[0]
 
   return (
     <div className="pt-6 pb-10">
       {/* Header */}
       <div className="px-5 lg:px-6 mb-5">
-        <h1 className="text-[22px] font-bold" style={{ color: '#111827' }}>{greet()}, {teacher.name.split(' ').slice(0, -1).join(' ')} 👋</h1>
-        <p className="text-[14px] mt-0.5" style={{ color: '#6B7280' }}>Class 10A has a unit test in 3 days · 38 students · 72% avg score</p>
+        <h1 className="text-[22px] font-bold" style={{ color: '#111827' }}>{greet()}, {firstName} 👋</h1>
+        <p className="text-[14px] mt-0.5" style={{ color: '#6B7280' }}>AI is watching your class. Alerts appear below when intervention is needed.</p>
       </div>
 
       {/* ═══ 3-PANE: Center (alerts) + Right (actions/health/spotlight) ═══ */}

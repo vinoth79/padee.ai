@@ -88,7 +88,7 @@ export default function TeacherAlertFeed({ onNavigate }: Props) {
       }))
       onNavigate('test-generator')
     } else if (a.action_type === 'view_student' && a.student_id) {
-      onNavigate('students', { studentId: a.student_id })
+      onNavigate('student-profile', { studentId: a.student_id })
     }
     setBusy(null)
   }

@@ -2,7 +2,23 @@ import { useState, useRef, useEffect } from 'react'
 import { mockAIResponses } from '../data/mockData'
 import AIOrb from '../components/AIOrb'
 import XPToast from '../components/XPToast'
+import RateLimitErrorCard from '../components/RateLimitErrorCard'
 import { useUser } from '../context/UserContext'
+
+// ═══ Module-level set: questions we've auto-sent in this tab/session.
+// Survives React StrictMode remounts, route changes, HMR, and
+// useRef resets — the ONLY reliable guard for ?q= auto-send deduping.
+// Cleared when the user explicitly clears conversation history.
+const AUTO_SENT_QUESTIONS = new Set()
+
+// Monotonic counter to avoid Date.now() collisions when sendMessage
+// is called 2+ times in the same millisecond (rare, but possible with
+// StrictMode double-fires).
+let MSG_ID_COUNTER = 0
+function nextMsgId() {
+  MSG_ID_COUNTER += 1
+  return `msg-${Date.now()}-${MSG_ID_COUNTER}`
+}
 
 const SAMPLE_QUESTIONS_BY_SUBJECT = {
   Physics: [
@@ -513,8 +529,8 @@ const SOLVE_PHASES = [
 const SUBJECT_KEYWORDS = {
   'Physics': ['force', 'velocity', 'acceleration', 'gravity', 'magnet', 'magnetic', 'electric', 'current', 'voltage', 'resistance', 'ohm', 'circuit', 'lens', 'mirror', 'reflection', 'refraction', 'wave', 'sound', 'light', 'energy', 'power', 'watt', 'joule', 'newton', 'momentum', 'friction', 'pressure'],
   'Chemistry': ['acid', 'base', 'salt', 'pH', 'reaction', 'chemical', 'element', 'compound', 'molecule', 'atom', 'ion', 'metal', 'non-metal', 'periodic', 'oxidation', 'reduction', 'corrosion', 'carbon', 'hydrogen', 'oxygen', 'nitrogen', 'sulphur', 'ethanol', 'methane', 'soap', 'detergent', 'milk', 'fermentation', 'curd', 'spoilage', 'bacteria'],
-  'Biology': ['cell', 'tissue', 'organ', 'photosynthesis', 'respiration', 'digestion', 'nutrition', 'excretion', 'reproduction', 'heredity', 'evolution', 'ecosystem', 'biodiversity', 'DNA', 'gene', 'chromosome', 'plant', 'animal', 'blood', 'heart', 'brain', 'kidney', 'liver', 'hormone', 'enzyme'],
-  'Mathematics': ['equation', 'polynomial', 'quadratic', 'triangle', 'circle', 'area', 'volume', 'probability', 'statistics', 'mean', 'median', 'mode', 'trigonometry', 'sin', 'cos', 'tan', 'pythagoras', 'theorem', 'proof', 'algebra', 'arithmetic', 'geometric', 'sequence', 'matrix'],
+  'Biology': ['cell', 'tissue', 'organ', 'photosynthesis', 'respiration', 'digestion', 'nutrition', 'excretion', 'reproduction', 'heredity', 'evolution', 'ecosystem', 'biodiversity', 'dna', 'gene', 'chromosome', 'plant', 'animal', 'blood', 'heart', 'brain', 'kidney', 'liver', 'hormone', 'enzyme', 'transportation', 'transport', 'circulation', 'circulatory', 'lung', 'stomach', 'intestine', 'nerve', 'nervous', 'muscle', 'human being', 'organism', 'species', 'habitat', 'food chain', 'nephron', 'xylem', 'phloem', 'stomata'],
+  'Mathematics': ['equation', 'polynomial', 'quadratic', 'triangle', 'circle', 'area', 'volume', 'probability', 'statistics', 'mean', 'median', 'mode', 'trigonometry', 'sin', 'cos', 'tan', 'pythagoras', 'theorem', 'proof', 'algebra', 'arithmetic', 'geometric', 'sequence', 'matrix', 'prime', 'factor', 'factoris', 'hcf', 'lcm', 'gcd', 'divisor', 'multiple', 'remainder', 'euclid', 'integer', 'rational', 'irrational', 'real number', 'decimal', 'fraction', 'percentage', 'ratio', 'proportion', 'zero of', 'zeroes', 'coefficient', 'coordinate', 'axis', 'slope', 'distance', 'midpoint', 'similar triangle', 'congruent', 'tangent', 'secant', 'chord', 'surface area'],
   'Computer Science': ['algorithm', 'program', 'code', 'python', 'java', 'loop', 'function', 'array', 'variable', 'database', 'SQL', 'HTML', 'CSS', 'network', 'internet', 'binary', 'boolean'],
   'English': ['grammar', 'tense', 'noun', 'verb', 'adjective', 'adverb', 'essay', 'comprehension', 'poem', 'poetry', 'prose', 'literature', 'letter', 'writing', 'speech'],
 }
@@ -550,13 +566,33 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
     : ['Physics', 'Chemistry', 'Biology', 'Mathematics', 'Computer Science', 'English']
 
   const [input, setInput] = useState('')
-  // Hydrate messages from localStorage (last session) so conversations persist across refresh
+  // Hydrate messages from localStorage (last session) so conversations persist across refresh.
+  // Sanitize: drop any orphaned `streaming: true` messages with no text — those are from a
+  // previous session that was closed mid-stream and would otherwise collide with new streams.
   const [messages, setMessages] = useState(() => {
     try {
       const saved = localStorage.getItem('padee-ask-ai-messages')
       if (saved) {
         const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed)) return parsed
+        if (Array.isArray(parsed)) {
+          // Drop orphaned empty-text AI messages from prior broken sessions.
+          // Also drop the trailing student message if its AI response never landed,
+          // so re-ask is clean (no "replying to ghost" state).
+          const pruned = []
+          for (let i = 0; i < parsed.length; i++) {
+            const m = parsed[i]
+            const isEmptyAi = m.role === 'ai' && (!m.text || !m.text.trim())
+            if (isEmptyAi) {
+              // Also drop the immediately-preceding student message (unanswered)
+              if (pruned.length && pruned[pruned.length - 1].role === 'student') {
+                pruned.pop()
+              }
+              continue
+            }
+            pruned.push(m)
+          }
+          return pruned
+        }
       }
     } catch {}
     return []
@@ -578,11 +614,22 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
   const fileInputRef = useRef(null)
   const endRef = useRef(null)
   const inputRef = useRef(null)
+  // Track mount state so the async stream reader doesn't setState after unmount
+  // (which would silently drop text updates and leave an empty bubble forever).
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
-  // Persist messages across refresh (cap at last 30 to keep localStorage tidy)
+  // Persist messages across refresh (cap at last 30 to keep localStorage tidy).
+  // Also strip `streaming: true` from persisted copy so a mid-stream page close/HMR
+  // can't leave an orphan placeholder that collides with the next session.
   useEffect(() => {
     try {
-      const tail = messages.slice(-30)
+      const tail = messages.slice(-30).map(m =>
+        m.streaming ? { ...m, streaming: false } : m
+      )
       localStorage.setItem('padee-ask-ai-messages', JSON.stringify(tail))
     } catch {}
   }, [messages])
@@ -593,6 +640,8 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
     setMessages([])
     setShowQuiz(false)
     setFeedbackState({})
+    // Reset auto-sent tracker so user can re-ask any question fresh
+    AUTO_SENT_QUESTIONS.clear()
   }
 
   async function copyMessage(msgId, text) {
@@ -617,9 +666,23 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  // Auto-send when ?question= is present.
+  // Uses the module-level AUTO_SENT_QUESTIONS set (defined at top of file)
+  // because:
+  //   - useRef resets on StrictMode's simulated remount → can't use refs
+  //   - useState's initial closure is stale in multi-fire scenarios
+  //   - messages-state check fails when state hasn't flushed between fires
+  // Module-level Set survives ALL lifecycle tricks. Cleared on explicit "Clear".
   useEffect(() => {
-    if (initialQuestion) sendMessage(initialQuestion)
-  }, [])
+    if (!initialQuestion) return
+    if (AUTO_SENT_QUESTIONS.has(initialQuestion)) return
+    AUTO_SENT_QUESTIONS.add(initialQuestion)
+    // If the question is already in hydrated history, don't re-send (just show history)
+    const alreadyInHistory = messages.some(m => m.role === 'student' && m.text === initialQuestion)
+    if (alreadyInHistory) return
+    sendMessage(initialQuestion)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion])
 
   const sendMessage = async (text = input) => {
     // Guard against duplicate submissions / re-entry while streaming
@@ -630,7 +693,16 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
     const imageToSend = pendingImage
 
     // Auto-detect subject from question text (no manual selector needed)
-    const effectiveSubject = detectSubject(question, availableSubjects) || availableSubjects[0] || 'Physics'
+    // Subject precedence: (1) explicit initialSubject from Learn screen click (most reliable —
+    // the Learn catalog knows exactly which subject each concept belongs to),
+    // (2) keyword-based detection on the question text,
+    // (3) first of the student's selected subjects (weakest fallback).
+    // Without (1), questions like "Prime Factorisation" match no keywords and
+    // fall through to the first selected subject — which silently breaks RAG.
+    const effectiveSubject = initialSubject
+      || detectSubject(question, availableSubjects)
+      || availableSubjects[0]
+      || 'Physics'
 
     setInput('')
     setPendingImage(null)
@@ -644,7 +716,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
       .slice(-6)
       .map(m => ({ role: m.role === 'student' ? 'user' : 'assistant', content: m.text }))
 
-    const studentId = Date.now()
+    const studentId = nextMsgId()
     setMessages(prev => [...prev, {
       role: 'student',
       text: question,
@@ -665,7 +737,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
 
     if (token) {
       // Real streaming API call
-      const aiId = studentId + 1
+      const aiId = nextMsgId()
       setMessages(prev => [...prev, { role: 'ai', text: '', steps: [], id: aiId, streaming: true }])
 
       try {
@@ -697,15 +769,35 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
         const reader = resp.body.getReader()
         const decoder = new TextDecoder()
         let fullText = ''
+        let buffer = ''   // buffers partial SSE lines across chunk boundaries
 
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-          for (const line of decoder.decode(value).split('\n')) {
+          buffer += decoder.decode(value, { stream: true })
+          // Split on newline, keep the trailing partial line in the buffer
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const rawLine of lines) {
+            const line = rawLine.replace(/\r$/, '')  // tolerate \r\n SSE framing
+            if (!line) continue
             if (line === 'data: [DONE]') continue
             if (line.startsWith('data: ')) {
               try {
                 const d = JSON.parse(line.slice(6))
+                if (d.error) {
+                  // Surface backend errors (rate limits, upstream failures) to the user
+                  const friendly = /rate limit/i.test(d.error)
+                    ? "I've hit the AI provider's rate limit. Please try again in a few minutes."
+                    : /quota/i.test(d.error)
+                      ? "AI quota exhausted for today. Try again tomorrow or contact admin."
+                      : `Something went wrong: ${String(d.error).slice(0, 200)}`
+                  setMessages(prev => prev.map(m => m.id === aiId
+                    ? { ...m, text: friendly, streaming: false, error: true }
+                    : m
+                  ))
+                  continue
+                }
                 if (d.text) {
                   fullText += d.text
                   setMessages(prev => prev.map(m => m.id === aiId
@@ -723,6 +815,14 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
             }
           }
         }
+        // Safety: if the stream ended without any text or error, mark as error
+        setMessages(prev => prev.map(m => {
+          if (m.id !== aiId) return m
+          if (!m.text || m.text.trim() === '') {
+            return { ...m, text: 'No response received. The AI service may be temporarily unavailable. Please try again.', streaming: false, error: true }
+          }
+          return { ...m, streaming: false }
+        }))
         setXpVisible(true)
         // Refresh user state → triggers level-up / badge celebration if unlocked
         user.refreshUser?.()
@@ -745,7 +845,7 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
       const aiText = getAIResponse(question)
       const steps = parseSteps(aiText)
       setLoading(false)
-      setMessages(prev => [...prev, { role: 'ai', text: aiText, steps, id: Date.now() + 1 }])
+      setMessages(prev => [...prev, { role: 'ai', text: aiText, steps, id: nextMsgId() }])
       setXpVisible(true)
     }
   }
@@ -854,14 +954,27 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
       }
       return
     }
-    // All action chips per UI spec 6.2
+    // Find the most recent student topic so chip prompts reference it explicitly.
+    // Generic chip prompts ("this concept") let the LLM drift to memory-referenced
+    // topics — e.g. a follow-up on Ohm's Law would answer about Polynomials if the
+    // student had recently asked a Polynomials question. Interpolating the actual
+    // topic text also gives detectSubject() a keyword to latch onto.
+    let lastTopic = null
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role === 'student' && m.text?.trim()) {
+        lastTopic = m.text.trim().slice(0, 150)
+        break
+      }
+    }
+    const ref = lastTopic ? `"${lastTopic}"` : 'the concept we just discussed'
     const prompts = {
-      simpler:  'Explain the same thing again but simpler -- use a real-life analogy a Class 10 student can relate to.',
-      exam:     'Give me the CBSE board exam model answer for this -- with keyword highlights and mark distribution.',
-      similar:  'Give me a similar question on the same concept so I can practise.',
-      challenge:'Give me a harder (challenge-level) problem on this topic with a step-by-step solution.',
-      reallife: 'Give me a real-life example where this concept is used in everyday life.',
-      mistakes: 'What are the common mistakes students make on this topic? Warn me about each one.',
+      simpler:  `Explain ${ref} again but simpler — use a real-life analogy a Class 10 student can relate to.`,
+      exam:     `Give me the CBSE board exam model answer for ${ref} — include keyword highlights and mark distribution.`,
+      similar:  `Give me a similar practice question on the same concept as ${ref}.`,
+      challenge:`Give me a harder (challenge-level) problem on ${ref}, with a step-by-step solution.`,
+      reallife: `Give me a real-life example of ${ref} used in everyday life.`,
+      mistakes: `What are the common mistakes students make on ${ref}? Warn me about each one.`,
     }
     sendMessage(prompts[chip])
   }
@@ -997,8 +1110,32 @@ export default function DoubtSolverScreen({ onNavigate, initialQuestion, initial
                   )}
                 </div>
 
-                {/* Main AI response bubble -- always shows full text */}
-                {msg.text && (
+                {/* Error state: show actionable card with retry/quiz/different-question actions */}
+                {msg.error && msg.text ? (
+                  <RateLimitErrorCard
+                    message={msg.text}
+                    onTakeQuiz={() => {
+                      const weakest = [...(user.homeData?.subjectHealth || [])]
+                        .filter(s => s.accuracy != null).sort((a, b) => a.accuracy - b.accuracy)[0]
+                      const subj = weakest?.subject || user.selectedSubjects?.[0] || 'Physics'
+                      onNavigate('practice', { subject: subj, count: 5 })
+                    }}
+                    onClearAndAsk={() => {
+                      // Remove the error message and focus input so they can type fresh
+                      setMessages(prev => prev.filter(m => m.id !== msg.id && !(m.role === 'student' && m.id === msg.id - 1)))
+                      inputRef.current?.focus()
+                    }}
+                    onRetry={() => {
+                      // Re-send the LAST student question that preceded this error
+                      const studentIdx = messages.findIndex(m => m.id === msg.id) - 1
+                      const prev = messages[studentIdx]
+                      if (prev?.role === 'student' && prev.text) {
+                        setMessages(curr => curr.filter(m => m.id !== msg.id))  // remove error card
+                        sendMessage(prev.text)
+                      }
+                    }}
+                  />
+                ) : msg.text && (
                   <div className="bg-white rounded-xl px-4 py-3.5 shadow-card border border-white relative group">
                     <AIResponseContent text={msg.text} />
                     {msg.streaming && (

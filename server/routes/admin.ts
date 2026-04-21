@@ -243,6 +243,41 @@ admin.get('/llm-log', (c) => {
   return c.json({ calls: calls.slice(0, limit) })
 })
 
+// ── Error stats: counts of recent errors for the admin banner ──
+admin.get('/error-stats', (c) => {
+  const calls = getRecentCalls(500)
+  const now = Date.now()
+  const hourAgo = now - 60 * 60 * 1000
+  const dayAgo = now - 24 * 60 * 60 * 1000
+
+  const withTime = calls.map(call => ({ ...call, ts: new Date(call.timestamp).getTime() }))
+  const errorsLastHour = withTime.filter(c => c.error && c.ts >= hourAgo).length
+  const errorsLast24h = withTime.filter(c => c.error && c.ts >= dayAgo).length
+  const totalLastHour = withTime.filter(c => c.ts >= hourAgo).length
+  const fallbacksLastHour = withTime.filter(c => (c.metadata as any)?.fallbackFired && c.ts >= hourAgo).length
+
+  // Rate-limit specific (common case — highlight this)
+  const rateLimitLastHour = withTime.filter(c =>
+    c.error && c.ts >= hourAgo && /rate limit|429|quota/i.test(c.error)
+  ).length
+
+  // Simple severity: red if >20 errors/hr or >50% error rate, amber if any errors
+  const errorRate = totalLastHour > 0 ? errorsLastHour / totalLastHour : 0
+  let severity: 'none' | 'amber' | 'red' = 'none'
+  if (errorsLastHour >= 20 || (totalLastHour >= 10 && errorRate > 0.5)) severity = 'red'
+  else if (errorsLastHour > 0) severity = 'amber'
+
+  return c.json({
+    severity,
+    errorsLastHour,
+    errorsLast24h,
+    totalLastHour,
+    errorRate: Math.round(errorRate * 100),
+    fallbacksLastHour,
+    rateLimitLastHour,
+  })
+})
+
 // ── Get processing status ──
 admin.get('/upload/:id/status', async (c) => {
   const { data } = await supabase

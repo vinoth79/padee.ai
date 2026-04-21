@@ -32,6 +32,9 @@ import WorksheetGeneratorScreen from './screens/WorksheetGeneratorScreen'
 import TeacherAssignTestScreen from './screens/TeacherAssignTestScreen'
 import LiveClassScreen from './screens/LiveClassScreen'
 import StudentPerformanceScreen from './screens/StudentPerformanceScreen'
+import TeacherReviewQueueScreen from './screens/TeacherReviewQueueScreen'
+import TeacherStudentProfileScreen from './screens/TeacherStudentProfileScreen'
+import PaperMimicScreen from './screens/PaperMimicScreen'
 
 export const router = createBrowserRouter([
   // ── Public routes ──
@@ -79,6 +82,9 @@ export const router = createBrowserRouter([
       { path: '/teacher/test',       element: <ScreenBridge Component={TeacherAssignTestScreen} /> },
       { path: '/teacher/live',       element: <ScreenBridge Component={LiveClassScreen} /> },
       { path: '/teacher/students',   element: <ScreenBridge Component={StudentPerformanceScreen} /> },
+      { path: '/teacher/review',     element: <ScreenBridge Component={TeacherReviewQueueScreen} /> },
+      { path: '/teacher/student/:id', element: <ScreenBridge Component={TeacherStudentProfileScreen} /> },
+      { path: '/teacher/mimic',       element: <ScreenBridge Component={PaperMimicScreen} /> },
     ],
   },
 

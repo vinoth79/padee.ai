@@ -175,13 +175,18 @@ ai.post('/doubt', async (c) => {
       })
     }
 
-    // Step 3: Retrieve NCERT chunks via pgvector cosine similarity
+    // Step 3: Retrieve NCERT chunks via pgvector cosine similarity.
+    // Threshold 0.35: text-embedding-3-small produces lower similarity scores
+    // than raw cosine suggests — real-world NCERT matches score ~0.35-0.50
+    // (e.g., a direct "Euclid division" match on a Class 10 chapter chunk
+    // that contains mixed intro + content scores ~0.42). Threshold 0.5 rejects
+    // all real matches. 0.35 keeps quality matches without adding noise.
     const { data: chunks } = await supabase.rpc('search_ncert_chunks', {
       query_embedding: JSON.stringify(queryEmbedding),
       match_subject: subject || 'Physics',
       match_class: className || 10,
       match_count: 4,
-      match_threshold: 0.5,
+      match_threshold: 0.35,
     })
 
     if (chunks && chunks.length > 0) {
@@ -202,8 +207,17 @@ ai.post('/doubt', async (c) => {
   const memoryObj = await buildStudentMemoryWithTokens(u.id)
   const memory = memoryObj.text
 
+  // Detect follow-up: if there's prior conversation history, the current question
+  // is a follow-up within an ongoing topic. In that case, the "Recent questions"
+  // list in memory is actively harmful (it pulls the LLM off the conversation
+  // topic — e.g. a chip click on "Real-life example" for Ohm's Law gets answered
+  // about Polynomials because Polynomials was in the student's recent-questions
+  // memory). We pass isFollowUp through so the system prompt can demote memory
+  // context in that case.
+  const isFollowUp = Array.isArray(messages) && messages.length > 1
+
   // Step 5: Build the prompt with memory injection
-  const systemPrompt = buildSystemPrompt(subject, className, ncertContext, memory)
+  const systemPrompt = buildSystemPrompt(subject, className, ncertContext, memory, isFollowUp)
 
   // Step 5: Stream LLM response via Groq (Llama-70B)
   const fullMessages = [
@@ -215,21 +229,25 @@ ai.post('/doubt', async (c) => {
   const t0 = Date.now()
 
   return streamSSE(c, async (stream) => {
+    let modelUsed = process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile'
+    let fallbackFired = false
     try {
-      const completion = await groq.chat.completions.create({
-        model: process.env.LLM_DOUBT_SIMPLE?.replace('groq/', '') || 'llama-3.3-70b-versatile',
-        messages: fullMessages,
-        stream: true,
-        max_tokens: 800,
+      // Stream with automatic Groq → OpenAI fallback on rate-limit/5xx/timeout
+      const { streamWithFallback } = await import('../lib/llmFallback.js')
+      const result = await streamWithFallback({
+        messages: fullMessages.map((m: any) => ({ role: m.role, content: m.content })),
+        maxTokens: 800,
         temperature: 0.3,
-      })
-
-      for await (const chunk of completion) {
-        const text = chunk.choices[0]?.delta?.content || ''
-        if (text) {
+        onChunk: async (text) => {
           fullResponse += text
           await stream.writeSSE({ data: JSON.stringify({ text }) })
-        }
+        },
+      })
+      modelUsed = result.modelUsed
+      fallbackFired = result.fallbackFired
+      if (fallbackFired) {
+        // Let the client know we used the fallback (for subtle UI indicator if desired)
+        await stream.writeSSE({ data: JSON.stringify({ fallbackUsed: true, modelUsed }) })
       }
 
       // Detect memory usage once, reuse across audit log + cache decision + SSE metadata
@@ -240,7 +258,7 @@ ai.post('/doubt', async (c) => {
         timestamp: new Date().toISOString(),
         endpoint: 'doubt',
         userId: u.id,
-        model: process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile',
+        model: modelUsed,
         systemPrompt,
         messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
         response: fullResponse,
@@ -248,7 +266,7 @@ ai.post('/doubt', async (c) => {
         cacheHit: false,
         ncertChunksUsed: ncertContext ? ncertContext.split('[Source').length - 1 : 0,
         ncertSource: ncertSource || undefined,
-        metadata: { subject, className, ncertConfidence, memoryUsed: memoryUsedDecisionEarly, memoryTokens: memoryObj.tokens },
+        metadata: { subject, className, ncertConfidence, memoryUsed: memoryUsedDecisionEarly, memoryTokens: memoryObj.tokens, fallbackFired },
       }).catch(() => {})
 
       // Save the session and response
@@ -336,7 +354,8 @@ ai.post('/doubt', async (c) => {
       await stream.writeSSE({
         data: JSON.stringify({
           sessionId: session?.id,
-          ncertSource: ncertConfidence > 0.55 ? ncertSource : '',
+          ncertSource: ncertConfidence > 0.35 ? ncertSource : '',
+          ncertConfidence,
           cacheHit: false,
           memoryUsed: memoryUsedDecision,
         })
@@ -344,6 +363,19 @@ ai.post('/doubt', async (c) => {
       await stream.writeSSE({ data: '[DONE]' })
     } catch (err: any) {
       console.error('[AI] LLM streaming error:', err)
+      // Log the failure to the audit trail so admin can see rate limits / API errors
+      logLLMCall({
+        timestamp: new Date().toISOString(),
+        endpoint: 'doubt',
+        userId: u.id,
+        model: process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile',
+        systemPrompt: systemPrompt || '',
+        messages: (messages || []).map((m: any) => ({ role: m.role, content: m.content })),
+        response: '',
+        latencyMs: Date.now() - t0,
+        error: err.message || String(err),
+        metadata: { subject, className, failed: true },
+      }).catch(() => {})
       await stream.writeSSE({ data: JSON.stringify({ error: err.message }) })
       await stream.writeSSE({ data: '[DONE]' })
     }
@@ -618,7 +650,13 @@ function detectMemoryUsage(
   return false
 }
 
-function buildSystemPrompt(subject: string, className: number, ncertContext: string, memory: string): string {
+function buildSystemPrompt(
+  subject: string,
+  className: number,
+  ncertContext: string,
+  memory: string,
+  isFollowUp: boolean = false,
+): string {
   let prompt = `You are Padee, an AI tutor for CBSE Class ${className} ${subject || 'students'}.
 You help Indian students understand their NCERT textbook content.
 
@@ -630,7 +668,11 @@ Rules:
 - Include relevant formulas, definitions, and examples from NCERT.
 - Temperature: be factual for definitions, slightly creative for analogies only.`
 
-  if (memory) {
+  // Mid-conversation follow-ups: conversation history IS the context. Suppress
+  // the topic-switch personalisation rule so the LLM doesn't pivot to a stale
+  // topic from memory. Weak-subject awareness is still fine, but we keep it
+  // gentle and purely informational — no "Since you've been working on X" lead.
+  if (memory && !isFollowUp) {
     prompt += `\n\n--- STUDENT CONTEXT ---\n${memory}\n--- END STUDENT CONTEXT ---
 
 PERSONALISATION RULE:
@@ -643,6 +685,15 @@ Examples (use this exact pattern when relevant):
 If the question is on a weak subject for the student, gently note it (e.g. "I see you've been working on [subject] -- here's a clearer take").
 
 If there is NO meaningful connection, do NOT force one -- just answer normally. Forced personalisation is worse than none.`
+  } else if (memory && isFollowUp) {
+    // Mid-conversation: give the LLM light awareness of student's weak subjects
+    // (for calibration) WITHOUT any "Recent questions" list or topic-switch
+    // instructions. The conversation history already anchors the topic.
+    prompt += `\n\n--- STUDENT CONTEXT (for calibration only, do NOT reference explicitly) ---
+${memory}
+--- END STUDENT CONTEXT ---
+
+IMPORTANT: This is a follow-up within an ongoing conversation. Stay on the topic the student and you have been discussing. Do NOT pivot to a different subject or concept from the student context above — that context is only for tone calibration, not for redirecting the answer. Treat the conversation history as authoritative for what the topic is.`
   }
 
   if (ncertContext) {
@@ -948,6 +999,18 @@ Match the scope: answer about Ohm's Law -> circuit. Answer about photosynthesis 
     return c.json({ html, cached: false })
   } catch (err: any) {
     console.error('[AI] Visual generation error:', err)
+    logLLMCall({
+      timestamp: new Date().toISOString(),
+      endpoint: 'visual',
+      userId: u.id,
+      model: process.env.LLM_VISUAL_EXPLAIN || 'gpt-4o',
+      systemPrompt: 'visual explanation (see ai.ts)',
+      messages: [{ role: 'user', content: (concept || '') + ' | ' + (context || '').slice(0, 300) }],
+      response: '',
+      latencyMs: 0,
+      error: err.message || String(err),
+      metadata: { failed: true },
+    }).catch(() => {})
     return c.json({ error: err.message || 'Visual generation failed', fallback: true }, 500)
   }
 })
@@ -996,29 +1059,27 @@ CRITICAL MCQ QUALITY RULES:
   const practiceModel = process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.1-8b-instant'
 
   try {
-    const completion = await groq.chat.completions.create({
-      model: practiceModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 500,
+    // Use Groq → OpenAI fallback chain for resilience
+    const { completeWithFallback } = await import('../lib/llmFallback.js')
+    const { content: raw, modelUsed, fallbackFired } = await completeWithFallback({
+      messages: [{ role: 'user', content: userPrompt }],
+      systemPrompt,
+      primaryModel: practiceModel,
+      maxTokens: 500,
       temperature: 0.4,
-      response_format: { type: 'json_object' },
+      jsonMode: true,
     })
-
-    const raw = completion.choices[0]?.message?.content || '{}'
 
     logLLMCall({
       timestamp: new Date().toISOString(),
       endpoint: 'practice',
       userId: u.id,
-      model: `groq/${practiceModel}`,
+      model: modelUsed,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       response: raw,
       latencyMs: Date.now() - tPractice0,
-      metadata: { subject: subject || 'Physics', className: className || 10 },
+      metadata: { subject: subject || 'Physics', className: className || 10, fallbackFired },
     }).catch(() => {})
 
     const parsed = JSON.parse(raw)
@@ -1038,6 +1099,18 @@ CRITICAL MCQ QUALITY RULES:
     return c.json({ questions: valid })
   } catch (err: any) {
     console.error('[AI] Practice generation error:', err)
+    logLLMCall({
+      timestamp: new Date().toISOString(),
+      endpoint: 'practice',
+      userId: u.id,
+      model: `groq/${practiceModel}`,
+      systemPrompt: systemPrompt || '',
+      messages: [{ role: 'user', content: userPrompt || '' }],
+      response: '',
+      latencyMs: Date.now() - tPractice0,
+      error: err.message || String(err),
+      metadata: { subject: subject || 'Physics', className: className || 10, failed: true },
+    }).catch(() => {})
     return c.json({ error: err.message || 'Practice generation failed' }, 500)
   }
 })
@@ -1139,7 +1212,691 @@ ai.post('/practice/complete', async (c) => {
 })
 
 ai.post('/evaluate', async (c) => c.json({ error: 'Not implemented yet' }, 501))
-ai.post('/worksheet', async (c) => c.json({ error: 'Not implemented yet' }, 501))
-ai.post('/mimic', async (c) => c.json({ error: 'Not implemented yet' }, 501))
+
+// ═══ WORKSHEET GENERATOR ═══
+// Teacher provides a free-text prompt (e.g. "10 questions on Ohm's Law for
+// Class 10, mixed difficulty, MCQs and numericals"). We parse intent + generate
+// structured questions in ONE LLM call (gpt-4o-mini — handles JSON well enough
+// and keeps latency under 10s). If `validate=true` (default), a second cheap
+// LLM pass checks each question; questions flagged as invalid get one
+// regeneration attempt before being surfaced with a warning flag.
+//
+// Returns JSON, not SSE — worksheets are not streamed.
+ai.post('/worksheet', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const { prompt, validate = true } = await c.req.json<any>()
+  if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+    return c.json({ error: 'prompt (free-text brief) is required' }, 400)
+  }
+
+  // Get teacher context (class they teach, school — for hints; not strict)
+  const { data: profile } = await supabase
+    .from('profiles').select('class_level, full_name').eq('id', u.id).single()
+
+  const systemPrompt = `You are a CBSE curriculum expert generating classroom worksheets.
+A teacher will give you a brief in natural language. Parse it to determine:
+- subject (Physics/Chemistry/Biology/Mathematics/English/etc)
+- class_level (8-12; default to the teacher's class if unspecified)
+- chapter (NCERT chapter name, best match)
+- topic (concept within the chapter)
+- question_types (mcq / short_answer / long_answer / numerical / fill_in_blank / true_false)
+- difficulty (easy / medium / hard / mixed)
+- total_questions (default 10 if unspecified)
+
+Then generate the worksheet as structured JSON. Group questions into sections by type.
+
+Question quality rules:
+- Factually accurate, CBSE-aligned
+- Use Unicode symbols only (°, ×, ÷, √, π, Ω, α, β, θ, ₂, ²) — NEVER LaTeX ($...$, \\frac, \\sqrt)
+- Each question has a complete answer + one-line explanation
+- MCQs: exactly 4 options (A, B, C, D), ONE correct, 3 plausible distractors
+- Numericals: include step-by-step solution in answer_explanation
+- Each question is self-contained (no "refer to diagram above")
+
+OUTPUT JSON SCHEMA (strict):
+{
+  "title": "Short descriptive title (e.g., 'Ohm's Law Practice — Class 10 Physics')",
+  "subject": "Physics",
+  "class_level": 10,
+  "chapter": "Electricity",
+  "topic": "Ohm's Law",
+  "difficulty": "mixed",
+  "intent_summary": "One sentence describing what you understood from the teacher's brief",
+  "sections": [
+    {
+      "name": "Section A — MCQs (1 mark each)",
+      "instructions": "Choose the correct option.",
+      "marks_per_question": 1,
+      "questions": [
+        {
+          "question": "Full question text.",
+          "type": "mcq",
+          "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+          "answer": "B",
+          "answer_explanation": "Why B is correct, briefly."
+        }
+      ]
+    },
+    {
+      "name": "Section B — Numerical Problems (3 marks each)",
+      "instructions": "Show your working.",
+      "marks_per_question": 3,
+      "questions": [
+        {
+          "question": "A 5Ω resistor has 2A flowing through it. Find the voltage.",
+          "type": "numerical",
+          "answer": "V = 10 V",
+          "answer_explanation": "Using Ohm's law V = IR = 2 × 5 = 10 V"
+        }
+      ]
+    }
+  ],
+  "total_marks": 40
+}
+
+Return ONLY this JSON. No surrounding prose, no markdown fences.`
+
+  const teacherContext = `Teacher: ${profile?.full_name || 'Unknown'}${profile?.class_level ? `, teaches Class ${profile.class_level}` : ''}\n\nTeacher's brief: ${prompt.trim()}`
+
+  // ─── Step 1: Generate ───
+  const genStart = Date.now()
+  let worksheet: any
+  let modelUsed = ''
+  let fallbackFired = false
+  try {
+    const primaryModel = process.env.LLM_WORKSHEET || 'gpt-4o-mini'
+    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const completion = await openaiClient.chat.completions.create({
+      model: primaryModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: teacherContext },
+      ],
+      max_tokens: 4000,
+      temperature: 0.5,
+      response_format: { type: 'json_object' },
+    })
+    const raw = completion.choices[0]?.message?.content || '{}'
+    worksheet = JSON.parse(raw)
+    modelUsed = `openai/${primaryModel}`
+  } catch (err: any) {
+    const msg = err.message || String(err)
+    console.error('[worksheet] generation failed:', msg)
+    await logLLMCall({
+      endpoint: 'other',
+      userId: u.id,
+      model: process.env.LLM_WORKSHEET || 'gpt-4o-mini',
+      latencyMs: Date.now() - genStart,
+      error: msg,
+      metadata: { phase: 'worksheet-generate', prompt: prompt.slice(0, 500) },
+    })
+    return c.json({ error: `Generation failed: ${msg.slice(0, 200)}` }, 500)
+  }
+
+  // Normalise: fill in safe defaults + compute total_marks + stamp validation state
+  worksheet.sections = (worksheet.sections || []).map((s: any) => ({
+    ...s,
+    questions: (s.questions || []).map((q: any) => ({
+      ...q,
+      validated: null, // null = not checked, true = passed, false = flagged
+      validation_issues: [] as string[],
+    })),
+  }))
+  // Always recompute total_marks from actual section content — LLMs regularly
+  // miscount (e.g., claims "30 marks" for 4 MCQs + 2 numericals = 10 marks).
+  worksheet.total_marks = worksheet.sections.reduce(
+    (sum: number, s: any) => sum + (s.questions.length * (s.marks_per_question || 1)), 0
+  )
+
+  await logLLMCall({
+    endpoint: 'other',
+    userId: u.id,
+    model: modelUsed,
+    latencyMs: Date.now() - genStart,
+    metadata: {
+      phase: 'worksheet-generate',
+      prompt: prompt.slice(0, 500),
+      subject: worksheet.subject,
+      class: worksheet.class_level,
+      totalQuestions: worksheet.sections.reduce((n: number, s: any) => n + s.questions.length, 0),
+    },
+  })
+
+  // ─── Step 2: Validate (optional) ───
+  let validationRan = false
+  let flaggedCount = 0
+  let regeneratedCount = 0
+  if (validate) {
+    validationRan = true
+    const validationModel = (process.env.LLM_VALIDATION || 'groq/llama-3.1-8b-instant').replace('groq/', '')
+    const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
+
+    // Flatten questions for batch validation, keep back-pointers so we can update in place
+    type QRef = { sectionIdx: number, questionIdx: number }
+    const refs: QRef[] = []
+    const payload: any[] = []
+    worksheet.sections.forEach((s: any, si: number) => {
+      s.questions.forEach((q: any, qi: number) => {
+        refs.push({ sectionIdx: si, questionIdx: qi })
+        payload.push({
+          idx: refs.length - 1,
+          type: q.type,
+          question: q.question,
+          options: q.options,
+          answer: q.answer,
+          explanation: q.answer_explanation,
+        })
+      })
+    })
+
+    // Batch validation — one LLM call for up to 30 questions
+    const validationPrompt = `You are a CBSE question-quality auditor. For each question below, decide if it is acceptable for a Class ${worksheet.class_level} ${worksheet.subject} classroom worksheet.
+
+CHECK FOR:
+- Factual accuracy (does the stated answer actually follow from the question?)
+- Ambiguity (is there exactly ONE defensible answer?)
+- For MCQs: is the correct option actually correct? Are distractors plausible but wrong? Are two options accidentally correct?
+- Clarity (can a Class ${worksheet.class_level} student understand the wording?)
+- Self-containment (does it reference missing diagrams/tables?)
+
+Return JSON with this shape, no surrounding prose:
+{
+  "results": [
+    { "idx": 0, "valid": true, "issues": [] },
+    { "idx": 1, "valid": false, "issues": ["Two options could both be correct", "Answer references a diagram not provided"] }
+  ]
+}
+
+QUESTIONS:
+${JSON.stringify(payload, null, 2)}`
+
+    const valStart = Date.now()
+    try {
+      const valCompletion = await groqClient.chat.completions.create({
+        model: validationModel,
+        messages: [
+          { role: 'system', content: 'You are a strict but fair CBSE question auditor. Return valid JSON only.' },
+          { role: 'user', content: validationPrompt },
+        ],
+        max_tokens: 2000,
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+      })
+      const valRaw = valCompletion.choices[0]?.message?.content || '{"results":[]}'
+      const parsed = JSON.parse(valRaw)
+      const results: any[] = parsed.results || []
+
+      // Apply validation results
+      for (const r of results) {
+        if (typeof r.idx !== 'number' || !refs[r.idx]) continue
+        const ref = refs[r.idx]
+        const q = worksheet.sections[ref.sectionIdx].questions[ref.questionIdx]
+        q.validated = r.valid === true
+        q.validation_issues = Array.isArray(r.issues) ? r.issues : []
+        if (!q.validated) flaggedCount++
+      }
+
+      await logLLMCall({
+        endpoint: 'other',
+        userId: u.id,
+        model: `groq/${validationModel}`,
+        latencyMs: Date.now() - valStart,
+        metadata: {
+          phase: 'worksheet-validate',
+          totalChecked: payload.length,
+          flagged: flaggedCount,
+        },
+      })
+    } catch (err: any) {
+      console.warn('[worksheet] validation failed, skipping:', err.message)
+      // Validation is best-effort — if it fails, return the unvalidated worksheet
+    }
+
+    // ─── Step 2b: Regenerate flagged questions (one attempt each) ───
+    // Only regenerate if there are flagged questions AND we have the OpenAI key
+    if (flaggedCount > 0) {
+      const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      const primaryModel = process.env.LLM_WORKSHEET || 'gpt-4o-mini'
+
+      for (const ref of refs) {
+        const q = worksheet.sections[ref.sectionIdx].questions[ref.questionIdx]
+        if (q.validated === false) {
+          try {
+            const regenPrompt = `A question was flagged as invalid. Write a REPLACEMENT question.
+
+CONTEXT:
+- Subject: ${worksheet.subject}
+- Class: ${worksheet.class_level}
+- Chapter: ${worksheet.chapter}
+- Topic: ${worksheet.topic}
+- Section: ${worksheet.sections[ref.sectionIdx].name}
+- Question type: ${q.type}
+- Marks: ${worksheet.sections[ref.sectionIdx].marks_per_question}
+
+ISSUES WITH THE ORIGINAL (fix these):
+${q.validation_issues.map((i: string) => `- ${i}`).join('\n')}
+
+ORIGINAL QUESTION (do not reuse):
+${q.question}
+
+Return the replacement as JSON matching the same shape as the original. Use Unicode symbols only. Return ONLY the JSON object, no surrounding prose.
+
+Example shape for MCQ:
+{"question":"...","type":"mcq","options":{"A":"...","B":"...","C":"...","D":"..."},"answer":"B","answer_explanation":"..."}`
+
+            const completion = await openaiClient.chat.completions.create({
+              model: primaryModel,
+              messages: [
+                { role: 'system', content: 'You are a CBSE question writer. Output valid JSON only.' },
+                { role: 'user', content: regenPrompt },
+              ],
+              max_tokens: 600,
+              temperature: 0.7, // higher temp so regen is actually different from original
+              response_format: { type: 'json_object' },
+            })
+            const raw = completion.choices[0]?.message?.content || ''
+            const fresh = JSON.parse(raw)
+            // Overwrite in place, mark as regenerated so UI can show "⟳ regenerated"
+            worksheet.sections[ref.sectionIdx].questions[ref.questionIdx] = {
+              ...fresh,
+              validated: true, // trust the regen (phase 1 — don't re-validate to cap cost)
+              validation_issues: [],
+              regenerated: true,
+            }
+            regeneratedCount++
+          } catch (err: any) {
+            console.warn('[worksheet] regen failed for question, leaving flagged:', err.message)
+          }
+        }
+      }
+    }
+  }
+
+  return c.json({
+    worksheet,
+    meta: {
+      modelUsed,
+      fallbackFired,
+      validationRan,
+      flaggedCount,
+      regeneratedCount,
+      totalGenerationMs: Date.now() - genStart,
+    },
+  })
+})
+
+// ═══ WORKSHEET SAVE / LIST / GET ═══
+// Save a generated worksheet to the `worksheets` table. The same endpoint is
+// used for "update" — pass an existing `id` and it will overwrite.
+ai.post('/worksheet/save', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const { id, worksheet, prompt } = await c.req.json<any>()
+  if (!worksheet || !worksheet.title || !Array.isArray(worksheet.sections)) {
+    return c.json({ error: 'worksheet.title and worksheet.sections are required' }, 400)
+  }
+
+  // `mode` and `source_pdf` are preserved from the worksheet payload when the
+  // upstream generator set them (mimic does; custom generator doesn't).
+  const mode: 'custom' | 'mimic' = worksheet.mode === 'mimic' ? 'mimic' : 'custom'
+  const row = {
+    teacher_id: u.id,
+    title: String(worksheet.title).slice(0, 200),
+    subject: worksheet.subject || 'General',
+    class_level: worksheet.class_level || 10,
+    chapter: worksheet.chapter || null,
+    mode,
+    difficulty: worksheet.difficulty || 'mixed',
+    total_questions: worksheet.sections.reduce(
+      (n: number, s: any) => n + (s.questions?.length || 0), 0
+    ),
+    sections: worksheet.sections,
+    source_pdf: worksheet.source_pdf || null,
+    model_used: worksheet.model_used || null,
+  }
+
+  if (id) {
+    // Update: only allowed if teacher owns this row
+    const { data: existing } = await supabase
+      .from('worksheets').select('teacher_id').eq('id', id).single()
+    if (!existing || existing.teacher_id !== u.id) {
+      return c.json({ error: 'Not found or not yours' }, 404)
+    }
+    const { data, error } = await supabase
+      .from('worksheets').update(row).eq('id', id).select().single()
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ worksheet: data, created: false })
+  } else {
+    const { data, error } = await supabase
+      .from('worksheets').insert(row).select().single()
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ worksheet: data, created: true })
+  }
+})
+
+ai.get('/worksheet/list', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const { data, error } = await supabase
+    .from('worksheets')
+    .select('id, title, subject, class_level, chapter, difficulty, total_questions, created_at, model_used')
+    .eq('teacher_id', u.id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json({ worksheets: data || [] })
+})
+
+ai.get('/worksheet/:id', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const id = c.req.param('id')
+  const { data, error } = await supabase
+    .from('worksheets').select('*').eq('id', id).eq('teacher_id', u.id).single()
+  if (error || !data) return c.json({ error: 'Not found' }, 404)
+  return c.json({ worksheet: data })
+})
+
+ai.delete('/worksheet/:id', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const id = c.req.param('id')
+  const { error } = await supabase
+    .from('worksheets').delete().eq('id', id).eq('teacher_id', u.id)
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json({ ok: true })
+})
+
+// ═══ CBSE PAPER MIMIC ═══
+// Teacher uploads a past CBSE paper (PDF). We extract text, ask the LLM to
+// (a) infer the paper's structure (sections, marks distribution, question
+// types, chapters), then (b) generate a BRAND NEW paper with the same
+// structure but fresh questions. Output shape matches `/worksheet` so the
+// same save/list/preview/export surfaces work — we just stamp `mode: 'mimic'`
+// and `source_pdf: <filename>` at save time.
+ai.post('/mimic', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+
+  // Multipart: pdf file + optional validate flag + optional hint text
+  const form = await c.req.formData()
+  const file = form.get('pdf') as File | null
+  const validate = form.get('validate') !== 'false' // default true
+  const hint = (form.get('hint') as string | null)?.trim() || ''
+
+  if (!file) return c.json({ error: 'pdf file is required (multipart field "pdf")' }, 400)
+  if (file.size > 15 * 1024 * 1024) {
+    return c.json({ error: 'PDF too large (max 15 MB)' }, 400)
+  }
+
+  // ─── Step 1: Extract text ───
+  let pdfText = ''
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const pdfParseModule = await import('pdf-parse')
+    const pdfParse = (pdfParseModule as any).default || pdfParseModule
+    const pdf = await pdfParse(buffer)
+    pdfText = (pdf.text || '').trim()
+  } catch (err: any) {
+    return c.json({ error: `PDF parse failed: ${err.message}` }, 500)
+  }
+  if (!pdfText) return c.json({ error: 'No text found in PDF — is it a scanned image?' }, 400)
+
+  // Truncate if enormous (past papers are usually 5-20k chars; cap at ~24k for the LLM)
+  const MAX = 24000
+  const truncated = pdfText.length > MAX
+  const excerpt = truncated ? pdfText.slice(0, MAX) + '\n\n[...truncated for length]' : pdfText
+
+  // ─── Step 2: Infer structure + generate new paper (single LLM call) ───
+  const systemPrompt = `You are a CBSE paper-mimicking expert. You'll be given the text of a past CBSE board paper. Your job:
+
+STEP 1 — ANALYZE the source paper's structure:
+- Number of sections and what each is called (e.g. "Section A - MCQs", "Section B - Very Short Answer")
+- Question types in each section (mcq, short_answer, long_answer, numerical, fill_in_blank, true_false)
+- Marks per question per section
+- Chapters / topics covered
+- Class level and subject
+
+STEP 2 — GENERATE a brand-new paper with the SAME STRUCTURE but entirely fresh, different questions. Do NOT reuse any question verbatim. Same difficulty range, same chapter coverage, same marks distribution.
+
+Question quality rules (non-negotiable):
+- Factually accurate, CBSE-aligned, Class-appropriate wording
+- Use Unicode symbols only (°, ×, ÷, √, π, Ω, α, β, θ, ₂, ²) — NEVER LaTeX ($...$, \\frac, \\sqrt)
+- Each question has a complete answer + one-line explanation
+- MCQs: exactly 4 options (A, B, C, D), ONE correct, 3 plausible distractors
+- Numericals: include step-by-step solution in answer_explanation
+- Each question self-contained (no "refer to diagram above")
+
+OUTPUT JSON SCHEMA (strict — match this exactly):
+{
+  "title": "Mimicked paper title (e.g., 'CBSE Class 10 Physics — Practice Paper (mimicked from 2024 paper)')",
+  "subject": "Physics",
+  "class_level": 10,
+  "chapter": "Board exam mix",
+  "topic": "Multiple chapters",
+  "difficulty": "mixed",
+  "intent_summary": "One sentence: what the source paper covered + that you preserved its structure",
+  "sections": [
+    {
+      "name": "Section A — Multiple Choice Questions (1 mark each)",
+      "instructions": "Choose the correct option.",
+      "marks_per_question": 1,
+      "questions": [
+        { "question": "...", "type": "mcq", "options": {"A":"...","B":"...","C":"...","D":"..."}, "answer": "B", "answer_explanation": "..." }
+      ]
+    }
+  ],
+  "total_marks": 80
+}
+
+Return ONLY this JSON. No surrounding prose, no markdown fences.`
+
+  const userMsg = `FILENAME: ${file.name}
+${hint ? `\nTEACHER HINT: ${hint}\n` : ''}
+SOURCE PAPER TEXT${truncated ? ' (truncated)' : ''}:
+${excerpt}`
+
+  const genStart = Date.now()
+  let paper: any
+  let modelUsed = ''
+  try {
+    const primaryModel = process.env.LLM_WORKSHEET || 'gpt-4o-mini'
+    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const completion = await openaiClient.chat.completions.create({
+      model: primaryModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMsg },
+      ],
+      max_tokens: 6000, // papers can be larger than worksheets
+      temperature: 0.5,
+      response_format: { type: 'json_object' },
+    })
+    const raw = completion.choices[0]?.message?.content || '{}'
+    paper = JSON.parse(raw)
+    modelUsed = `openai/${primaryModel}`
+  } catch (err: any) {
+    const msg = err.message || String(err)
+    console.error('[mimic] generation failed:', msg)
+    await logLLMCall({
+      endpoint: 'other',
+      userId: u.id,
+      model: process.env.LLM_WORKSHEET || 'gpt-4o-mini',
+      latencyMs: Date.now() - genStart,
+      error: msg,
+      metadata: { phase: 'mimic-generate', filename: file.name, pdfChars: pdfText.length },
+    })
+    return c.json({ error: `Generation failed: ${msg.slice(0, 200)}` }, 500)
+  }
+
+  // Stamp normalisation — same shape as /worksheet expects
+  paper.sections = (paper.sections || []).map((s: any) => ({
+    ...s,
+    questions: (s.questions || []).map((q: any) => ({
+      ...q,
+      validated: null,
+      validation_issues: [] as string[],
+    })),
+  }))
+  paper.total_marks = paper.sections.reduce(
+    (sum: number, s: any) => sum + (s.questions.length * (s.marks_per_question || 1)), 0
+  )
+  paper.mode = 'mimic'
+  paper.source_pdf = file.name
+
+  await logLLMCall({
+    endpoint: 'other',
+    userId: u.id,
+    model: modelUsed,
+    latencyMs: Date.now() - genStart,
+    metadata: {
+      phase: 'mimic-generate',
+      filename: file.name,
+      pdfChars: pdfText.length,
+      truncated,
+      subject: paper.subject,
+      class: paper.class_level,
+      totalQuestions: paper.sections.reduce((n: number, s: any) => n + s.questions.length, 0),
+    },
+  })
+
+  // ─── Step 3: Validate + regenerate (same logic as /worksheet) ───
+  let validationRan = false
+  let flaggedCount = 0
+  let regeneratedCount = 0
+  if (validate) {
+    validationRan = true
+    const validationModel = (process.env.LLM_VALIDATION || 'groq/llama-3.1-8b-instant').replace('groq/', '')
+    const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
+
+    type QRef = { sectionIdx: number, questionIdx: number }
+    const refs: QRef[] = []
+    const payload: any[] = []
+    paper.sections.forEach((s: any, si: number) => {
+      s.questions.forEach((q: any, qi: number) => {
+        refs.push({ sectionIdx: si, questionIdx: qi })
+        payload.push({
+          idx: refs.length - 1,
+          type: q.type, question: q.question, options: q.options,
+          answer: q.answer, explanation: q.answer_explanation,
+        })
+      })
+    })
+
+    const validationPrompt = `You are a CBSE question-quality auditor. For each question below, decide if it is acceptable for a Class ${paper.class_level} ${paper.subject} board-style exam paper.
+
+CHECK FOR:
+- Factual accuracy (does the stated answer actually follow from the question?)
+- Ambiguity (is there exactly ONE defensible answer?)
+- For MCQs: is the correct option actually correct? Are distractors plausible but wrong? Are two options accidentally correct?
+- Clarity (can a Class ${paper.class_level} student understand the wording?)
+- Self-containment (does it reference missing diagrams/tables?)
+
+Return JSON: {"results":[{"idx":0,"valid":true,"issues":[]}, ...]}
+
+QUESTIONS:
+${JSON.stringify(payload, null, 2)}`
+
+    const valStart = Date.now()
+    try {
+      const valCompletion = await groqClient.chat.completions.create({
+        model: validationModel,
+        messages: [
+          { role: 'system', content: 'You are a strict but fair CBSE question auditor. Return valid JSON only.' },
+          { role: 'user', content: validationPrompt },
+        ],
+        max_tokens: 3000,
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+      })
+      const valRaw = valCompletion.choices[0]?.message?.content || '{"results":[]}'
+      const parsed = JSON.parse(valRaw)
+      const results: any[] = parsed.results || []
+
+      for (const r of results) {
+        if (typeof r.idx !== 'number' || !refs[r.idx]) continue
+        const ref = refs[r.idx]
+        const q = paper.sections[ref.sectionIdx].questions[ref.questionIdx]
+        q.validated = r.valid === true
+        q.validation_issues = Array.isArray(r.issues) ? r.issues : []
+        if (!q.validated) flaggedCount++
+      }
+
+      await logLLMCall({
+        endpoint: 'other',
+        userId: u.id,
+        model: `groq/${validationModel}`,
+        latencyMs: Date.now() - valStart,
+        metadata: { phase: 'mimic-validate', totalChecked: payload.length, flagged: flaggedCount },
+      })
+    } catch (err: any) {
+      console.warn('[mimic] validation failed, skipping:', err.message)
+    }
+
+    // Regenerate flagged
+    if (flaggedCount > 0) {
+      const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      const primaryModel = process.env.LLM_WORKSHEET || 'gpt-4o-mini'
+
+      for (const ref of refs) {
+        const q = paper.sections[ref.sectionIdx].questions[ref.questionIdx]
+        if (q.validated === false) {
+          try {
+            const regenPrompt = `A question was flagged as invalid. Write a REPLACEMENT question preserving the exam-paper style.
+
+CONTEXT:
+- Subject: ${paper.subject}  | Class: ${paper.class_level}
+- Section: ${paper.sections[ref.sectionIdx].name}
+- Type: ${q.type}  | Marks: ${paper.sections[ref.sectionIdx].marks_per_question}
+
+ISSUES (fix these):
+${q.validation_issues.map((i: string) => `- ${i}`).join('\n')}
+
+ORIGINAL (do not reuse):
+${q.question}
+
+Return JSON matching the original shape. Unicode symbols only. Return ONLY the JSON.`
+
+            const completion = await openaiClient.chat.completions.create({
+              model: primaryModel,
+              messages: [
+                { role: 'system', content: 'You are a CBSE question writer. Output valid JSON only.' },
+                { role: 'user', content: regenPrompt },
+              ],
+              max_tokens: 600,
+              temperature: 0.7,
+              response_format: { type: 'json_object' },
+            })
+            const fresh = JSON.parse(completion.choices[0]?.message?.content || '{}')
+            paper.sections[ref.sectionIdx].questions[ref.questionIdx] = {
+              ...fresh,
+              validated: true,
+              validation_issues: [],
+              regenerated: true,
+            }
+            regeneratedCount++
+          } catch (err: any) {
+            console.warn('[mimic] regen failed, leaving flagged:', err.message)
+          }
+        }
+      }
+    }
+  }
+
+  return c.json({
+    worksheet: paper, // same shape → same preview/save/export
+    meta: {
+      modelUsed,
+      validationRan,
+      flaggedCount,
+      regeneratedCount,
+      totalGenerationMs: Date.now() - genStart,
+      sourcePdf: file.name,
+      sourcePdfBytes: file.size,
+      pdfTruncated: truncated,
+    },
+  })
+})
 
 export default ai

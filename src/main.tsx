@@ -1,4 +1,3 @@
-import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './routes'
@@ -7,12 +6,14 @@ import { UserProvider } from './context/UserContext'
 import './tokens.css'
 import './index.css'
 
+// Note: React.StrictMode is intentionally NOT used.
+// It double-invokes effects in dev which orphans in-flight streaming fetches
+// (e.g. /api/ai/doubt SSE). Re-enable once we wire AbortController on effect
+// cleanup throughout the app.
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <AuthProvider>
-      <UserProvider>
-        <RouterProvider router={router} />
-      </UserProvider>
-    </AuthProvider>
-  </React.StrictMode>
+  <AuthProvider>
+    <UserProvider>
+      <RouterProvider router={router} />
+    </UserProvider>
+  </AuthProvider>
 )

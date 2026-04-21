@@ -102,10 +102,12 @@ export async function evaluateAnswer(token: string, data: {
   return r.json()
 }
 
-// -- Worksheet --
+// ═══ Worksheet ═══
+// Generate from a free-text teacher brief.
+// Returns { worksheet: { title, subject, class_level, chapter, sections: [...], total_marks }, meta }
 export async function generateWorksheet(token: string, data: {
-  subject: string; className: number; chapter: string;
-  questionTypes: string[]; difficulty: string; totalQuestions: number
+  prompt: string
+  validate?: boolean
 }) {
   const r = await fetch(`${BASE}/ai/worksheet`, {
     method: 'POST',
@@ -115,7 +117,66 @@ export async function generateWorksheet(token: string, data: {
   return r.json()
 }
 
-// -- Paper Mimic --
+// Persist a worksheet to the teacher's library. Pass `id` to overwrite an existing one.
+export async function saveWorksheet(token: string, payload: {
+  id?: string
+  worksheet: any
+  prompt?: string
+}) {
+  const r = await fetch(`${BASE}/ai/worksheet/save`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload),
+  })
+  return r.json()
+}
+
+// List the teacher's saved worksheets (metadata only).
+export async function listWorksheets(token: string) {
+  const r = await fetch(`${BASE}/ai/worksheet/list`, {
+    headers: authHeader(token),
+  })
+  return r.json()
+}
+
+// Fetch one full worksheet (with all questions).
+export async function getWorksheet(token: string, id: string) {
+  const r = await fetch(`${BASE}/ai/worksheet/${id}`, {
+    headers: authHeader(token),
+  })
+  return r.json()
+}
+
+export async function deleteWorksheet(token: string, id: string) {
+  const r = await fetch(`${BASE}/ai/worksheet/${id}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+  return r.json()
+}
+
+// ═══ Paper Mimic ═══
+// Upload a past CBSE paper PDF → server extracts + analyzes + generates a
+// fresh paper with the same structure. Output shape identical to worksheet
+// so save/list/export functions above work as-is.
+export async function mimicPaper(
+  token: string,
+  file: File,
+  opts?: { validate?: boolean; hint?: string }
+) {
+  const form = new FormData()
+  form.append('pdf', file)
+  if (opts?.validate === false) form.append('validate', 'false')
+  if (opts?.hint) form.append('hint', opts.hint)
+  const r = await fetch(`${BASE}/ai/mimic`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, // NO Content-Type — browser sets multipart boundary
+    body: form,
+  })
+  return r.json()
+}
+
+// (Legacy signature preserved for back-compat; new code should use mimicPaper)
 export async function uploadMimicPDF(
   token: string, file: File, subject: string,
   className: number, questionCount: number
@@ -153,5 +214,66 @@ export async function saveOnboarding(token: string, data: {
 // -- Home data --
 export async function getHomeData(token: string) {
   const r = await fetch(`${BASE}/user/home-data`, { headers: authHeader(token) })
+  return r.json()
+}
+
+// ═══ Teacher review queue ═══
+export async function listFlagged(token: string, opts?: {
+  status?: 'pending' | 'reviewed' | 'all'
+  subject?: string
+  limit?: number
+}) {
+  const qs = new URLSearchParams()
+  if (opts?.status) qs.set('status', opts.status)
+  if (opts?.subject) qs.set('subject', opts.subject)
+  if (opts?.limit) qs.set('limit', String(opts.limit))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const r = await fetch(`${BASE}/teacher/flagged${suffix}`, { headers: authHeader(token) })
+  return r.json()
+}
+
+export async function getFlagged(token: string, id: string) {
+  const r = await fetch(`${BASE}/teacher/flagged/${id}`, { headers: authHeader(token) })
+  return r.json()
+}
+
+export async function reviewFlagged(token: string, id: string, data: {
+  status: 'correct' | 'wrong' | 'partial'
+  teacher_notes?: string
+}) {
+  const r = await fetch(`${BASE}/teacher/flagged/${id}/review`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(data),
+  })
+  return r.json()
+}
+
+export async function reopenFlagged(token: string, id: string) {
+  const r = await fetch(`${BASE}/teacher/flagged/${id}/reopen`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+  return r.json()
+}
+
+// ═══ Teacher — student list + profile drill-down ═══
+export async function listTeacherStudents(token: string, opts?: { q?: string; classLevel?: number }) {
+  const qs = new URLSearchParams()
+  if (opts?.q) qs.set('q', opts.q)
+  if (opts?.classLevel) qs.set('class', String(opts.classLevel))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const r = await fetch(`${BASE}/teacher/students${suffix}`, { headers: authHeader(token) })
+  return r.json()
+}
+
+export async function getStudentProfile(token: string, studentId: string) {
+  const r = await fetch(`${BASE}/teacher/student/${studentId}`, { headers: authHeader(token) })
+  return r.json()
+}
+
+// ═══ Teacher dashboard (command centre) ═══
+export async function getTeacherDashboard(token: string) {
+  const r = await fetch(`${BASE}/teacher/dashboard`, { headers: authHeader(token) })
   return r.json()
 }

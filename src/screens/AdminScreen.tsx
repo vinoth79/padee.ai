@@ -53,8 +53,12 @@ export default function AdminScreen() {
   // LLM audit state
   const [llmCalls, setLlmCalls] = useState<LLMCall[]>([])
   const [llmFilter, setLlmFilter] = useState<string>('')
+  const [errorsOnly, setErrorsOnly] = useState<boolean>(false)
   const [expandedCall, setExpandedCall] = useState<number | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
+
+  // Error stats (polled every 60s while admin is authed)
+  const [errorStats, setErrorStats] = useState<any>(null)
 
   // Upload state
   const [subject, setSubject] = useState('Physics')
@@ -186,6 +190,20 @@ export default function AdminScreen() {
     return () => clearInterval(interval)
   }, [authed, tab, llmFilter, autoRefresh])
 
+  // Error stats banner — poll every 60s on any tab
+  useEffect(() => {
+    if (!authed) return
+    async function loadErrors() {
+      try {
+        const r = await fetch('/api/admin/error-stats', { headers: adminHeaders })
+        if (r.ok) setErrorStats(await r.json())
+      } catch {}
+    }
+    loadErrors()
+    const iv = setInterval(loadErrors, 60_000)
+    return () => clearInterval(iv)
+  }, [authed])
+
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault()
     if (!file) return
@@ -273,6 +291,53 @@ export default function AdminScreen() {
   return (
     <div className="min-h-screen bg-[#F8F7F4]">
       {/* Header */}
+      {/* Error-rate banner — shows when LLM calls are failing */}
+      {errorStats && errorStats.severity !== 'none' && (
+        <div className="px-6 py-2.5"
+          style={{
+            background: errorStats.severity === 'red' ? '#FEF2F2' : '#FFFBEB',
+            borderBottom: `1px solid ${errorStats.severity === 'red' ? '#FCA5A5' : '#FCD34D'}`,
+          }}>
+          <div className="max-w-6xl mx-auto flex items-center gap-3">
+            <span className="text-lg">{errorStats.severity === 'red' ? '🚨' : '⚠️'}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold"
+                style={{ color: errorStats.severity === 'red' ? '#991B1B' : '#92400E' }}>
+                {errorStats.severity === 'red'
+                  ? `${errorStats.errorsLastHour} LLM errors in the last hour (${errorStats.errorRate}% error rate)`
+                  : `${errorStats.errorsLastHour} LLM error${errorStats.errorsLastHour !== 1 ? 's' : ''} in the last hour`}
+                {errorStats.rateLimitLastHour > 0 && (
+                  <span className="font-normal ml-1">
+                    · {errorStats.rateLimitLastHour} rate-limited
+                  </span>
+                )}
+                {errorStats.fallbacksLastHour > 0 && (
+                  <span className="font-normal ml-1">
+                    · {errorStats.fallbacksLastHour} auto-recovered via fallback
+                  </span>
+                )}
+              </p>
+              <p className="text-xs mt-0.5"
+                style={{ color: errorStats.severity === 'red' ? '#B91C1C' : '#B45309' }}>
+                {errorStats.severity === 'red'
+                  ? errorStats.rateLimitLastHour > errorStats.errorsLastHour / 2
+                    ? 'Heavy rate-limiting detected. Consider upgrading Groq to Dev tier ($10/month) for 10× the daily token quota.'
+                    : 'Investigate recent LLM call failures below.'
+                  : 'Click "LLM Audit → 🚨 Errors only" to investigate.'}
+              </p>
+            </div>
+            <button onClick={() => setTab('audit')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0"
+              style={{
+                background: errorStats.severity === 'red' ? '#991B1B' : '#92400E',
+                color: '#FFFFFF',
+              }}>
+              View errors →
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border-b px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
@@ -339,6 +404,19 @@ export default function AdminScreen() {
                 {f || 'All'}
               </button>
             ))}
+            <button onClick={() => setErrorsOnly(!errorsOnly)}
+              className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                errorsOnly
+                  ? 'bg-red-100 text-red-800 border border-red-200'
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}>
+              🚨 Errors only {errorsOnly && `(${llmCalls.filter(c => c.error).length})`}
+            </button>
+            {llmCalls.some(c => c.error) && !errorsOnly && (
+              <span className="text-xs text-red-600 font-medium">
+                {llmCalls.filter(c => c.error).length} error{llmCalls.filter(c => c.error).length !== 1 ? 's' : ''} in last {llmCalls.length} calls
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-3">
               <label className="flex items-center gap-2 text-xs text-gray-600">
                 <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
@@ -352,13 +430,17 @@ export default function AdminScreen() {
           </div>
 
           {/* Calls list */}
-          {llmCalls.length === 0 ? (
-            <div className="bg-white border rounded-2xl p-8 text-center text-sm text-gray-400">
-              No LLM calls yet. Ask a doubt or click "Explain visually" in the student app.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {llmCalls.map((call, i) => {
+          {(() => {
+            const visibleCalls = errorsOnly ? llmCalls.filter(c => c.error) : llmCalls
+            return visibleCalls.length === 0 ? (
+              <div className="bg-white border rounded-2xl p-8 text-center text-sm text-gray-400">
+                {errorsOnly
+                  ? 'No errors in the current log. 🎉'
+                  : 'No LLM calls yet. Ask a doubt or click "Explain visually" in the student app.'}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {visibleCalls.map((call, i) => {
                 const isOpen = expandedCall === i
                 const endpointColors: Record<string, string> = {
                   doubt: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -367,7 +449,7 @@ export default function AdminScreen() {
                 }
                 const color = endpointColors[call.endpoint] || 'bg-gray-50 text-gray-700 border-gray-200'
                 return (
-                  <div key={i} className="bg-white border rounded-xl overflow-hidden">
+                  <div key={i} className={`border rounded-xl overflow-hidden ${call.error ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
                     {/* Row header */}
                     <button onClick={() => setExpandedCall(isOpen ? null : i)}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left">
@@ -440,7 +522,8 @@ export default function AdminScreen() {
                 )
               })}
             </div>
-          )}
+            )
+          })()}
         </div>
       ) : tab === 'config' ? (
         <div className="max-w-4xl mx-auto px-6 py-6 space-y-6">

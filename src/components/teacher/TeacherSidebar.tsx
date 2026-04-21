@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, ClipboardList, Users, Radio, LogOut } from 'lucide-react'
+import { LayoutDashboard, FileText, ClipboardList, Users, Radio, LogOut, ShieldAlert, FileStack } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
 const NAV_SECTIONS = [
@@ -13,6 +13,7 @@ const NAV_SECTIONS = [
     label: 'Create',
     items: [
       { id: 'worksheet', label: 'Worksheet', icon: FileText, path: '/teacher/worksheet' },
+      { id: 'mimic',     label: 'Paper Mimic', icon: FileStack, path: '/teacher/mimic' },
       { id: 'test',      label: 'Test Paper', icon: ClipboardList, path: '/teacher/test' },
       { id: 'live',      label: 'Live Class', icon: Radio, path: '/teacher/live' },
     ],
@@ -21,6 +22,7 @@ const NAV_SECTIONS = [
     label: 'Monitor',
     items: [
       { id: 'students', label: 'Students', icon: Users, path: '/teacher/students' },
+      { id: 'review',   label: 'Review queue', icon: ShieldAlert, path: '/teacher/review' },
     ],
   },
 ]
@@ -28,9 +30,11 @@ const NAV_SECTIONS = [
 function getActiveId(pathname: string) {
   if (pathname === '/teacher') return 'command'
   if (pathname.includes('worksheet')) return 'worksheet'
+  if (pathname.includes('/teacher/mimic')) return 'mimic'
   if (pathname.includes('/teacher/test')) return 'test'
   if (pathname.includes('live')) return 'live'
   if (pathname.includes('students')) return 'students'
+  if (pathname.includes('review')) return 'review'
   return 'command'
 }
 

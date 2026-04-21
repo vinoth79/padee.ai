@@ -16,14 +16,23 @@ const SCREEN_TO_PATH: Record<string, string> = {
   'parent-summary': '/progress',
   'teacher-dashboard': '/teacher',
   'worksheet': '/teacher/worksheet',
+  'paper-mimic': '/teacher/mimic',
   'test-generator': '/teacher/test',
   'live-class': '/teacher/live',
   'students': '/teacher/students',
+  'teacher-review': '/teacher/review',
 }
 
 export function useAppNavigate() {
   const nav = useNavigate()
   return (screen: string, params?: Record<string, any>) => {
+    // Special case: `student-profile` takes the studentId as a path segment,
+    // not a query param (cleaner URLs + real route matching).
+    if (screen === 'student-profile' && params?.studentId) {
+      nav(`/teacher/student/${params.studentId}`, { state: params })
+      return
+    }
+
     let path = SCREEN_TO_PATH[screen] || '/home'
     // Append params as URL query string for reliability (location.state is flaky across nested routes)
     if (params) {

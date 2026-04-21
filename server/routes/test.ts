@@ -60,29 +60,27 @@ CRITICAL QUALITY RULES:
   const t0 = Date.now()
   const model = process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.3-70b-versatile'
 
-  const completion = await groq.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    max_tokens: 2500,
+  // Use Groq → OpenAI fallback chain so test generation is resilient to rate limits
+  const { completeWithFallback } = await import('../lib/llmFallback.js')
+  const { content: raw, modelUsed, fallbackFired } = await completeWithFallback({
+    messages: [{ role: 'user', content: userPrompt }],
+    systemPrompt,
+    primaryModel: model,
+    maxTokens: 2500,
     temperature: 0.5,
-    response_format: { type: 'json_object' },
+    jsonMode: true,
   })
-
-  const raw = completion.choices[0]?.message?.content || '{}'
 
   logLLMCall({
     timestamp: new Date().toISOString(),
     endpoint: 'test_generate',
     userId,
-    model: `groq/${model}`,
+    model: modelUsed,
     systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
     response: raw,
     latencyMs: Date.now() - t0,
-    metadata: { subject, classLevel, count, difficulty },
+    metadata: { subject, classLevel, count, difficulty, fallbackFired },
   }).catch(() => {})
 
   const parsed = JSON.parse(raw)
@@ -319,14 +317,16 @@ Write a short encouraging analysis for the student (under 80 words):
 
 Plain text only, no markdown headers. Warm, direct, brief.`
 
-      const completion = await groq.chat.completions.create({
-        model: process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.3-70b-versatile',
+      // Use fallback chain for AI insights too (non-critical but nice to have resilience)
+      const { completeWithFallback } = await import('../lib/llmFallback.js')
+      const { content } = await completeWithFallback({
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 200,
+        primaryModel: process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.3-70b-versatile',
+        maxTokens: 200,
         temperature: 0.6,
       })
       aiInsights = {
-        summary: completion.choices[0]?.message?.content?.trim() || '',
+        summary: content.trim() || '',
         weakTopics: [...new Set(questionsWithAnswers.filter((q: any) => !q.correct).map((q: any) => q.topic).filter(Boolean))],
       }
     } else {

@@ -22,11 +22,12 @@ npm run dev:all
 
 | Document | Description |
 |----------|-------------|
-| [architecture.md](architecture.md) | System diagram, tech stack, request lifecycles, caching strategy, security model |
+| [feature-status.md](feature-status.md) | **Scannable status tracker** — what's complete, partial, pending, Phase 2. Start here for "what's done?" |
 | [features.md](features.md) | Deep dive on every built feature: endpoints, tables, LLM models, data flows |
-| [database.md](database.md) | All 15 tables, migration history, RPC functions, the migration 006 bug fix |
+| [architecture.md](architecture.md) | System diagram, tech stack, request lifecycles, caching strategy, security model |
+| [database.md](database.md) | All tables, migration history, RPC functions, the migration 006 bug fix |
 | [api-reference.md](api-reference.md) | Every API endpoint with method, path, auth, request/response shapes |
-| [admin-guide.md](admin-guide.md) | Step-by-step instructions for the admin panel: NCERT uploads, audit, users, config |
+| [admin-guide.md](admin-guide.md) | Step-by-step instructions for the admin panel: NCERT uploads, audit, users, config, concepts |
 | [deployment.md](deployment.md) | Environment variables, Supabase setup, model routing, known issues |
 | [llm-prompts.md](llm-prompts.md) | Every LLM prompt in the system: purpose, key rules, modification guidelines |
 
@@ -37,6 +38,21 @@ npm run dev:all
 3. **Admin-configurable** -- XP rewards, badges, daily goals, and challenge settings live in `server/config.json` and are editable from the admin panel.
 4. **Audit everything** -- every LLM call is logged to `logs/llm-calls.jsonl` and viewable in the admin panel.
 
-## Current State (April 2026)
+## Current State (April 17, 2026)
 
-Phase 1 is mostly complete. The core product (Ask AI with RAG, visual explanations, practice MCQs, photo doubts, progress tracking) is fully wired. See [features.md](features.md) for what is built and what remains.
+**Working tree:** commit `b036c3e` — Phase 1 with v3 UI (teal sidebar, DM Sans, working).
+
+**Student side ~90% done:** core product (Ask AI with RAG, visual explanations, practice MCQs, photo doubts, test mode with 3 entry points, progress tracking, gamification celebrations) is fully wired. Pending: descriptive answer evaluation, flashcards, voice input, prep-for-test flow.
+
+**Teacher side ~35% done:** alert feed + test assignment work; worksheet generator, paper mimic, and review queue remain.
+
+**Recommendation engine ~90% done:** concept catalog, mastery tracking, hero card logic, and 4 home cards are all built. Gaps: nightly cron (no host selected), empty-state UI when fallback triggers.
+
+**Deployment:** 0% — no live host yet.
+
+See [feature-status.md](feature-status.md) for the complete scannable tracker.
+
+### Recent decisions
+
+- **April 17, 2026** — v4 UI redesign (Lexend Deca + vermillion + topbar + right panel) was rolled back. Future UI improvements will be done **one change at a time, committed and verified at each step**, instead of all-at-once.
+- **April 17, 2026** — Vercel deployment removed. Deployment host will be selected separately.

@@ -231,7 +231,7 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 | **Teacher review queue** (flagged responses) | ✅ | List / detail / review (correct/wrong/partial) / reopen. `/teacher/review` |
 | **Real student list** (replaces mock) | ✅ | Search + class filter, clicks drill into profile. `GET /api/teacher/students` |
 | **Individual student profile view** | ✅ | 30-day activity sparkline, subject mastery bars, weak concepts, recent tests/practice, doubt history. `/teacher/student/:id` |
-| Live class feature | 🚫 | Deferred — requires WebRTC/real-time infrastructure; revisit post-pilot |
+| **Live class feature** | ❌ | See Section 19 below. Scoped as chat-first MVP (Supabase Realtime, not WebRTC video) — achievable in 2-3 days |
 
 ---
 
@@ -404,12 +404,127 @@ A 2-hour session with volunteers from the founder's network:
 
 ---
 
+## 19. Live Class (teacher-led synchronous session)
+
+**Status:** Active pending feature. Scoped below.
+
+The goal: a teacher can start a session in the classroom (or online), students join with a 6-digit code, and the teacher drives the session — pushes a question, sees who answered what in real time, reviews wrong answers with the AI tutor, moves to the next concept. Not a video call — that's the trap. Video exists elsewhere (Zoom, Meet, Teams). Padee's differentiator is the **AI-assisted teaching loop**: the AI is the teacher's co-pilot during class.
+
+### Product shape (MVP)
+
+**Teacher flow:**
+1. Click "Start live class" in dashboard
+2. Select subject + chapter (or concept) — session gets a 6-digit code
+3. Share code with class (print on board, WhatsApp, etc.)
+4. Teacher screen shows: roster (who joined), a question composer, a live response grid
+5. Teacher pushes a question ("Quick check: What's the unit of resistance?") → appears instantly on every joined student's phone
+6. Student picks A/B/C/D → teacher sees live bar chart updating
+7. Teacher taps "Reveal answer" → correct option highlights on everyone's screen
+8. Teacher taps "Explain with AI" → Padee's AI generates a classroom-appropriate explanation → renders on every student screen (streamed)
+9. Teacher moves to next question
+10. End session → stats saved + optional auto-generated homework from weak questions
+
+**Student flow:**
+1. Tap "Join live class" on home screen
+2. Enter 6-digit code
+3. Wait for teacher to push the first question
+4. Answer → see live (anonymised) class distribution after teacher reveals
+5. See AI explanation when teacher triggers it
+6. End screen: "You got 7/10. Here's what you'll revise next."
+
+### Why this instead of WebRTC video
+
+| Option | Cost | Value |
+|---|---|---|
+| WebRTC video (Zoom-like) | 2-3 weeks, infra cost, privacy/consent issues | Redundant with tools schools already use |
+| **Chat-first live class (above)** | **2-3 days, Supabase Realtime, zero infra** | **Unique — AI co-pilot in the moment** |
+| Text polls (Kahoot-like) | 1 day | Solved problem, no AI moat |
+
+The chat-first shape gives Padee a reason to be the classroom tool rather than one of many.
+
+### Technical approach
+
+**Backend:**
+- New table `live_sessions`: `id, teacher_id, code, subject, class_level, chapter, status (active/ended), started_at, ended_at`
+- New table `live_session_participants`: `session_id, student_id, joined_at, left_at`
+- New table `live_session_events`: `session_id, event_type (question/answer/reveal/explanation), payload jsonb, created_at` — the replay log
+- Supabase Realtime channel per session (`live-session:<id>`) — broadcast model
+- `POST /api/live/start` — teacher creates a session, returns code
+- `POST /api/live/join` — student joins with code
+- `POST /api/live/push-question` — teacher publishes a question to the channel
+- `POST /api/live/answer` — student submits their pick
+- `POST /api/live/reveal` — teacher broadcasts "correct answer" event
+- `POST /api/live/ai-explain` — streams an AI explanation via SSE to all participants
+- `POST /api/live/end` — teacher ends session, triggers post-session recompute
+
+**Frontend:**
+- New `/teacher/live` screen — roster, question composer, response grid, reveal/AI-explain controls
+- New `/live/:code` student screen — join, see pushed content, answer
+- New "Join live class" entry point on student home
+- Reuse worksheet generator's question shape for the question composer
+
+### Features within live class (phase 1)
+
+| Feature | Priority |
+|---|---|
+| Session create + 6-digit code | P0 |
+| Student join via code | P0 |
+| Push MCQ question → everyone sees | P0 |
+| Live response grid (teacher view) | P0 |
+| Reveal answer → everyone sees correct option | P0 |
+| Roster (who joined / left) | P0 |
+| AI explain on demand (streaming) | P0 |
+| Session end + per-student results | P0 |
+| Auto-generate follow-up worksheet from weak questions | P1 |
+| Push short-answer question (text, not MCQ) | P1 |
+| Push visual explanation (reuse Screen 19) | P1 |
+| Anonymous mode (hide names from grid) | P1 |
+| Session replay (watch the event log) | P2 |
+| Breakout rooms | 🚫 deferred |
+| Video / audio | 🚫 deferred |
+| Teacher can chat with one student privately | 🚫 deferred |
+
+### Scope effort
+
+- Backend (tables + routes + Realtime): **1 day**
+- Teacher live screen: **1 day**
+- Student live screen + join flow: **0.5 day**
+- AI explain streaming integration: **0.5 day**
+- Post-session results + optional worksheet generation: **0.5 day**
+
+**Total: ~2.5–3 days for a shippable MVP.**
+
+### Why build this now
+
+1. **It's the teacher's clearest "why Padee" moment.** Worksheets and tests are useful but not magical. AI-in-the-classroom-in-real-time is magical.
+2. **It drives daily active use.** Worksheets are weekly. Live class is daily.
+3. **It's the best pilot demo surface.** A 10-minute live session in front of a headmaster is worth more than a printed worksheet.
+4. **It reuses existing infra.** Worksheet question generation, AI doubt solver, visual explanation, concept mastery — all plug in.
+5. **Supabase Realtime is already available.** No new infra to set up.
+
+### Pilot positioning
+
+Pitched to teachers as:
+> *"Use Padee's live class for your last 15 minutes. Ask the AI to explain anything the class is confused about, right there on their phones. Then take the weak topics home as an auto-generated worksheet for tomorrow."*
+
+### Open questions to resolve before building
+
+1. **Who can start a session?** Any teacher? Or only for students enrolled in their class? (Phase 1: any teacher, any code. Phase 2: school-scoped when `schools` table exists.)
+2. **Does the student need an account to join?** (Phase 1: yes — we already track concept_mastery per student. Phase 2: guest join via code + name only.)
+3. **What's the max session size?** (Phase 1: cap at 60 participants. Supabase Realtime free tier supports this.)
+4. **Do we save student answers to `practice_sessions`?** (Probably yes — counts as practice, updates concept_mastery.)
+5. **Can students ask questions mid-session?** (Phase 1: no — teacher-driven only. Phase 2: raise-hand queue.)
+
+Defaults: most permissive / simplest option for each. Revisit based on pilot feedback.
+
+---
+
 ## Summary
 
 | Area | Progress |
 |---|---|
 | Student side | **~90% Phase 1 complete** (desc eval, flashcards, voice, prep-for-test, offline still pending) |
-| **Teacher side** | **~95% complete** (live-class intentionally deferred; everything else shipped) |
+| **Teacher side** | **~90% complete** (live-class in scope and pending — see Section 19; everything else shipped) |
 | Admin side | **~95% complete** (generic server error log still pending) |
 | Recommendation engine | **~90%** (backend complete, nightly cron + empty-state UI pending) |
 | Platform / deployment | **0% — no host selected** |
@@ -434,6 +549,9 @@ A 2-hour session with volunteers from the founder's network:
 8. **Descriptive answer evaluation** (`POST /api/ai/evaluate`) — unlocks board prep, 1-2 days.
 9. **Deployment** — pick host (Railway recommended for backend, Vercel or Render for frontend), go live.
 
-**Track C — post-pilot learnings drive the list:**
-10. Incremental v4 UI — start with font or one screen.
-11. Student-side nice-to-haves (voice, flashcards, streak calendar).
+**Track C — high-value differentiator:**
+10. **Live class feature** (Section 19) — 2.5-3 days, biggest teacher "why Padee" moment, unlocks daily classroom use.
+
+**Track D — post-pilot learnings drive the list:**
+11. Incremental v4 UI — start with font or one screen.
+12. Student-side nice-to-haves (voice, flashcards, streak calendar).

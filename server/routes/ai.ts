@@ -7,59 +7,111 @@ import { detectConcept, validateConceptSlug } from '../lib/conceptDetection.js'
 import { recomputeForStudent } from '../cron/recompute-recommendations.js'
 import Groq from 'groq-sdk'
 import OpenAI from 'openai'
+import { createHash } from 'node:crypto'
+import {
+  istTodayStr, istWeekdayCode, istWeekdayForDateStr,
+  istTodayStartUTC, istDaysBetween,
+} from '../lib/dateIST.js'
+import { validateOrSanitise, validateLatex } from '../lib/latexValidate.js'
+import { checkRateLimit } from '../lib/rateLimit.js'
 
 // ═══ Streak updater — called after any XP award ═══
+// IST-aware (uses lib/dateIST). All "today/yesterday" comparisons are in IST,
+// so a 1 AM IST study session correctly counts as the new day, not the old.
+//
+// Pledge-aware (migrations 010 + 011): respects profiles.study_days.
+//
+//   • Rest day (today not in pledged days) → no streak change. Activity is
+//     still logged elsewhere (XP, doubt, practice). Pa doesn't punish or
+//     reward; the row is left alone.
+//   • Pledged day with no missed pledged days since last_active → streak +1,
+//     pledged_days_missed reset to 0. Streak bonus XP fires when streak >= 2.
+//   • Pledged day after missing 1+ pledged days → streak FROZEN (not reset),
+//     pledged_days_missed += missedCount. Frontend shows a re-plan check-in
+//     when pledged_days_missed >= 3.
+//   • If profiles.study_days is NULL/empty (legacy users pre-Apr-25 onboarding),
+//     every day is treated as pledged — preserves original behaviour.
 async function updateStreak(userId: string) {
   try {
-    const today = new Date().toISOString().split('T')[0]
-    const { data: streak } = await supabase
-      .from('student_streaks')
-      .select('*')
-      .eq('student_id', userId)
-      .single()
+    const todayStr = istTodayStr()        // YYYY-MM-DD in IST
+    const todayWeekday = istWeekdayCode() // 'mon'..'sun' in IST
 
+    const [{ data: streak }, { data: profile }] = await Promise.all([
+      supabase.from('student_streaks').select('*').eq('student_id', userId).single(),
+      supabase.from('profiles').select('study_days').eq('id', userId).single(),
+    ])
     if (!streak) return
 
+    // Pledged days. Three cases:
+    //   • NULL  → legacy user (pre-onboarding-rebrand). Treat all 7 days as
+    //             pledged so existing streaks continue to work.
+    //   • []    → user explicitly cleared every pledged day on /settings.
+    //             No day is pledged → streak never increments. Honor that.
+    //   • [..]  → check membership of today's weekday code.
+    const studyDaysRaw = (profile as any)?.study_days
+    const isLegacyDefault = studyDaysRaw === null || studyDaysRaw === undefined
+    const studyDays: string[] = Array.isArray(studyDaysRaw) ? studyDaysRaw : []
+    const isPledgedToday = isLegacyDefault || studyDays.includes(todayWeekday)
+
+    // Rest day → leave streak row alone (last_active_date stays = "last pledged active day")
+    if (!isPledgedToday) return
+
     const lastActive = streak.last_active_date
-    if (lastActive === today) return // already updated today
+    if (lastActive === todayStr) return // already counted today
 
-    // Calculate if yesterday was the last active day
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
-
-    let newStreak: number
-    if (lastActive === yesterdayStr) {
-      // Consecutive day — increment streak
-      newStreak = (streak.current_streak || 0) + 1
-    } else if (!lastActive) {
-      // First ever activity
-      newStreak = 1
-    } else {
-      // Missed a day — reset to 1
-      newStreak = 1
+    // ── First ever pledged-day activity → streak = 1 ──
+    if (!lastActive) {
+      await supabase.from('student_streaks').update({
+        current_streak: 1,
+        longest_streak: Math.max(1, streak.longest_streak || 0),
+        last_active_date: todayStr,
+        pledged_days_missed: 0,
+        updated_at: new Date().toISOString(),
+      }).eq('student_id', userId)
+      return // bonus only fires for streak >= 2
     }
 
-    const longestStreak = Math.max(newStreak, streak.longest_streak || 0)
+    // ── Count pledged days strictly between last_active and today (both IST labels) ──
+    let missedPledged = 0
+    for (const dayStr of istDaysBetween(lastActive, todayStr)) {
+      const wd = istWeekdayForDateStr(dayStr)
+      const wasPledged = isLegacyDefault || studyDays.includes(wd)
+      if (wasPledged) missedPledged++
+    }
+
+    let newStreak: number
+    let missedCounter: number
+    const isFresh = missedPledged === 0
+
+    if (isFresh) {
+      // Kept the rhythm — increment, reset miss counter
+      newStreak = (streak.current_streak || 0) + 1
+      missedCounter = 0
+    } else {
+      // Missed pledged day(s) — freeze streak, accumulate misses for re-plan trigger
+      newStreak = streak.current_streak || 0
+      missedCounter = (streak.pledged_days_missed || 0) + missedPledged
+    }
 
     await supabase.from('student_streaks').update({
       current_streak: newStreak,
-      longest_streak: longestStreak,
-      last_active_date: today,
+      longest_streak: Math.max(newStreak, streak.longest_streak || 0),
+      last_active_date: todayStr,
+      pledged_days_missed: missedCounter,
       updated_at: new Date().toISOString(),
     }).eq('student_id', userId)
 
-    // Award streak bonus XP if streak >= 2
-    if (newStreak >= 2) {
+    // Streak bonus XP — only when streak actually grew (not when frozen) and >= 2
+    if (isFresh && newStreak >= 2) {
       const config = await getAppConfig()
       const bonus = config.xpRewards?.streakBonus || 5
-      // Only award once per day — check if streak XP already given today
+      // Once-per-day guard — bound to IST day window
       const { count } = await supabase
         .from('student_xp')
         .select('*', { count: 'exact', head: true })
         .eq('student_id', userId)
         .eq('source', 'streak')
-        .gte('created_at', `${today}T00:00:00`)
+        .gte('created_at', istTodayStartUTC())
       if (!count || count === 0) {
         await supabase.from('student_xp').insert({
           student_id: userId,
@@ -78,6 +130,20 @@ const ai = new Hono()
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+// Gate teacher-tool endpoints (worksheet generator, paper mimic) so a leaked
+// student token can't burn through paid LLM calls. Returns the auth'd user on
+// success; a Hono Response on auth/role failure (caller must early-return it).
+async function requireTeacher(c: any) {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const { data: profile } = await supabase
+    .from('profiles').select('role').eq('id', u.id).single()
+  if (profile?.role !== 'teacher' && profile?.role !== 'admin') {
+    return c.json({ error: 'Teacher role required' }, 403)
+  }
+  return u
+}
 
 // ═══ POST /api/ai/doubt -- The core product: RAG-grounded doubt solver ═══
 ai.post('/doubt', async (c) => {
@@ -106,13 +172,16 @@ ai.post('/doubt', async (c) => {
   let ncertSource = ''
   let ncertConfidence = 0
   let cacheHit = false
+  // Hoisted so the cache-write step at the end of the SSE handler can reuse
+  // the embedding instead of paying for a second OpenAI embeddings call.
+  let queryEmbedding: number[] | null = null
 
   try {
     const embeddingRes = await openai.embeddings.create({
       model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
       input: question,
     })
-    const queryEmbedding = embeddingRes.data[0].embedding
+    queryEmbedding = embeddingRes.data[0].embedding
 
     // Step 2: Check semantic cache (92%+ similarity = cache hit)
     const { data: cached } = await supabase.rpc('search_response_cache', {
@@ -269,13 +338,25 @@ ai.post('/doubt', async (c) => {
         metadata: { subject, className, ncertConfidence, memoryUsed: memoryUsedDecisionEarly, memoryTokens: memoryObj.tokens, fallbackFired },
       }).catch(() => {})
 
+      // Post-stream LaTeX validation — non-blocking. Stream is already
+      // delivered, but we log warnings for observability and sanitise the
+      // version stored in doubt_sessions / response_cache so future cache
+      // hits don't replay malformed math.
+      const latexCheck = validateLatex(fullResponse)
+      if (!latexCheck.ok) {
+        console.warn(`[LaTeX] doubt response had ${latexCheck.reason}. user=${u.id} q="${question.slice(0, 60)}"`)
+      }
+      const responseToStore = latexCheck.ok
+        ? fullResponse
+        : validateOrSanitise(fullResponse, 'doubt/post-stream', u.id)
+
       // Save the session and response
       const { data: session } = await supabase.from('doubt_sessions').insert({
         student_id: u.id,
         subject: subject || 'Physics',
         class_level: className || 10,
         question_text: question,
-        ai_response: fullResponse,
+        ai_response: responseToStore,
         model_used: process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile',
         tokens_used: fullResponse.length, // approximate
         cache_hit: false,
@@ -333,18 +414,25 @@ ai.post('/doubt', async (c) => {
 
       // Cache the response only if it does NOT reference the student's memory.
       // Personalised responses are student-specific and shouldn't be reused.
+      // Reuse the embedding we already computed for RAG/cache lookup at Step 1
+      // — saves a redundant OpenAI embeddings call per non-cache-hit doubt.
+      // Falls back to a fresh embed if Step 1 errored before queryEmbedding was set.
       if (fullResponse.length > 50 && !memoryUsedDecision) {
         try {
-          const respEmbedding = await openai.embeddings.create({
-            model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
-            input: question,
-          })
+          let embedToCache = queryEmbedding
+          if (!embedToCache) {
+            const respEmbedding = await openai.embeddings.create({
+              model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+              input: question,
+            })
+            embedToCache = respEmbedding.data[0].embedding
+          }
           await supabase.from('response_cache').insert({
             question_text: question,
-            question_embedding: JSON.stringify(respEmbedding.data[0].embedding),
+            question_embedding: JSON.stringify(embedToCache),
             subject: subject || 'Physics',
             class_level: className || 10,
-            ai_response: fullResponse,
+            ai_response: responseToStore,
             model_used: process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile',
           })
         } catch {}
@@ -427,22 +515,53 @@ async function handleVisionDoubt(
   const t0 = Date.now()
 
   return streamSSE(c, async (stream) => {
+    let modelUsed = `groq/${visionModel}`
+    let firstChunkDelivered = false
     try {
-      const completion = await groq.chat.completions.create({
-        model: visionModel,
-        messages: fullMessages as any,
-        stream: true,
-        max_tokens: 900,
-        temperature: 0.3,
-      })
-
-      for await (const chunk of completion) {
-        const text = chunk.choices[0]?.delta?.content || ''
-        if (text) {
-          fullResponse += text
-          await stream.writeSSE({ data: JSON.stringify({ text }) })
+      try {
+        const completion = await groq.chat.completions.create({
+          model: visionModel,
+          messages: fullMessages as any,
+          stream: true,
+          max_tokens: 900,
+          temperature: 0.3,
+        })
+        for await (const chunk of completion) {
+          const text = chunk.choices[0]?.delta?.content || ''
+          if (text) {
+            firstChunkDelivered = true
+            fullResponse += text
+            await stream.writeSSE({ data: JSON.stringify({ text }) })
+          }
+        }
+      } catch (groqErr: any) {
+        // Same guard as streamWithFallback: don't re-stream on top of partial
+        // output. Only fall back if Groq failed before delivering anything.
+        if (firstChunkDelivered) throw groqErr
+        const fallbackVisionModel = process.env.LLM_VISION_FALLBACK || 'gpt-4o'
+        console.warn(`[Vision] Groq vision failed (${(groqErr.message || String(groqErr)).slice(0, 120)}), trying OpenAI ${fallbackVisionModel}...`)
+        const completion = await openai.chat.completions.create({
+          model: fallbackVisionModel,
+          messages: fullMessages as any,
+          stream: true,
+          max_tokens: 900,
+          temperature: 0.3,
+        })
+        modelUsed = `openai/${fallbackVisionModel}`
+        for await (const chunk of completion) {
+          const text = chunk.choices[0]?.delta?.content || ''
+          if (text) {
+            fullResponse += text
+            await stream.writeSSE({ data: JSON.stringify({ text }) })
+          }
         }
       }
+
+      // LaTeX sanity-check before persisting — vision system prompt mandates
+      // KaTeX-renderable math, but vision models slip up. Without this, broken
+      // `$` counts re-render with KaTeX errors when the student reviews the
+      // past doubt later.
+      const responseToStore = validateOrSanitise(fullResponse, 'doubt/vision', userId)
 
       // Save session (store a truncated image reference -- data URL is too large)
       const { data: session } = await supabase.from('doubt_sessions').insert({
@@ -450,8 +569,8 @@ async function handleVisionDoubt(
         subject: subject || 'Physics',
         class_level: className || 10,
         question_text: `[PHOTO] ${question || '(no text)'}`,
-        ai_response: fullResponse,
-        model_used: `groq/${visionModel}`,
+        ai_response: responseToStore,
+        model_used: modelUsed,
         tokens_used: fullResponse.length,
         cache_hit: false,
         session_metadata: { photo: true, imageBytes: imageDataUrl.length },
@@ -474,7 +593,7 @@ async function handleVisionDoubt(
         timestamp: new Date().toISOString(),
         endpoint: 'doubt',
         userId,
-        model: `groq/${visionModel}`,
+        model: modelUsed,
         systemPrompt,
         messages: [
           ...priorTurns,
@@ -483,7 +602,7 @@ async function handleVisionDoubt(
         response: fullResponse,
         latencyMs: Date.now() - t0,
         cacheHit: false,
-        metadata: { subject, className, photo: true },
+        metadata: { subject, className, photo: true, fallbackFired: modelUsed !== `groq/${visionModel}` },
       }).catch(() => {})
 
       await stream.writeSSE({
@@ -545,11 +664,13 @@ ABSOLUTE RULES:
 3. NEVER add unsolicited content: no "similar question for practice", no "real-world examples" unless asked, no "common mistakes" unless asked. The student will use action chips if they want those.
 4. Skip steps that don't apply. A good answer may have just 2-3 sections, not 8.
 
-FORMATTING RULES (CRITICAL -- the frontend does NOT render LaTeX):
-- DO NOT use LaTeX syntax like $F = BIL \\sin \\theta$. It will show as raw text to the student.
-- Use plain text with Unicode symbols: θ (theta), °, Ω (ohm), × (multiply), ÷, √, π, α, β, Δ, ≈, ≤, ≥, ², ³
-- Example GOOD: "F = BIL sin θ where B is the magnetic field in tesla"
-- Example BAD: "$F = BIL \\sin \\theta$ where \\(B\\) is..."
+FORMATTING RULES (CRITICAL -- the frontend renders LaTeX via KaTeX):
+- USE LaTeX for ALL math expressions, formulas, equations, and Greek letters.
+- Inline math: wrap in single dollar signs. Example: "$F = BIL \\sin\\theta$ where $B$ is the magnetic field in tesla."
+- Display math (a standalone equation on its own line): wrap in double dollar signs. Example: "$$E = mc^2$$"
+- Common commands: \\sin, \\cos, \\tan, \\theta, \\pi, \\alpha, \\beta, \\Delta, \\Omega, \\frac{a}{b}, \\sqrt{x}, x^2, x_{i}, \\leq, \\geq, \\neq, \\approx, \\cdot, \\times.
+- DO balance every $ — every opening $ needs a closing $. Unbalanced delimiters render as ugly red errors.
+- Plain prose between math segments stays in plain English. e.g. "We use $F = ma$ to find the force, then plug in the values."
 - Use **bold** for emphasis (Markdown bold works). Use bullet lists with - or *. Use normal sentences, not numbered step headers, unless truly solving a step-by-step problem.
 
 Keep the whole response under 350 words. Use simple English for Class ${className}.`
@@ -755,12 +876,13 @@ ai.get('/usage', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
 
-  const today = new Date().toISOString().split('T')[0]
+  // "Today" bound to IST day window — students near midnight IST shouldn't
+  // see their counter wrongly reset (or fail to reset) due to UTC drift.
   const { count } = await supabase
     .from('doubt_sessions')
     .select('*', { count: 'exact', head: true })
     .eq('student_id', u.id)
-    .gte('created_at', `${today}T00:00:00`)
+    .gte('created_at', istTodayStartUTC())
 
   // Phase 1: unlimited (limit: -1 signals no cap to frontend)
   return c.json({ count: count || 0, limit: -1 })
@@ -772,6 +894,11 @@ ai.get('/usage', async (c) => {
 ai.post('/visual', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  // gpt-4o, ~₹0.05-0.10/call. force=true (Regenerate) bypasses the cache so
+  // a click-loop can rack up cost fast. 20/min/user is generous for normal
+  // use (1 click per concept) and stops accidental loops cold.
+  const limited = checkRateLimit(c, `visual:${u.id}`, 20, 60_000)
+  if (limited) return limited
 
   const { concept, context, question, subject, className, force } = await c.req.json()
 
@@ -1019,11 +1146,28 @@ Match the scope: answer about Ohm's Law -> circuit. Answer about photosynthesis 
 ai.post('/practice', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  // Groq is cheap but still the highest-volume endpoint by call count
+  // (every "Quiz me" chip + every practice round + InlineQuiz). 30/min covers
+  // intense legitimate use and caps the runaway loop.
+  const limited = checkRateLimit(c, `practice:${u.id}`, 30, 60_000)
+  if (limited) return limited
 
-  const { topic, context, subject, className, count = 1 } = await c.req.json()
+  const { topic, context, subject, className, count = 1, concept } = await c.req.json()
 
-  if (!topic && !context) {
-    return c.json({ error: 'Provide either topic or context' }, 400)
+  if (!topic && !context && !concept) {
+    return c.json({ error: 'Provide either topic, context, or concept' }, 400)
+  }
+
+  // If a concept slug was passed, look up its name + chapter for sharper prompting
+  let conceptMeta: { name: string; chapter: string | null } | null = null
+  if (concept) {
+    const { data } = await supabase
+      .from('concept_catalog')
+      .select('concept_name, chapter_name')
+      .eq('concept_slug', concept)
+      .eq('status', 'published')
+      .maybeSingle()
+    if (data) conceptMeta = { name: data.concept_name, chapter: data.chapter_name }
   }
 
   const systemPrompt = `You are a CBSE Class ${className || 10} ${subject || 'Physics'} teacher creating practice MCQs.
@@ -1035,9 +1179,12 @@ Schema:
   "questions": [
     {
       "question": "The question text",
+      "hint_subtitle": "Short one-line instruction under the question (≤12 words). Optional — omit if the question is self-explanatory.",
       "options": ["option A", "option B", "option C", "option D"],
       "correctIndex": 0,
-      "explanation": "Brief reason why the correct answer is right"
+      "explanation": "Brief reason why the correct answer is right",
+      "difficulty": "easy|medium|hard",
+      "hint": "One-line nudge that points the student toward the right approach WITHOUT revealing the answer or naming the correct option. ≤20 words."
     }
   ]
 }
@@ -1049,23 +1196,35 @@ CRITICAL MCQ QUALITY RULES:
 4. Prefer questions that test DEEPER understanding -- numerical application, comparing scenarios, or identifying the subtle correct phrasing -- over surface recall.
 5. Use CBSE terminology exactly as in the NCERT textbook.
 6. Question under 40 words. Options under 15 words each. Explanation under 35 words.
-7. Randomise correctIndex across questions (do not always put the answer at index 0).`
+7. Randomise correctIndex across questions (do not always put the answer at index 0).
+8. Mix difficulties when count > 1: roughly 30% easy, 50% medium, 20% hard. Tag each question honestly.
+9. Hint must point at the method / formula / principle, not the answer. NEVER say "the answer is X" or reference an option letter.
+10. MATH FORMATTING: For any math expression, formula, fraction, exponent, Greek letter, or symbol, USE LaTeX with single $ delimiters. e.g. "What is $F$ if $m = 2$ kg and $a = 3$ m/s$^2$?" — options can include "$F = 6$ N". Balance every $ (every opening needs a closing). Use \\frac{a}{b}, \\sqrt{x}, x^{2}, \\theta, \\pi, \\sin, \\cos, etc. Plain English between math segments — don't wrap whole sentences in $.`
 
+  const conceptLine = conceptMeta
+    ? `\n\nFocus specifically on the concept: ${conceptMeta.name}${conceptMeta.chapter ? ` (from chapter: ${conceptMeta.chapter})` : ''}.`
+    : ''
+
+  const nQ = `${count} multiple-choice question${count > 1 ? 's' : ''}`
   const userPrompt = context
-    ? `Create an MCQ based on this explanation:\n\n${context}\n\nFocus on the core concept a Class ${className || 10} student just learnt.`
-    : `Create an MCQ on: ${topic}`
+    ? `Create ${nQ} based on this explanation:\n\n${context}\n\nFocus on the core concept a Class ${className || 10} student just learnt.${conceptLine}\n\nReturn EXACTLY ${count} question${count > 1 ? 's' : ''} in the "questions" array. Not fewer.`
+    : `Create ${nQ} on: ${topic || conceptMeta?.name || 'CBSE syllabus'}${conceptLine}\n\nReturn EXACTLY ${count} question${count > 1 ? 's' : ''} in the "questions" array. Not fewer.`
 
   const tPractice0 = Date.now()
-  const practiceModel = process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.1-8b-instant'
+  const practiceModel = process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.3-70b-versatile'
 
   try {
-    // Use Groq → OpenAI fallback chain for resilience
+    // Use Groq → OpenAI fallback chain for resilience.
+    // Token budget: the expanded schema (question + 4 options + explanation +
+    // difficulty + hint + hint_subtitle) runs ~250-300 tokens per question.
+    // Scale linearly so count=3 doesn't truncate, count=8 doesn't over-allocate.
     const { completeWithFallback } = await import('../lib/llmFallback.js')
+    const maxTokens = Math.max(600, count * 320 + 200)
     const { content: raw, modelUsed, fallbackFired } = await completeWithFallback({
       messages: [{ role: 'user', content: userPrompt }],
       systemPrompt,
       primaryModel: practiceModel,
-      maxTokens: 500,
+      maxTokens,
       temperature: 0.4,
       jsonMode: true,
     })
@@ -1088,15 +1247,54 @@ CRITICAL MCQ QUALITY RULES:
     if (!parsed.questions || !Array.isArray(parsed.questions)) {
       return c.json({ error: 'Invalid LLM output' }, 500)
     }
-    const valid = parsed.questions.filter((q: any) =>
-      q.question && Array.isArray(q.options) && q.options.length === 4
-      && typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < 4
-    )
+    const valid = parsed.questions
+      .filter((q: any) =>
+        q.question && Array.isArray(q.options) && q.options.length === 4
+        && typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < 4
+      )
+      .map((q: any) => ({
+        // Each text field gets validated. If unbalanced LaTeX, delimiters are
+        // stripped — the formula still reads correctly as plain text rather
+        // than rendering as an ugly KaTeX error on the frontend.
+        question: validateOrSanitise(q.question, 'practice/question', u.id),
+        options: q.options.map((opt: string) => validateOrSanitise(opt, 'practice/option', u.id)),
+        correctIndex: q.correctIndex,
+        explanation: validateOrSanitise(q.explanation || '', 'practice/explanation', u.id),
+        difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
+        hint: typeof q.hint === 'string' ? validateOrSanitise(q.hint, 'practice/hint', u.id) : '',
+        hint_subtitle: typeof q.hint_subtitle === 'string' ? validateOrSanitise(q.hint_subtitle, 'practice/sub', u.id) : '',
+        // Tag with concept slug if we targeted one — mastery update uses this
+        concept_slug: concept || undefined,
+      }))
     if (valid.length === 0) {
       return c.json({ error: 'LLM produced no valid questions' }, 500)
     }
+    if (valid.length < count) {
+      console.warn(`[AI] Practice: requested ${count}, got ${valid.length} valid (${parsed.questions.length} raw). Subject=${subject} concept=${concept || 'none'}`)
+    }
 
-    return c.json({ questions: valid })
+    // Persist a pending practice_sessions row holding the canonical questions
+    // (with correctIndex). /practice/complete will fetch by sessionId and
+    // grade server-side — we don't trust the client's `correct` flag.
+    // We still ship correctIndex back to the browser because practice has
+    // per-question instant feedback ("you got it right!"); the security gain
+    // is closing the trivial "POST correct: true" XP/mastery exploit.
+    const { data: session, error: sessErr } = await supabase
+      .from('practice_sessions').insert({
+        student_id: u.id,
+        subject: subject || 'Physics',
+        class_level: className || 10,
+        difficulty: 'mixed',
+        total_questions: valid.length,
+        questions: valid,
+        completed: false,
+      }).select('id').single()
+    if (sessErr || !session) {
+      console.error('[AI] Practice: pending session insert failed:', sessErr)
+      return c.json({ error: 'Failed to start practice' }, 500)
+    }
+
+    return c.json({ sessionId: session.id, questions: valid, requestedCount: count })
   } catch (err: any) {
     console.error('[AI] Practice generation error:', err)
     logLLMCall({
@@ -1115,40 +1313,86 @@ CRITICAL MCQ QUALITY RULES:
   }
 })
 // ═══ POST /api/ai/practice/complete — Save results + award XP + update mastery ═══
+// Strict server-side grading: client sends only sessionId + selectedIdx values.
+// Canonical questions live on practice_sessions.questions (persisted by /practice).
 ai.post('/practice/complete', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
 
-  const { subject, className, questions, correctCount, totalQuestions } = await c.req.json()
-  if (!subject || !questions || !totalQuestions) return c.json({ error: 'Missing fields' }, 400)
+  const { sessionId, answers, hintsUsed = 0 } = await c.req.json()
+  if (!sessionId || !Array.isArray(answers)) {
+    return c.json({ error: 'sessionId and answers[] required' }, 400)
+  }
 
-  // Save practice session
-  const { data: session } = await supabase.from('practice_sessions').insert({
-    student_id: u.id,
-    subject,
-    class_level: className || 10,
-    difficulty: 'mixed',
-    total_questions: totalQuestions,
-    correct_count: correctCount || 0,
+  const { data: pending, error: fetchErr } = await supabase
+    .from('practice_sessions')
+    .select('id, student_id, subject, class_level, questions, completed')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (fetchErr || !pending) return c.json({ error: 'Session not found' }, 404)
+  if (pending.student_id !== u.id) return c.json({ error: 'Forbidden' }, 403)
+  if (pending.completed) return c.json({ error: 'Practice already submitted' }, 409)
+
+  const subject: string = pending.subject
+  const className: number = pending.class_level
+  const canonicalQuestions: any[] = Array.isArray(pending.questions) ? pending.questions : []
+  const totalQuestions = canonicalQuestions.length
+
+  // Server-side grade. selectedIdx is the only client input; correct is
+  // re-derived from canonical correctIndex.
+  const answerByIdx = new Map<number, { selectedIdx: number | null; skipped: boolean }>()
+  for (const a of answers as any[]) {
+    if (typeof a?.questionIdx === 'number') {
+      answerByIdx.set(a.questionIdx, {
+        selectedIdx: typeof a.selectedIdx === 'number' ? a.selectedIdx : null,
+        skipped: !!a.skipped,
+      })
+    }
+  }
+  const questions = canonicalQuestions.map((q: any, i: number) => {
+    const entry = answerByIdx.get(i)
+    const sel = entry?.selectedIdx ?? null
+    const correct = sel !== null && typeof q.correctIndex === 'number' && sel === q.correctIndex
+    return { ...q, studentAnswer: sel, correct, skipped: entry?.skipped ?? false }
+  })
+  const correctCount = questions.filter(q => q.correct).length
+
+  // Update the pending session to its completed state.
+  const { data: session } = await supabase.from('practice_sessions').update({
+    correct_count: correctCount,
     questions,
     completed: true,
-  }).select('id').single()
+  }).eq('id', sessionId).select('id').single()
 
-  // Award XP from admin config
+  // Award XP per-question by difficulty (admin-configurable), minus hint penalty.
+  // Falls back to flat practiceSession XP if no per-difficulty config (legacy safety).
   const config = await getAppConfig()
-  const xpAmount = config.xpRewards?.practiceSession || 15
+  const diffXp = config.xpRewards?.practiceDifficulty || { easy: 3, medium: 6, hard: 10 }
+  const hintPenalty = config.xpRewards?.practiceHintPenalty ?? 2
+  let xpAmount = 0
+  for (const q of questions) {
+    if (q.correct) {
+      const diff = ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium'
+      xpAmount += diffXp[diff] ?? diffXp.medium ?? 6
+    }
+  }
+  xpAmount = Math.max(0, xpAmount - (Number(hintsUsed) || 0) * hintPenalty)
+  // Legacy fallback: if nothing was computed (e.g. all skipped/wrong + no hints), still give the flat reward for completing the round
+  if (xpAmount === 0 && correctCount > 0) {
+    xpAmount = config.xpRewards?.practiceSession || 15
+  }
   await supabase.from('student_xp').insert({
     student_id: u.id,
     amount: xpAmount,
     source: 'practice',
-    metadata: { session_id: session?.id, subject, correctCount, totalQuestions },
+    metadata: { session_id: session?.id, subject, correctCount, totalQuestions, hintsUsed },
   })
 
   // Update streak
   updateStreak(u.id).catch(() => {})
 
   // Update subject_mastery (running average)
-  const accuracy = Math.round((correctCount / totalQuestions) * 100)
+  const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
   const { data: existing } = await supabase
     .from('subject_mastery')
     .select('*')
@@ -1175,10 +1419,10 @@ ai.post('/practice/complete', async (c) => {
     })
   }
 
-  // Update concept_mastery for each question (if we can detect the concept)
+  // Update concept_mastery for each question (if we can detect the concept).
+  // Parallel — N independent RPCs blocked serially otherwise add ~N×100ms.
   try {
-    for (const q of questions as any[]) {
-      // Prefer explicit concept_slug on question (LLM-provided); else detect from question text
+    await Promise.all(questions.map(async (q) => {
       let slug: string | null = q.concept_slug || null
       if (slug) {
         const valid = await validateConceptSlug(slug)
@@ -1193,14 +1437,13 @@ ai.post('/practice/complete', async (c) => {
         if (detected) slug = detected.concept_slug
       }
       if (slug) {
-        const wasCorrect = typeof q.correct === 'boolean' ? q.correct : (q.studentAnswer === q.correctIndex)
         await supabase.rpc('update_concept_mastery', {
           p_student_id: u.id,
           p_concept_slug: slug,
-          p_correct: !!wasCorrect,
+          p_correct: !!q.correct,
         })
       }
-    }
+    }))
   } catch (err) {
     console.warn('[practice/complete] concept_mastery update failed (non-fatal):', err)
   }
@@ -1208,10 +1451,135 @@ ai.post('/practice/complete', async (c) => {
   // Trigger mid-session recomputation (async, non-blocking)
   recomputeForStudent(u.id).catch(e => console.warn('[practice/complete] recompute failed:', e))
 
-  return c.json({ ok: true, sessionId: session?.id, xpAwarded: xpAmount, accuracy })
+  return c.json({ ok: true, sessionId: session?.id, xpAwarded: xpAmount, accuracy, correctCount, totalQuestions })
 })
 
 ai.post('/evaluate', async (c) => c.json({ error: 'Not implemented yet' }, 501))
+
+// ═══ POST /api/ai/tts — Google Cloud TTS proxy with in-memory LRU cache ═══
+// ─────────────────────────────────────────────────────────────────────────
+// Cost control: in-memory LRU cache keyed by sha256(text::voice). Hits return
+// cached MP3 (no Google call). 500-entry cap ≈ ~50MB RAM worst case (100KB/clip).
+// If `GOOGLE_TTS_API_KEY` is not set the endpoint returns 501 — the frontend
+// falls back to browser speechSynthesis (see useSpeech.js).
+//
+// Voice: defaults to en-IN-Wavenet-D (warm Indian English female). Override
+// via env `LLM_TTS_VOICE`. Full list: https://cloud.google.com/text-to-speech/docs/voices
+// ─────────────────────────────────────────────────────────────────────────
+const TTS_CACHE_MAX = 500
+const ttsCache = new Map<string, { audio: Buffer; lastAccess: number; hits: number }>()
+let ttsBytesServed = 0
+let ttsCharsBilled = 0
+
+ai.post('/tts', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  // Google TTS bills per character (~$16/M chars Wavenet). 60/min/user is
+  // ample for one Listen click per bubble in heavy session use; the LRU
+  // cache absorbs repeats so this rarely binds in practice.
+  const limited = checkRateLimit(c, `tts:${u.id}`, 60, 60_000)
+  if (limited) return limited
+
+  const { text, voice: voiceOverride } = await c.req.json<any>()
+  if (!text || typeof text !== 'string') {
+    return c.json({ error: 'text (non-empty string) is required' }, 400)
+  }
+
+  // Cap: 5000 chars per call. Longer answers truncate. Google allows 5000 for plain text.
+  const clean = text.trim().slice(0, 5000)
+  if (!clean) return c.json({ error: 'text empty after trim' }, 400)
+
+  const voice = voiceOverride || process.env.LLM_TTS_VOICE || 'en-IN-Wavenet-D'
+  const langCode = voice.startsWith('en-IN') ? 'en-IN'
+                 : voice.startsWith('hi-IN') ? 'hi-IN'
+                 : 'en-IN'
+
+  const hash = createHash('sha256').update(`${clean}::${voice}`).digest('hex')
+
+  // Cache hit → serve from memory
+  const cached = ttsCache.get(hash)
+  if (cached) {
+    cached.lastAccess = Date.now()
+    cached.hits++
+    ttsBytesServed += cached.audio.length
+    c.header('Content-Type', 'audio/mpeg')
+    c.header('X-TTS-Cache', 'hit')
+    c.header('Cache-Control', 'public, max-age=3600')
+    return c.body(cached.audio as any)
+  }
+
+  // Miss → call Google
+  const apiKey = process.env.GOOGLE_TTS_API_KEY
+  if (!apiKey) {
+    return c.json({ error: 'TTS not configured — GOOGLE_TTS_API_KEY missing', fallbackToBrowser: true }, 501)
+  }
+
+  try {
+    const t0 = Date.now()
+    const resp = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text: clean },
+          voice: { languageCode: langCode, name: voice },
+          audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0, pitch: 0 },
+        }),
+      }
+    )
+    if (!resp.ok) {
+      const errBody = await resp.text()
+      console.error('[TTS] Google error', resp.status, errBody.slice(0, 300))
+      return c.json({ error: 'TTS generation failed', status: resp.status, fallbackToBrowser: true }, 502)
+    }
+    const { audioContent } = await resp.json() as any
+    if (!audioContent) {
+      return c.json({ error: 'No audio returned', fallbackToBrowser: true }, 502)
+    }
+    const audio = Buffer.from(audioContent, 'base64')
+    const latencyMs = Date.now() - t0
+    ttsCharsBilled += clean.length
+
+    // LRU evict: drop oldest entry if at cap
+    if (ttsCache.size >= TTS_CACHE_MAX) {
+      let oldestKey: string | null = null
+      let oldestTime = Infinity
+      for (const [k, v] of ttsCache.entries()) {
+        if (v.lastAccess < oldestTime) { oldestTime = v.lastAccess; oldestKey = k }
+      }
+      if (oldestKey) ttsCache.delete(oldestKey)
+    }
+    ttsCache.set(hash, { audio, lastAccess: Date.now(), hits: 0 })
+    ttsBytesServed += audio.length
+
+    console.log(`[TTS] miss: ${clean.length} chars → ${audio.length}B MP3 (${latencyMs}ms, voice=${voice})`)
+
+    c.header('Content-Type', 'audio/mpeg')
+    c.header('X-TTS-Cache', 'miss')
+    c.header('Cache-Control', 'public, max-age=3600')
+    return c.body(audio as any)
+  } catch (err: any) {
+    console.error('[TTS] fetch failed:', err.message)
+    return c.json({ error: 'TTS network error', fallbackToBrowser: true }, 500)
+  }
+})
+
+// Admin helper: /api/ai/tts/stats — cache size, bytes served, chars billed
+ai.get('/tts/stats', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const totalHits = [...ttsCache.values()].reduce((s, e) => s + e.hits, 0)
+  return c.json({
+    cacheEntries: ttsCache.size,
+    cacheCap: TTS_CACHE_MAX,
+    totalCacheHits: totalHits,
+    totalBytesServed: ttsBytesServed,
+    totalCharsBilled: ttsCharsBilled,
+    voice: process.env.LLM_TTS_VOICE || 'en-IN-Wavenet-D',
+    configured: Boolean(process.env.GOOGLE_TTS_API_KEY),
+  })
+})
 
 // ═══ WORKSHEET GENERATOR ═══
 // Teacher provides a free-text prompt (e.g. "10 questions on Ohm's Law for
@@ -1223,8 +1591,13 @@ ai.post('/evaluate', async (c) => c.json({ error: 'Not implemented yet' }, 501))
 //
 // Returns JSON, not SSE — worksheets are not streamed.
 ai.post('/worksheet', async (c) => {
-  const u = await getUserFromToken(c.req.header('Authorization'))
-  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const auth = await requireTeacher(c)
+  if (auth instanceof Response) return auth
+  const u = auth
+  // gpt-4o-mini generation + validation + per-flagged regen → multi-call cost
+  // per request. 10/min/teacher is more than enough for human-paced authoring.
+  const limited = checkRateLimit(c, `worksheet:${u.id}`, 10, 60_000)
+  if (limited) return limited
   const { prompt, validate = true } = await c.req.json<any>()
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
     return c.json({ error: 'prompt (free-text brief) is required' }, 400)
@@ -1530,8 +1903,9 @@ Example shape for MCQ:
 // Save a generated worksheet to the `worksheets` table. The same endpoint is
 // used for "update" — pass an existing `id` and it will overwrite.
 ai.post('/worksheet/save', async (c) => {
-  const u = await getUserFromToken(c.req.header('Authorization'))
-  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const auth = await requireTeacher(c)
+  if (auth instanceof Response) return auth
+  const u = auth
   const { id, worksheet, prompt } = await c.req.json<any>()
   if (!worksheet || !worksheet.title || !Array.isArray(worksheet.sections)) {
     return c.json({ error: 'worksheet.title and worksheet.sections are required' }, 400)
@@ -1576,8 +1950,9 @@ ai.post('/worksheet/save', async (c) => {
 })
 
 ai.get('/worksheet/list', async (c) => {
-  const u = await getUserFromToken(c.req.header('Authorization'))
-  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const auth = await requireTeacher(c)
+  if (auth instanceof Response) return auth
+  const u = auth
   const { data, error } = await supabase
     .from('worksheets')
     .select('id, title, subject, class_level, chapter, difficulty, total_questions, created_at, model_used')
@@ -1589,8 +1964,9 @@ ai.get('/worksheet/list', async (c) => {
 })
 
 ai.get('/worksheet/:id', async (c) => {
-  const u = await getUserFromToken(c.req.header('Authorization'))
-  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const auth = await requireTeacher(c)
+  if (auth instanceof Response) return auth
+  const u = auth
   const id = c.req.param('id')
   const { data, error } = await supabase
     .from('worksheets').select('*').eq('id', id).eq('teacher_id', u.id).single()
@@ -1599,8 +1975,9 @@ ai.get('/worksheet/:id', async (c) => {
 })
 
 ai.delete('/worksheet/:id', async (c) => {
-  const u = await getUserFromToken(c.req.header('Authorization'))
-  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const auth = await requireTeacher(c)
+  if (auth instanceof Response) return auth
+  const u = auth
   const id = c.req.param('id')
   const { error } = await supabase
     .from('worksheets').delete().eq('id', id).eq('teacher_id', u.id)
@@ -1616,8 +1993,14 @@ ai.delete('/worksheet/:id', async (c) => {
 // same save/list/preview/export surfaces work — we just stamp `mode: 'mimic'`
 // and `source_pdf: <filename>` at save time.
 ai.post('/mimic', async (c) => {
-  const u = await getUserFromToken(c.req.header('Authorization'))
-  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+  const auth = await requireTeacher(c)
+  if (auth instanceof Response) return auth
+  const u = auth
+  // Heaviest endpoint: PDF parse (up to 15 MB) + gpt-4o-mini @ 6000 tokens
+  // + validation + regen. 5/min/teacher matches the human pace of "upload,
+  // wait 30s, review, upload again."
+  const limited = checkRateLimit(c, `mimic:${u.id}`, 5, 60_000)
+  if (limited) return limited
 
   // Multipart: pdf file + optional validate flag + optional hint text
   const form = await c.req.formData()

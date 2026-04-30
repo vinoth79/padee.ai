@@ -4,6 +4,7 @@ import { logLLMCall } from '../lib/llmLog.js'
 import { getAppConfig } from './admin.js'
 import { detectConcept, validateConceptSlug } from '../lib/conceptDetection.js'
 import { recomputeForStudent } from '../cron/recompute-recommendations.js'
+import { istTodayStr, istDateAddDays } from '../lib/dateIST.js'
 import Groq from 'groq-sdk'
 import OpenAI from 'openai'
 
@@ -95,16 +96,18 @@ CRITICAL QUALITY RULES:
   return valid
 }
 
+// IST-aware. NOT pledge-aware — duplication with ai.ts updateStreak() is a
+// known follow-up; for now we just fix the timezone so test completions
+// don't credit the wrong calendar day. Pledge logic will follow in a
+// separate cleanup that unifies the two implementations.
 async function updateStreak(userId: string) {
   try {
-    const today = new Date().toISOString().split('T')[0]
+    const today = istTodayStr()
+    const yesterdayStr = istDateAddDays(today, -1)
     const { data: streak } = await supabase
       .from('student_streaks').select('*').eq('student_id', userId).single()
     if (!streak) return
     if (streak.last_active_date === today) return
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
     let newStreak: number
     if (streak.last_active_date === yesterdayStr) newStreak = (streak.current_streak || 0) + 1
     else if (!streak.last_active_date) newStreak = 1
@@ -183,9 +186,14 @@ test.get('/list', async (c) => {
       recSubject = selectedSubjects[0]
       reason = `Start with a quick ${recSubject} test to see where you stand.`
     }
+    // For new students with no mastery rows, default to medium — landing them
+    // on 'hard' as a first test (the falsy-comparison fall-through bug below)
+    // is discouraging.
+    const acc = attempted[0]?.accuracy_percent
     const recDifficulty: 'easy' | 'medium' | 'hard' =
-      attempted[0]?.accuracy_percent < 50 ? 'easy'
-      : attempted[0]?.accuracy_percent < 75 ? 'medium'
+      typeof acc !== 'number' ? 'medium'
+      : acc < 50 ? 'easy'
+      : acc < 75 ? 'medium'
       : 'hard'
 
     aiRecommendation = {
@@ -220,45 +228,89 @@ test.post('/start', async (c) => {
   const secondsPerQuestion = testCfg.secondsPerQuestion || 60
 
   try {
-    if (mode === 'teacher') {
-      const assignmentId = body.assignmentId
-      if (!assignmentId) return c.json({ error: 'assignmentId required' }, 400)
-      const { data: assignment, error } = await supabase
-        .from('test_assignments').select('*').eq('id', assignmentId).single()
-      if (error || !assignment) return c.json({ error: 'Assignment not found' }, 404)
+    // canonical = the FULL question objects (with correctIndex + explanation)
+    // that live server-side in test_sessions.questions. The student-facing
+    // response below strips those fields so the answer key never reaches the
+    // browser. Grading at /complete reads from the persisted canonical.
+    let canonical: any[]
+    let title: string
+    let subject: string
+    let classLevel: number
+    let difficulty: string
+    let assignmentId: string | null = null
+    let perQSecs: number = secondsPerQuestion
+    let safeMode: 'self' | 'ai_recommended' | 'teacher' = 'self'
 
-      return c.json({
-        mode: 'teacher',
-        assignmentId: assignment.id,
-        title: assignment.title,
-        subject: assignment.subject,
-        classLevel: assignment.class_level,
-        difficulty: assignment.difficulty,
-        questions: assignment.questions,
-        secondsPerQuestion: assignment.seconds_per_question || secondsPerQuestion,
-        totalSeconds: (assignment.questions?.length || 0) * (assignment.seconds_per_question || secondsPerQuestion),
+    if (mode === 'teacher') {
+      if (!body.assignmentId) return c.json({ error: 'assignmentId required' }, 400)
+      const { data: assignment, error } = await supabase
+        .from('test_assignments').select('*').eq('id', body.assignmentId).single()
+      if (error || !assignment) return c.json({ error: 'Assignment not found' }, 404)
+      canonical = Array.isArray(assignment.questions) ? assignment.questions : []
+      title = assignment.title
+      subject = assignment.subject
+      classLevel = assignment.class_level
+      difficulty = assignment.difficulty
+      assignmentId = assignment.id
+      perQSecs = assignment.seconds_per_question || secondsPerQuestion
+      safeMode = 'teacher'
+    } else {
+      subject = body.subject || 'Physics'
+      classLevel = body.classLevel || 10
+      const questionCount = Math.max(1, Math.min(body.questionCount || 10, 20))
+      difficulty = body.difficulty || 'medium'
+      canonical = await generateTestQuestions({
+        subject, classLevel, count: questionCount, difficulty, userId: u.id,
       })
+      title = `${subject} Test (${difficulty})`
+      safeMode = mode === 'ai_recommended' ? 'ai_recommended' : 'self'
     }
 
-    // Self-pick or AI-recommended — generate questions on the fly
-    const subject = body.subject || 'Physics'
-    const classLevel = body.classLevel || 10
-    const questionCount = Math.min(body.questionCount || 10, 20)
-    const difficulty = body.difficulty || 'medium'
+    if (!canonical.length) {
+      return c.json({ error: 'No questions available' }, 500)
+    }
 
-    const questions = await generateTestQuestions({
-      subject, classLevel, count: questionCount, difficulty, userId: u.id,
-    })
+    // Persist a pending session — completes (or auto-fails) at /complete.
+    const { data: session, error: insertErr } = await supabase
+      .from('test_sessions').insert({
+        student_id: u.id,
+        title,
+        subject,
+        class_level: classLevel,
+        total_marks: canonical.length,
+        difficulty: ['easy', 'medium', 'hard'].includes(difficulty) ? difficulty : null,
+        source: safeMode,
+        assignment_id: assignmentId,
+        questions: canonical,
+        completed: false,
+      }).select('id').single()
+    if (insertErr || !session) {
+      console.error('[Test] start: session insert failed:', insertErr)
+      return c.json({ error: 'Failed to start test' }, 500)
+    }
+
+    // Sanitise: strip correctIndex + explanation. Keep difficulty/topic/concept_slug
+    // since the active screen displays them and the results screen needs them
+    // for the topic stats grid.
+    const sanitisedQuestions = canonical.map((q: any) => ({
+      question: q.question,
+      options: q.options,
+      difficulty: q.difficulty,
+      topic: q.topic,
+      concept_slug: q.concept_slug,
+    }))
 
     return c.json({
-      mode,
-      title: `${subject} Test (${difficulty})`,
+      sessionId: session.id,
+      mode: safeMode,
+      assignmentId,
+      title,
       subject,
       classLevel,
       difficulty,
-      questions,
-      secondsPerQuestion,
-      totalSeconds: questions.length * secondsPerQuestion,
+      questions: sanitisedQuestions,
+      secondsPerQuestion: perQSecs,
+      totalSeconds: canonical.length * perQSecs,
     })
   } catch (err: any) {
     console.error('[Test] start error:', err)
@@ -274,88 +326,162 @@ test.post('/complete', async (c) => {
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
 
   const body = await c.req.json()
-  const {
-    mode, subject, classLevel, difficulty, title,
-    questions, answers, // answers: [{ questionIdx, selectedIdx, correct }]
-    timeTakenSeconds, assignmentId,
-  } = body
+  const { sessionId, answers, timeTakenSeconds } = body
 
-  if (!subject || !questions || !answers) return c.json({ error: 'Missing fields' }, 400)
+  // Strict contract: /complete requires the sessionId returned by /start. The
+  // canonical questions live server-side; the client only sends selectedIdx
+  // values. This is what closes the "POST correct: true" cheat — there's no
+  // path here that takes correctness from the client.
+  if (!sessionId || !Array.isArray(answers)) {
+    return c.json({ error: 'sessionId and answers[] required' }, 400)
+  }
 
-  const correctCount = answers.filter((a: any) => a.correct).length
-  const totalQuestions = questions.length
+  const { data: pending, error: fetchErr } = await supabase
+    .from('test_sessions')
+    .select('id, student_id, title, subject, class_level, difficulty, source, assignment_id, questions, completed')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (fetchErr || !pending) return c.json({ error: 'Session not found' }, 404)
+  if (pending.student_id !== u.id) return c.json({ error: 'Forbidden' }, 403)
+  if (pending.completed) return c.json({ error: 'Test already submitted' }, 409)
+
+  const subject: string = pending.subject
+  const classLevel: number = pending.class_level
+  const difficulty: string | null = pending.difficulty
+  const title: string = pending.title
+  const safeMode: 'self' | 'ai_recommended' | 'teacher' =
+    pending.source === 'teacher' ? 'teacher'
+    : pending.source === 'ai_recommended' ? 'ai_recommended' : 'self'
+  const canonicalQuestions: any[] = Array.isArray(pending.questions) ? pending.questions : []
+  const totalQuestions = canonicalQuestions.length
+
+  // Server-side grading. selectedIdx is the only thing we trust from the
+  // client — `correct` is derived from canonical correctIndex.
+  const answerByIdx = new Map<number, number | null>()
+  for (const a of answers as any[]) {
+    if (typeof a?.questionIdx === 'number') {
+      answerByIdx.set(a.questionIdx, typeof a.selectedIdx === 'number' ? a.selectedIdx : null)
+    }
+  }
+
+  const questionsWithAnswers = canonicalQuestions.map((q: any, i: number) => {
+    const sel = answerByIdx.has(i) ? answerByIdx.get(i)! : null
+    const correct = sel !== null && typeof q.correctIndex === 'number' && sel === q.correctIndex
+    return { ...q, studentAnswer: sel, correct }
+  })
+  const correctCount = questionsWithAnswers.filter(q => q.correct).length
   const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
 
-  // Merge answers into questions for persistence
-  const questionsWithAnswers = questions.map((q: any, i: number) => {
-    const a = answers.find((x: any) => x.questionIdx === i)
-    return {
-      ...q,
-      studentAnswer: a?.selectedIdx ?? null,
-      correct: a?.correct ?? false,
-    }
-  })
-
-  // Generate AI insights (fast, single call)
+  // ── AI-powered debrief ──────────────────────────────────────────────────
+  // Pa's debrief = a 2-3 paragraph diagnosis of WHAT the student got right,
+  // WHY they got the wrong ones wrong (the underlying misconception), and
+  // a concrete next step. This is what the student actually reads — quality
+  // matters more than speed, so we use gpt-4o-mini (overridable via
+  // LLM_TEST_INSIGHTS) and feed it per-topic stats + actual wrong-answer
+  // detail so it can write specifics, not platitudes.
   let aiInsights: any = {}
   try {
-    const wrongQuestions = questionsWithAnswers
-      .filter((q: any) => !q.correct)
-      .map((q: any) => `- ${q.question} (topic: ${q.topic || 'unknown'})`)
-      .slice(0, 8)
-      .join('\n')
+    // Per-topic stats — drives "very confident on N1 and N2 (6 of 6 correct)"
+    type TopicStat = { topic: string; correct: number; total: number }
+    const topicMap = new Map<string, TopicStat>()
+    for (const q of questionsWithAnswers as any[]) {
+      const t = (q.topic || '').trim() || 'General'
+      if (!topicMap.has(t)) topicMap.set(t, { topic: t, correct: 0, total: 0 })
+      const e = topicMap.get(t)!
+      e.total++
+      if (q.correct) e.correct++
+    }
+    const topicStats: TopicStat[] = Array.from(topicMap.values())
+    const aced = topicStats.filter(t => t.correct === t.total && t.total > 0)
+    const slipped = topicStats.filter(t => t.correct < t.total)
 
-    if (wrongQuestions.length > 0) {
-      const prompt = `A CBSE Class ${classLevel} student took a ${subject} test and scored ${accuracy}%.
-They got these questions WRONG:
-${wrongQuestions}
+    // Wrong-question detail — student's pick + correct answer + explanation.
+    // Skip questions with malformed indices (LLM occasionally returns
+    // correctIndex out of range), otherwise q.options[bad] → undefined and
+    // the prompt becomes garbage.
+    const wrongDetail = (questionsWithAnswers as any[])
+      .filter((q: any) => {
+        if (q.correct || q.studentAnswer == null) return false
+        const opts = Array.isArray(q.options) ? q.options : []
+        const ciOk = typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < opts.length
+        const saOk = typeof q.studentAnswer === 'number' && q.studentAnswer >= 0 && q.studentAnswer < opts.length
+        return ciOk && saOk
+      })
+      .slice(0, 6)
+      .map((q: any, i: number) => {
+        const studentLetter = String.fromCharCode(65 + q.studentAnswer)
+        const correctLetter = String.fromCharCode(65 + q.correctIndex)
+        const studentPick = q.options[q.studentAnswer]
+        const correctPick = q.options[q.correctIndex]
+        const why = q.explanation ? ` (why: ${q.explanation})` : ''
+        return `Q${i + 1} [${q.topic || 'General'}]: "${q.question}"\n  Student picked ${studentLetter} ("${studentPick}"). Correct: ${correctLetter} ("${correctPick}").${why}`
+      })
+      .join('\n\n')
 
-Write a short encouraging analysis for the student (under 80 words):
-- 1-2 sentence assessment
-- 2-3 specific topics they should revise
-- One concrete next-step suggestion
+    if (wrongDetail.length > 0) {
+      const acedLine = aced.length > 0
+        ? aced.map(t => `${t.topic}: ${t.correct}/${t.total}`).join(', ')
+        : 'none'
+      const slippedLine = slipped.length > 0
+        ? slipped.map(t => `${t.topic}: ${t.correct}/${t.total}`).join(', ')
+        : 'none'
 
-Plain text only, no markdown headers. Warm, direct, brief.`
+      const prompt = `You are Pa, a warm CBSE Class ${classLevel} ${subject} tutor. A student just finished "${title || `${subject} Test`}" and scored ${correctCount}/${totalQuestions} (${accuracy}%).
 
-      // Use fallback chain for AI insights too (non-critical but nice to have resilience)
+PER-TOPIC BREAKDOWN
+Aced: ${acedLine}
+Slipped: ${slippedLine}
+
+WRONG QUESTIONS (with student's pick + correct answer)
+${wrongDetail}
+
+Write a 2-3 paragraph debrief (~100-130 words total) the student will read on their results page. Follow this structure exactly:
+
+PARAGRAPH 1 (assessment): Open with what they NAILED — name the topic and cite the count from the breakdown ("very confident on N1 and N2 — 6 of 6 correct"). Then pivot to where they slipped, also naming topics with counts. Use **bold** sparingly to highlight 1-2 key phrases per paragraph.
+
+PARAGRAPH 2 (diagnosis + correction): Look at the wrong questions and identify the SHARED misconception underneath them. State it plainly in one sentence ("The confusion: you're treating action-reaction as one-sided"). Correct it in one sentence with the right mental model in **bold**. Add ONE memorable line — an analogy, an everyday example, or a striking fact — that makes the correct idea stick.
+
+PARAGRAPH 3 (next step): Recommend a short Ask Pa explainer on their weakest topic ("Watch the 4-min Ask Pa explainer on [topic]…"). If you can infer urgency (e.g. boards, upcoming class test), name it.
+
+Tone: warm, direct, like a smart friend explaining over chai. Plain text with **bold** for emphasis. No headers, no bullet lists, no LaTeX in this debrief (it's read on the results page, not the doubt panel).`
+
       const { completeWithFallback } = await import('../lib/llmFallback.js')
+      const insightsModel = process.env.LLM_TEST_INSIGHTS?.replace('groq/', '') || 'gpt-4o-mini'
       const { content } = await completeWithFallback({
         messages: [{ role: 'user', content: prompt }],
-        primaryModel: process.env.LLM_PRACTICE_GEN?.replace('groq/', '') || 'llama-3.3-70b-versatile',
-        maxTokens: 200,
-        temperature: 0.6,
+        primaryModel: insightsModel,
+        maxTokens: 350,
+        temperature: 0.7,
       })
+
       aiInsights = {
         summary: content.trim() || '',
-        weakTopics: [...new Set(questionsWithAnswers.filter((q: any) => !q.correct).map((q: any) => q.topic).filter(Boolean))],
+        topicStats,
+        weakTopics: slipped.map(t => t.topic),
       }
     } else {
-      aiInsights = { summary: `Outstanding! You got all ${totalQuestions} questions right. Ready to try a harder test?`, weakTopics: [] }
+      aiInsights = {
+        summary: `Outstanding! You got all ${totalQuestions} questions right. Ready to try a harder test? Bump the difficulty up a notch on your next round.`,
+        topicStats,
+        weakTopics: [],
+      }
     }
   } catch (err) {
     console.warn('[Test] AI insights generation failed:', err)
   }
 
-  // Save test session
-  const testTitle = title || `${subject} Test`
-  const { data: session } = await supabase.from('test_sessions').insert({
-    student_id: u.id,
-    title: testTitle,
-    subject,
-    class_level: classLevel || 10,
-    total_marks: totalQuestions,
+  // Update the pending session to its completed state. The row was inserted
+  // at /start with the canonical questions; here we replace .questions with
+  // the grader-merged version (carries studentAnswer + correct per question).
+  const { data: session } = await supabase.from('test_sessions').update({
     score: correctCount,
     correct_count: correctCount,
-    difficulty: difficulty || null,
-    source: mode === 'teacher' ? 'teacher' : mode === 'ai_recommended' ? 'ai_recommended' : 'self',
-    assignment_id: assignmentId || null,
-    time_limit_minutes: null,
     time_taken_seconds: timeTakenSeconds || 0,
     questions: questionsWithAnswers,
     ai_insights: aiInsights,
     completed: true,
     completed_at: new Date().toISOString(),
-  }).select('id').single()
+  }).eq('id', sessionId).select('id').single()
 
   // Award XP
   const config = await getAppConfig()
@@ -368,7 +494,7 @@ Plain text only, no markdown headers. Warm, direct, brief.`
     student_id: u.id,
     amount: xpAwarded,
     source: 'test',
-    metadata: { session_id: session?.id, subject, accuracy, correctCount, totalQuestions, mode },
+    metadata: { session_id: session?.id, subject, accuracy, correctCount, totalQuestions, mode: safeMode },
   })
 
   // Update streak
@@ -398,9 +524,11 @@ Plain text only, no markdown headers. Warm, direct, brief.`
     })
   }
 
-  // Update concept_mastery per question
+  // Update concept_mastery per question. Parallel — N independent RPCs blocked
+  // serially otherwise add ~N×100ms to the response time before the student
+  // sees their results page.
   try {
-    for (const q of questionsWithAnswers as any[]) {
+    await Promise.all((questionsWithAnswers as any[]).map(async (q) => {
       let slug: string | null = q.concept_slug || null
       if (slug) {
         const valid = await validateConceptSlug(slug)
@@ -421,7 +549,7 @@ Plain text only, no markdown headers. Warm, direct, brief.`
           p_correct: !!q.correct,
         })
       }
-    }
+    }))
   } catch (err) {
     console.warn('[test/complete] concept_mastery update failed (non-fatal):', err)
   }

@@ -49,6 +49,12 @@ export async function streamWithFallback(params: {
     ? [{ role: 'system', content: systemPrompt }, ...messages]
     : messages
 
+  // Track whether ANY content was already streamed to the caller. If Groq
+  // emits chunks then errors mid-stream, falling back to OpenAI would re-stream
+  // a fresh full answer on top of the partial one — the student would see
+  // garbled output. Only fall back when the primary failed before any output.
+  let firstChunkDelivered = false
+
   // ─── Try Groq first ───
   try {
     const completion = await groq.chat.completions.create({
@@ -60,11 +66,18 @@ export async function streamWithFallback(params: {
     })
     for await (const chunk of completion) {
       const text = chunk.choices[0]?.delta?.content || ''
-      if (text) await onChunk(text)
+      if (text) {
+        firstChunkDelivered = true
+        await onChunk(text)
+      }
     }
     return { modelUsed: `groq/${primaryModel}`, fallbackFired: false }
   } catch (primaryErr: any) {
     const primaryMsg = primaryErr.message || String(primaryErr)
+    if (firstChunkDelivered) {
+      console.error(`[LLM fallback] Groq failed AFTER streaming started (${primaryMsg.slice(0, 120)}). Re-streaming on OpenAI would garble output — surfacing primary error.`)
+      throw primaryErr
+    }
     console.warn(`[LLM fallback] Groq failed (${primaryMsg.slice(0, 120)}), trying OpenAI ${fallbackModel}...`)
 
     // ─── Fallback to OpenAI ───

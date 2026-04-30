@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { supabase, getUserFromToken } from '../lib/supabase.js'
 import { logLLMCall } from '../lib/llmLog.js'
+import { clearConceptCache } from '../lib/conceptDetection.js'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -258,6 +259,9 @@ concepts.patch('/:slug', async (c) => {
   const { data, error } = await supabase
     .from('concept_catalog').update(updates).eq('concept_slug', slug).select().single()
   if (error) return c.json({ error: error.message }, 500)
+  // Edits to a published concept change the keyword-match surface seen by
+  // detectConcept(). Invalidate the in-memory cache so the next call refetches.
+  if (data?.status === 'published') clearConceptCache()
   return c.json({ ok: true, concept: data })
 })
 
@@ -271,6 +275,7 @@ concepts.post('/:slug/publish', async (c) => {
     .from('concept_catalog').update({ status: 'published', updated_at: new Date().toISOString() })
     .eq('concept_slug', slug)
   if (error) return c.json({ error: error.message }, 500)
+  clearConceptCache()
   return c.json({ ok: true })
 })
 
@@ -292,6 +297,7 @@ concepts.post('/bulk-publish', async (c) => {
     .eq('status', 'draft')
     .select('concept_slug')
   if (error) return c.json({ error: error.message }, 500)
+  if ((data?.length || 0) > 0) clearConceptCache()
   return c.json({ ok: true, published: data?.length || 0 })
 })
 
@@ -312,9 +318,11 @@ concepts.delete('/:slug', async (c) => {
     await supabase.from('concept_catalog')
       .update({ status: 'archived', updated_at: new Date().toISOString() })
       .eq('concept_slug', slug)
+    clearConceptCache()
     return c.json({ ok: true, mode: 'archived', mastery_rows: count })
   } else {
     await supabase.from('concept_catalog').delete().eq('concept_slug', slug)
+    clearConceptCache()
     return c.json({ ok: true, mode: 'deleted' })
   }
 })

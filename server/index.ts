@@ -18,8 +18,20 @@ const app = new Hono()
 
 // Middleware
 app.use('*', logger())
+
+// CORS — origins driven by env so prod (Vercel) doesn't need a code change.
+// `ALLOWED_ORIGINS` is a comma-separated list; the localhost defaults below
+// keep dev (vite picks 5173/5174/5175 depending on what's free) frictionless.
+const DEFAULT_DEV_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:3000',
+]
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || DEFAULT_DEV_ORIGINS.join(','))
+  .split(',').map(s => s.trim()).filter(Boolean)
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:5175', 'http://localhost:3000'],
+  origin: allowedOrigins,
   credentials: true,
 }))
 
@@ -27,9 +39,12 @@ app.use('*', cors({
 app.route('/api', health)
 app.route('/api/user', user)
 app.route('/api/ai', ai)
+// Mount /api/admin/concepts BEFORE /api/admin so concepts (which has its own
+// dual-auth: X-Admin-Password OR Bearer token w/ teacher role) wins the prefix
+// match. Otherwise /api/admin/* middleware would gate teachers out with 401.
+app.route('/api/admin/concepts', concepts)
 app.route('/api/admin', admin)
 app.route('/api/test', test)
-app.route('/api/admin/concepts', concepts)
 app.route('/api/recommendations', recommendations)
 app.route('/api/teacher', teacher)
 

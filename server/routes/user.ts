@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { supabase, getUserFromToken } from '../lib/supabase.js'
 import { getAppConfig } from '../routes/admin.js'
+import { istTodayStr, istTodayStartUTC, istTodayEndUTC } from '../lib/dateIST.js'
 
 const user = new Hono()
 
@@ -19,23 +20,81 @@ user.get('/profile', async (c) => {
   return c.json(data)
 })
 
-// POST /api/user/onboarding -- set class, subjects, track
+// POST /api/user/replan-acknowledged
+// ─── Resets the pledged_days_missed counter on student_streaks. Called when
+// the student dismisses the home re-plan check-in banner ("Got it"). After
+// reset, the banner won't show again until they miss 3+ pledged days again.
+user.post('/replan-acknowledged', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+
+  await supabase
+    .from('student_streaks')
+    .update({ pledged_days_missed: 0, updated_at: new Date().toISOString() })
+    .eq('student_id', u.id)
+
+  return c.json({ ok: true })
+})
+
+// POST /api/user/onboarding -- set class, board, subjects, track
 user.post('/onboarding', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
 
-  const { className, subjects, track } = await c.req.json()
+  const { className, board, subjects, track, dailyPledgeXp, studyDays } = await c.req.json()
 
-  await supabase.from('profiles').update({
-    class_level: className,
-    active_track: track,
-  }).eq('id', u.id)
+  // Build a partial update — only set fields the caller explicitly sent. This
+  // makes the endpoint safe for the /settings page, which can submit just one
+  // field (e.g. {dailyPledgeXp: 60}) without nuking the rest.
+  const update: any = {}
+  if (typeof className === 'number') update.class_level = className
+  if (typeof track === 'string' && track.length) update.active_track = track
+  if (board && ['CBSE', 'ICSE', 'IGCSE', 'IB', 'STATE', 'OTHER'].includes(board)) {
+    update.board = board
+  }
+  // Daily pledge (15/35/60/100 are the standard tiles, but we accept any 5-500)
+  if (typeof dailyPledgeXp === 'number' && dailyPledgeXp >= 5 && dailyPledgeXp <= 500) {
+    update.daily_pledge_xp = dailyPledgeXp
+  }
+  // Study days — array of lowercase weekday codes. We preserve the distinction
+  // between NULL (legacy users who never onboarded; updateStreak treats this as
+  // "all 7 days pledged" for backward compat) and [] (user explicitly cleared
+  // all pledged days; updateStreak treats this as "no pledged days, never bumps
+  // streak"). Collapsing [] to NULL would invert the user's intent — a student
+  // who deselected every day would suddenly have every day count as pledged.
+  if (Array.isArray(studyDays)) {
+    update.study_days = studyDays.filter(d =>
+      ['mon','tue','wed','thu','fri','sat','sun'].includes(d))
+  }
 
-  await supabase.from('student_subjects').delete().eq('student_id', u.id)
-  if (subjects?.length > 0) {
-    await supabase.from('student_subjects').insert(
-      subjects.map((s: string) => ({ student_id: u.id, subject_code: s }))
-    )
+  if (Object.keys(update).length > 0) {
+    const { error: profileErr } = await supabase
+      .from('profiles').update(update).eq('id', u.id)
+    if (profileErr) {
+      console.error('[onboarding] profile update failed:', profileErr)
+      return c.json({ error: profileErr.message }, 500)
+    }
+  }
+
+  // Subjects: only rewrite when the caller explicitly sent the array. Avoids
+  // nuking the student's subject list during a settings save that didn't
+  // include it.
+  if (Array.isArray(subjects)) {
+    const { error: delErr } = await supabase
+      .from('student_subjects').delete().eq('student_id', u.id)
+    if (delErr) {
+      console.error('[onboarding] subjects delete failed:', delErr)
+      return c.json({ error: delErr.message }, 500)
+    }
+    if (subjects.length > 0) {
+      const { error: insErr } = await supabase.from('student_subjects').insert(
+        subjects.map((s: string) => ({ student_id: u.id, subject_code: s }))
+      )
+      if (insErr) {
+        console.error('[onboarding] subjects insert failed:', insErr)
+        return c.json({ error: insErr.message }, 500)
+      }
+    }
   }
 
   return c.json({ ok: true })
@@ -46,7 +105,11 @@ user.get('/home-data', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
 
-  const today = new Date().toISOString().split('T')[0]
+  // "Today" is bound to the IST calendar day. UTC drift around midnight IST
+  // would otherwise rotate counters at the wrong moment for Indian students.
+  const todayIST = istTodayStr()
+  const dayStartUTC = istTodayStartUTC()
+  const dayEndUTC = istTodayEndUTC()
 
   const [
     profile,
@@ -56,8 +119,9 @@ user.get('/home-data', async (c) => {
     recentDoubts,
     subjects,
     todayDoubtsCount,
-    todayPracticeCount,
+    todayPracticeSessions,
     feedbackRows,
+    todayTestSessions,
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', u.id).single(),
     supabase.from('student_xp').select('amount, source, created_at').eq('student_id', u.id),
@@ -72,20 +136,27 @@ user.get('/home-data', async (c) => {
     supabase.from('doubt_sessions')
       .select('*', { count: 'exact', head: true })
       .eq('student_id', u.id)
-      .gte('created_at', `${today}T00:00:00`),
+      .gte('created_at', dayStartUTC).lt('created_at', dayEndUTC),
     supabase.from('practice_sessions')
-      .select('*', { count: 'exact', head: true })
+      .select('total_questions')
       .eq('student_id', u.id)
-      .gte('created_at', `${today}T00:00:00`),
+      .gte('created_at', dayStartUTC).lt('created_at', dayEndUTC),
     supabase.from('doubt_feedback')
       .select('helpful')
       .eq('student_id', u.id),
+    supabase.from('test_sessions')
+      .select('time_taken_seconds')
+      .eq('student_id', u.id)
+      .gte('created_at', dayStartUTC).lt('created_at', dayEndUTC),
   ])
 
-  // Compute XP totals and breakdowns
+  // Compute XP totals and breakdowns — today's window is IST-bound
   const allXP = xpRows.data || []
   const totalXP = allXP.reduce((s: number, r: any) => s + r.amount, 0)
-  const todayXPRows = allXP.filter((r: any) => r.created_at?.startsWith(today))
+  const todayXPRows = allXP.filter((r: any) => {
+    if (!r.created_at) return false
+    return r.created_at >= dayStartUTC && r.created_at < dayEndUTC
+  })
   const todayXP = todayXPRows.reduce((s: number, r: any) => s + r.amount, 0)
 
   // XP breakdown by source for today
@@ -138,10 +209,23 @@ user.get('/home-data', async (c) => {
   })
 
   // Today's activity
+  const todayPracticeRows = todayPracticeSessions.data || []
+  const todayTestRows = todayTestSessions.data || []
+  const todayPracticeQuestions = todayPracticeRows.reduce((s: number, r: any) => s + (r.total_questions || 0), 0)
+  // Study-minute estimate: 2 min/doubt + 1.5 min/practice Q + real test seconds
+  const MIN_PER_DOUBT = 2
+  const MIN_PER_PRACTICE_Q = 1.5
+  const testSeconds = todayTestRows.reduce((s: number, r: any) => s + (r.time_taken_seconds || 0), 0)
+  const studyMinutes = Math.round(
+    (todayDoubtsCount.count || 0) * MIN_PER_DOUBT
+    + todayPracticeQuestions * MIN_PER_PRACTICE_Q
+    + testSeconds / 60,
+  )
   const todayActivity = {
     doubts: todayDoubtsCount.count || 0,
-    questions: (todayPracticeCount.count || 0),
-    tests: 0,  // no test sessions wired yet
+    questions: todayPracticeRows.length,
+    tests: todayTestRows.length,
+    studyMinutes,
   }
 
   // Feedback stats
@@ -151,20 +235,23 @@ user.get('/home-data', async (c) => {
   // ── Admin-configurable features ──
   const config = await getAppConfig()
   const currentStreak = streaks.data?.current_streak || 0
-  const totalDoubts = (recentDoubts.data || []).length // from the 5 we fetched, but need total count
-  // Get full doubt count for badge computation
-  const { count: allDoubtsCount } = await supabase
-    .from('doubt_sessions')
-    .select('*', { count: 'exact', head: true })
-    .eq('student_id', u.id)
-
-  const { count: photoDoubtsCount } = await supabase
-    .from('doubt_sessions')
-    .select('*', { count: 'exact', head: true })
-    .eq('student_id', u.id)
-    .not('session_metadata->photo', 'is', null)
-
-  const distinctSubjects = new Set((recentDoubts.data || []).map((d: any) => d.subject))
+  // Badge counts read from the full doubt_sessions history, not the 5-row
+  // recent slice — otherwise "5 distinct subjects" badges are unreachable.
+  const [
+    { count: allDoubtsCount },
+    { count: photoDoubtsCount },
+    { data: allSubjectRows },
+  ] = await Promise.all([
+    supabase.from('doubt_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('student_id', u.id),
+    supabase.from('doubt_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('student_id', u.id)
+      .not('session_metadata->photo', 'is', null),
+    supabase.from('doubt_sessions').select('subject').eq('student_id', u.id),
+  ])
+  const distinctSubjects = new Set((allSubjectRows || []).map((d: any) => d.subject).filter(Boolean))
 
   // Compute badge stats
   const badgeStats = {
@@ -223,7 +310,9 @@ user.get('/home-data', async (c) => {
     ncertContent: ncertContent || [],
     totalXP,
     todayXP,
-    dailyGoal: config.dailyGoal || 50,
+    // Per-student pledge wins over config default (migration 010)
+    dailyGoal: (profile.data as any)?.daily_pledge_xp || config.dailyGoal || 50,
+    studyDays: (profile.data as any)?.study_days || null,
     xpBreakdown,
     streak: streaks.data || { current_streak: 0, longest_streak: 0 },
     mastery: masteryData,
@@ -233,6 +322,7 @@ user.get('/home-data', async (c) => {
     todayActivity,
     feedbackStats: { total: totalFeedback, helpful: helpfulCount },
     badges: unlockedBadges,
+    totalBadges: (config.badges || []).length,
     badgeStats,
     dailyChallenge,
     weakTopicThreshold: weakThreshold,
@@ -450,11 +540,12 @@ user.get('/learn-data', async (c) => {
   })
 })
 
-// Helper: map composite_score + attempts → simple status label
+// Helper: map composite_score + attempts → simple status label.
+// Buckets: not_started | weak | learning | mastered. The 0.65–0.80 band stays
+// in 'learning' deliberately — UI/aggregation expects 4 statuses, not 5.
 function statusFromScore(score: number | null | undefined, attempts: number | null | undefined): string {
   if (!score || !attempts || attempts === 0) return 'not_started'
   if (attempts >= 3 && score < 0.45) return 'weak'
-  if (score < 0.65) return 'learning'
   if (score < 0.80) return 'learning'
   return 'mastered'
 }

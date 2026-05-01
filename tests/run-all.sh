@@ -52,6 +52,9 @@ phase_done $? "Grading integration"
 bash tests/teacher.integration.sh
 phase_done $? "Teacher integration"
 
+bash tests/recommendations.integration.sh
+phase_done $? "Recommendations integration"
+
 echo ""
 echo -e "\033[1m═══════════════════════════════════════════\033[0m"
 if [ "$PHASES_FAILED" -eq 0 ]; then

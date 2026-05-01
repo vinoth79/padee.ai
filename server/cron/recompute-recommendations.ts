@@ -314,28 +314,56 @@ export async function recomputeForStudent(studentId: string): Promise<void> {
 }
 
 // ─── Full nightly pass ────────────────────────────────────────
-export async function recomputeAll(): Promise<{ students: number; alerts: number }> {
-  // Find active students (any activity in last 30 days)
+export async function recomputeAll(): Promise<{ students: number; failed: number; alerts: number }> {
+  // Find active students (any activity in last 30 days). The previous filter
+  // used `profiles.updated_at`, which only changes when the profile row
+  // itself mutates (onboarding, settings save) — NOT when a student answers
+  // a doubt or completes practice. That meant the recompute silently
+  // skipped the most engaged users.
+  //
+  // Activity = at least one student_xp award in the last 30 days. Every
+  // doubt/practice/test/streak-bonus writes to that ledger, so it's the
+  // canonical "did the student do anything" signal.
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  const { data: activeStudents } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('role', 'student')
-    .gte('updated_at', cutoff)
+  const { data: xpRecent } = await supabase
+    .from('student_xp')
+    .select('student_id')
+    .gte('created_at', cutoff)
+  const candidateIds = Array.from(new Set((xpRecent || []).map((r: any) => r.student_id).filter(Boolean)))
 
-  const ids = (activeStudents || []).map((p: any) => p.id)
+  // Verify they're actually students (defence-in-depth: a teacher could
+  // accidentally have an XP row from a test account). Use .in() on the
+  // candidate set rather than scanning all profiles.
+  let ids: string[] = []
+  if (candidateIds.length > 0) {
+    const { data: students } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'student')
+      .in('id', candidateIds)
+    ids = (students || []).map((p: any) => p.id)
+  }
+
   let processed = 0
+  let failed = 0
   for (const id of ids) {
     try {
       await recomputeForStudent(id)
       processed++
     } catch (err) {
       console.warn(`[recompute] student ${id} failed:`, err)
+      failed++
+    }
+    // Light progress logging — at 50-student intervals so a 6-min job
+    // gives the operator something to watch.
+    if ((processed + failed) % 50 === 0 && (processed + failed) > 0) {
+      console.log(`[recompute] progress: ${processed + failed}/${ids.length} (${failed} failed)`)
     }
   }
 
   const alertsCount = await recomputeClassHealth()
-  return { students: processed, alerts: alertsCount }
+  console.log(`[recompute] done: ${processed} students, ${failed} failed, ${alertsCount} alerts`)
+  return { students: processed, failed, alerts: alertsCount }
 }
 
 // ─── Class health aggregation + teacher alerts ────────────────
@@ -361,25 +389,23 @@ export async function recomputeClassHealth(): Promise<number> {
     const students_total = totalStudents || 0
     if (students_total === 0) continue
 
-    // Count students by score bands for this concept
+    // Count students by score bands for this concept. Class-scoped via a
+    // single inner join on profiles — was previously N+1 (one profile lookup
+    // per mastery row), which made nightly recompute O(C×N) round-trips.
     const { data: masteryRows } = await supabase
       .from('concept_mastery')
-      .select('student_id, composite_score')
+      .select('student_id, composite_score, profiles!inner(class_level)')
       .eq('concept_slug', c.concept_slug)
+      .eq('profiles.class_level', c.class_level)
 
     let below50 = 0, below65 = 0, above70 = 0, sum = 0, attempted = 0
-    if (masteryRows) {
-      for (const m of masteryRows) {
-        // Only count students actually in this class
-        const { data: sp } = await supabase
-          .from('profiles').select('class_level').eq('id', m.student_id).maybeSingle()
-        if (!sp || sp.class_level !== c.class_level) continue
-        attempted++
-        sum += m.composite_score || 0
-        if (m.composite_score < 0.50) below50++
-        if (m.composite_score < 0.65) below65++
-        if (m.composite_score >= 0.70) above70++
-      }
+    for (const m of (masteryRows as any[] || [])) {
+      attempted++
+      const score = m.composite_score || 0
+      sum += score
+      if (score < 0.50) below50++
+      if (score < 0.65) below65++
+      if (score >= 0.70) above70++
     }
     const avg = attempted > 0 ? sum / attempted : 0
 

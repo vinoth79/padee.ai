@@ -45,6 +45,18 @@ recommendations.post('/acted-on', async (c) => {
 
 // ═══ POST /api/recommendations/recompute ═══ (admin trigger)
 // Runs the full nightly job on demand. Can be called from admin panel.
+//
+// Response: 202 Accepted, returns IMMEDIATELY. The job runs in the
+// background — progress visible in the LLM Audit panel and server logs.
+//
+// Why async: at school scale (200+ students × ~2s LLM hero copy each + 20+
+// concepts × class-health aggregation) the job can take several minutes.
+// Reverse proxies kill the connection at 30-60s and the admin's browser
+// shows an unhelpful timeout. Returning 202 immediately is friendlier and
+// matches the real shape of the work.
+//
+// Caller still gets the started/in-progress signal. If a status endpoint
+// is added later it can read from a recompute_jobs table (Phase 2).
 recommendations.post('/recompute', async (c) => {
   const pwd = c.req.header('X-Admin-Password')
   if (pwd !== ADMIN_PASSWORD) {
@@ -55,13 +67,18 @@ recommendations.post('/recompute', async (c) => {
     if (profile?.role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
   }
 
-  try {
-    const result = await recomputeAll()
-    return c.json({ ok: true, ...result })
-  } catch (err: any) {
-    console.error('[recompute] error:', err)
-    return c.json({ error: err.message || 'Recompute failed' }, 500)
-  }
+  // Fire-and-track. The recomputeAll() promise is intentionally not awaited.
+  const startedAt = new Date().toISOString()
+  recomputeAll()
+    .then(result => {
+      const ms = Date.now() - new Date(startedAt).getTime()
+      console.log(`[recompute] complete in ${ms}ms:`, result)
+    })
+    .catch(err => {
+      console.error('[recompute] background job failed:', err)
+    })
+
+  return c.json({ ok: true, status: 'started', startedAt }, 202)
 })
 
 export default recommendations

@@ -5,6 +5,7 @@ import { getAppConfig } from './admin.js'
 import { detectConcept, validateConceptSlug } from '../lib/conceptDetection.js'
 import { recomputeForStudent } from '../cron/recompute-recommendations.js'
 import { istTodayStr, istDateAddDays } from '../lib/dateIST.js'
+import { safeParseLLMJson } from '../lib/latexValidate.js'
 import Groq from 'groq-sdk'
 import OpenAI from 'openai'
 
@@ -84,7 +85,7 @@ CRITICAL QUALITY RULES:
     metadata: { subject, classLevel, count, difficulty, fallbackFired },
   }).catch(() => {})
 
-  const parsed = JSON.parse(raw)
+  const parsed = safeParseLLMJson(raw)
   if (!parsed.questions || !Array.isArray(parsed.questions)) {
     throw new Error('Invalid LLM output')
   }

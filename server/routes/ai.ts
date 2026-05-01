@@ -12,7 +12,7 @@ import {
   istTodayStr, istWeekdayCode, istWeekdayForDateStr,
   istTodayStartUTC, istDaysBetween,
 } from '../lib/dateIST.js'
-import { validateOrSanitise, validateLatex } from '../lib/latexValidate.js'
+import { validateOrSanitise, validateLatex, safeParseLLMJson } from '../lib/latexValidate.js'
 import { checkRateLimit } from '../lib/rateLimit.js'
 
 // ═══ Streak updater — called after any XP award ═══
@@ -1170,6 +1170,66 @@ ai.post('/practice', async (c) => {
     if (data) conceptMeta = { name: data.concept_name, chapter: data.chapter_name }
   }
 
+  // ─── RAG: ground the LLM in NCERT content ────────────────────────────
+  // Without this, the LLM happily invents wrong facts on tricky topics
+  // (e.g., flipping the sign convention on mirrors). We embed the topic /
+  // concept name (or context) and pull the top-4 NCERT chunks for the
+  // student's class+subject. The system prompt then directs the LLM to
+  // use these as the SOLE source of truth. Same retrieval primitive as
+  // /doubt — search_ncert_chunks RPC, threshold 0.35.
+  let ncertContext = ''
+  let ncertSourcesLine = ''
+  let ncertChunkCount = 0
+  let ncertTopSimilarity = 0
+  try {
+    const ragQuery = conceptMeta
+      ? `${conceptMeta.name}${conceptMeta.chapter ? ' — ' + conceptMeta.chapter : ''}`
+      : (typeof topic === 'string' && topic.trim())
+        ? topic.trim()
+        : (typeof context === 'string' && context.trim())
+          ? context.trim().slice(0, 300)
+          : `${subject || 'Physics'} Class ${className || 10}`
+
+    const emb = await openai.embeddings.create({
+      model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+      input: ragQuery,
+    })
+    const { data: chunks } = await supabase.rpc('search_ncert_chunks', {
+      query_embedding: JSON.stringify(emb.data[0].embedding),
+      match_subject: subject || 'Physics',
+      match_class: className || 10,
+      match_count: 4,
+      match_threshold: 0.35,
+    })
+    if (chunks && chunks.length > 0) {
+      ncertChunkCount = chunks.length
+      ncertTopSimilarity = chunks[0].similarity || 0
+      ncertContext = chunks
+        .map((ch: any, i: number) => `[Source ${i + 1}] ${ch.content}`)
+        .join('\n\n')
+      const distinct = Array.from(new Set(chunks.map((ch: any) => ch.chapter_name).filter(Boolean)))
+      ncertSourcesLine = distinct.length
+        ? `Drawn from: NCERT Class ${className || 10} ${subject || 'Physics'} — ${distinct.join(', ')}.`
+        : ''
+    }
+  } catch (err) {
+    console.warn('[practice RAG] retrieval failed, continuing without:', err)
+  }
+
+  const ncertBlock = ncertContext
+    ? `\n\nNCERT REFERENCE CONTENT (your sole source of truth — base every question, distractor, and explanation on the facts below):
+--- BEGIN NCERT REFERENCE ---
+${ncertContext}
+--- END NCERT REFERENCE ---
+${ncertSourcesLine}
+
+GROUNDING RULES (non-negotiable):
+- Every factual claim, formula, sign convention, value, and direction MUST be supported by the NCERT reference above.
+- If a topic appears in the request but is NOT covered in the reference, generate a question on a related sub-topic that IS covered. Do not invent.
+- For sign-convention or directional questions (mirrors, lenses, current direction, force vector), cite the convention used IN THE REFERENCE — do not assume a default.
+- Do NOT mention "[Source N]" labels, "the reference", or "the textbook" in the question, options, or explanation. Those labels are internal markers.`
+    : ''
+
   const systemPrompt = `You are a CBSE Class ${className || 10} ${subject || 'Physics'} teacher creating practice MCQs.
 Generate ${count} multiple-choice question${count > 1 ? 's' : ''} on the given topic/context.
 
@@ -1199,7 +1259,13 @@ CRITICAL MCQ QUALITY RULES:
 7. Randomise correctIndex across questions (do not always put the answer at index 0).
 8. Mix difficulties when count > 1: roughly 30% easy, 50% medium, 20% hard. Tag each question honestly.
 9. Hint must point at the method / formula / principle, not the answer. NEVER say "the answer is X" or reference an option letter.
-10. MATH FORMATTING: For any math expression, formula, fraction, exponent, Greek letter, or symbol, USE LaTeX with single $ delimiters. e.g. "What is $F$ if $m = 2$ kg and $a = 3$ m/s$^2$?" — options can include "$F = 6$ N". Balance every $ (every opening needs a closing). Use \\frac{a}{b}, \\sqrt{x}, x^{2}, \\theta, \\pi, \\sin, \\cos, etc. Plain English between math segments — don't wrap whole sentences in $.`
+10. MATH FORMATTING: For any math expression, formula, fraction, exponent, Greek letter, or symbol, USE LaTeX with single $ delimiters. EVERY equation or expression containing LaTeX commands MUST be inside $...$. Bare commands like \\frac outside of $...$ render as broken text — never do that.
+    Examples — note how the WHOLE equation is wrapped, not just the variable:
+      ✓ "What is $P$ in $P = \\frac{W}{t}$?"
+      ✓ "What is $K$ in $K = \\frac{1}{2} m v^2$?"
+      ✓ "If $m = 2$ kg and $a = 3$ m/s$^2$, find $F$. Options can be $F = 6$ N."
+      ✗ "What is K in K = \\frac{1}{2} m v^2?"  (\\frac outside $ — BROKEN)
+    Use \\frac{a}{b}, \\sqrt{x}, x^{2}, \\theta, \\pi, \\sin, \\cos, etc. Always inside $...$. Balance every $ (every opening needs a closing). Plain English between math segments — don't wrap whole sentences in $.${ncertBlock}`
 
   const conceptLine = conceptMeta
     ? `\n\nFocus specifically on the concept: ${conceptMeta.name}${conceptMeta.chapter ? ` (from chapter: ${conceptMeta.chapter})` : ''}.`
@@ -1238,15 +1304,29 @@ CRITICAL MCQ QUALITY RULES:
       messages: [{ role: 'user', content: userPrompt }],
       response: raw,
       latencyMs: Date.now() - tPractice0,
-      metadata: { subject: subject || 'Physics', className: className || 10, fallbackFired },
+      ncertChunksUsed: ncertChunkCount,
+      ncertSource: ncertSourcesLine || undefined,
+      metadata: {
+        subject: subject || 'Physics',
+        className: className || 10,
+        fallbackFired,
+        ncertChunkCount,
+        ncertTopSimilarity,
+      },
     }).catch(() => {})
 
-    const parsed = JSON.parse(raw)
+    const parsed = safeParseLLMJson(raw)
 
     // Validate structure
     if (!parsed.questions || !Array.isArray(parsed.questions)) {
       return c.json({ error: 'Invalid LLM output' }, 500)
     }
+    // Stamp each generated question with its grounding state so admins can
+    // audit which rounds had no NCERT chunks behind them (a hint to upload
+    // the missing chapter via /admin → NCERT Content). Stored on the question
+    // itself, so it survives into practice_sessions.questions JSONB.
+    const grounded = ncertChunkCount > 0
+    const groundedSource = grounded ? (ncertSourcesLine || null) : null
     const valid = parsed.questions
       .filter((q: any) =>
         q.question && Array.isArray(q.options) && q.options.length === 4
@@ -1265,6 +1345,9 @@ CRITICAL MCQ QUALITY RULES:
         hint_subtitle: typeof q.hint_subtitle === 'string' ? validateOrSanitise(q.hint_subtitle, 'practice/sub', u.id) : '',
         // Tag with concept slug if we targeted one — mastery update uses this
         concept_slug: concept || undefined,
+        // Grounding provenance (Option C: allow ungrounded but tag it)
+        grounded,
+        grounded_source: groundedSource,
       }))
     if (valid.length === 0) {
       return c.json({ error: 'LLM produced no valid questions' }, 500)
@@ -1294,7 +1377,16 @@ CRITICAL MCQ QUALITY RULES:
       return c.json({ error: 'Failed to start practice' }, 500)
     }
 
-    return c.json({ sessionId: session.id, questions: valid, requestedCount: count })
+    return c.json({
+      sessionId: session.id,
+      questions: valid,
+      requestedCount: count,
+      // Round-level grounding summary. Frontend can use this to show a
+      // subtle "ungrounded — chapter not yet uploaded" badge if desired.
+      grounded,
+      groundedSource: groundedSource,
+      ncertChunksUsed: ncertChunkCount,
+    })
   } catch (err: any) {
     console.error('[AI] Practice generation error:', err)
     logLLMCall({
@@ -1691,7 +1783,7 @@ Return ONLY this JSON. No surrounding prose, no markdown fences.`
       response_format: { type: 'json_object' },
     })
     const raw = completion.choices[0]?.message?.content || '{}'
-    worksheet = JSON.parse(raw)
+    worksheet = safeParseLLMJson(raw)
     modelUsed = `openai/${primaryModel}`
   } catch (err: any) {
     const msg = err.message || String(err)
@@ -1797,7 +1889,7 @@ ${JSON.stringify(payload, null, 2)}`
         response_format: { type: 'json_object' },
       })
       const valRaw = valCompletion.choices[0]?.message?.content || '{"results":[]}'
-      const parsed = JSON.parse(valRaw)
+      const parsed = safeParseLLMJson(valRaw)
       const results: any[] = parsed.results || []
 
       // Apply validation results
@@ -1869,7 +1961,7 @@ Example shape for MCQ:
               response_format: { type: 'json_object' },
             })
             const raw = completion.choices[0]?.message?.content || ''
-            const fresh = JSON.parse(raw)
+            const fresh = safeParseLLMJson(raw)
             // Overwrite in place, mark as regenerated so UI can show "⟳ regenerated"
             worksheet.sections[ref.sectionIdx].questions[ref.questionIdx] = {
               ...fresh,
@@ -2097,7 +2189,7 @@ ${excerpt}`
       response_format: { type: 'json_object' },
     })
     const raw = completion.choices[0]?.message?.content || '{}'
-    paper = JSON.parse(raw)
+    paper = safeParseLLMJson(raw)
     modelUsed = `openai/${primaryModel}`
   } catch (err: any) {
     const msg = err.message || String(err)
@@ -2194,7 +2286,7 @@ ${JSON.stringify(payload, null, 2)}`
         response_format: { type: 'json_object' },
       })
       const valRaw = valCompletion.choices[0]?.message?.content || '{"results":[]}'
-      const parsed = JSON.parse(valRaw)
+      const parsed = safeParseLLMJson(valRaw)
       const results: any[] = parsed.results || []
 
       for (const r of results) {
@@ -2251,7 +2343,7 @@ Return JSON matching the original shape. Unicode symbols only. Return ONLY the J
               temperature: 0.7,
               response_format: { type: 'json_object' },
             })
-            const fresh = JSON.parse(completion.choices[0]?.message?.content || '{}')
+            const fresh = safeParseLLMJson(completion.choices[0]?.message?.content || '{}')
             paper.sections[ref.sectionIdx].questions[ref.questionIdx] = {
               ...fresh,
               validated: true,

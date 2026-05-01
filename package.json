@@ -7,7 +7,11 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:all": "npm run dev:server & npm run dev",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "bash tests/run-all.sh",
+    "test:unit": "npx tsx tests/safeParseLLMJson.test.mjs",
+    "test:integration": "bash tests/grading.integration.sh && bash tests/onboarding.integration.sh && bash tests/cors.integration.sh && bash tests/teacher.integration.sh",
+    "typecheck": "npx tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.13",
@@ -20,6 +24,7 @@
     "groq-sdk": "^1.1.2",
     "hono": "^4.12.12",
     "jspdf": "^4.2.1",
+    "katex": "^0.16.45",
     "lucide-react": "^1.8.0",
     "multer": "^2.1.1",
     "openai": "^6.34.0",

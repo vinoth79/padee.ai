@@ -19,7 +19,7 @@
 //   • Responsive: desktop = 2-col with right rail; mobile = single column
 // ═══════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useUser } from '../context/UserContext'
+import { useUser, getLevelInfo } from '../context/UserContext'
 import '../styles/home-v4.css'
 import '../styles/practice-v4.css'
 
@@ -98,6 +98,32 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
   const [reportOpen, setReportOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
 
+  // Bumps on Retry click. The load effect's deps include this so a retry
+  // genuinely re-runs the effect — previously `setPhase('loading')` alone
+  // didn't re-trigger because subject/concept/className/questionCount
+  // never change.
+  const [loadAttempt, setLoadAttempt] = useState(0)
+
+  // AbortController for the in-flight /practice load fetch + the post-
+  // completion enrichment fetches (/learn-data, /recommendations/today).
+  // Aborted on unmount so a navigate-away doesn't leak fetches.
+  const loadAbortRef = useRef(null)
+  const enrichAbortRef = useRef(null)
+
+  // Guard against finishSession() double-fire (rapid double-tap on
+  // "See results" before the phase flips to submitting). Without this,
+  // the second call hits /complete with an already-completed sessionId
+  // → server returns 409 → catch block sets local-only stats → student
+  // sees zero XP awarded for a round they actually scored on.
+  const finishingRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      loadAbortRef.current?.abort()
+      enrichAbortRef.current?.abort()
+    }
+  }, [])
+
   // ── Results-page enrichment (fetched after /complete) ──
   const [resultsConcepts, setResultsConcepts] = useState([]) // [{slug, name, before, after, status}]
   const [paNextMove, setPaNextMove] = useState(null)         // { copy, hero_type, concept_slug }
@@ -122,9 +148,17 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
     return () => clearInterval(timerRef.current)
   }, [phase, currentIdx, submitted])
 
-  // ── Load questions (pre-loaded cache → API) ──
+  // ── Load questions ──
+  // AbortController signals cancellation on unmount or on a new load
+  // (Retry button bumps loadAttempt which re-runs this effect). The
+  // cancelled flag is also kept as belt-and-braces — abort can race
+  // with response parsing in some environments.
   useEffect(() => {
     let cancelled = false
+    loadAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    loadAbortRef.current = ctrl
+
     async function load() {
       setPhase('loading')
       setError('')
@@ -148,6 +182,7 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
             subject, className, count: questionCount,
             concept: concept || undefined,
           }),
+          signal: ctrl.signal,
         })
         const data = await r.json()
         if (cancelled) return
@@ -160,12 +195,16 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
         setQuestions(data.questions)
         setPhase('quiz')
       } catch (err) {
-        if (!cancelled) { setError(err.message || 'Network error'); setPhase('error') }
+        if (cancelled || err?.name === 'AbortError') return
+        setError(err.message || 'Network error'); setPhase('error')
       }
     }
     load()
-    return () => { cancelled = true }
-  }, [subject, concept, className, questionCount])
+    return () => {
+      cancelled = true
+      ctrl.abort()
+    }
+  }, [subject, concept, className, questionCount, loadAttempt])
 
   // ── Reset per-question timer when the question changes ──
   useEffect(() => { setQSeconds(0) }, [currentIdx])
@@ -224,6 +263,14 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
   }
 
   async function finishSession() {
+    // Guard against double-fire from rapid double-tap on "See results" —
+    // a second call would hit /complete with an already-completed
+    // sessionId, server returns 409, catch block falls back to local-only
+    // stats, and the student sees zero XP for a round they actually
+    // earned points on.
+    if (finishingRef.current) return
+    finishingRef.current = true
+
     const token = getToken()
     // If currently on a question that hasn't been recorded (edge case), no-op — answers[] is source of truth
     const allAnswers = submitted && answers.find(a => a.questionIdx === currentIdx) == null
@@ -284,12 +331,22 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
   // /recommendations/today for Pa's next-move copy. Both are best-effort —
   // failures leave the matching cards out of the layout, never crash.
   async function enrichResultsAfterCompletion(token) {
+    enrichAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    enrichAbortRef.current = ctrl
+
     const slugsTouched = Array.from(new Set(
       questions.map(q => q?.concept_slug).filter(Boolean)
     ))
     const [learnRes, recRes] = await Promise.allSettled([
-      fetch('/api/user/learn-data', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-      fetch('/api/recommendations/today', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch('/api/user/learn-data', {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      }).then(r => r.json()),
+      fetch('/api/recommendations/today', {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      }).then(r => r.json()),
     ])
 
     if (learnRes.status === 'fulfilled') {
@@ -382,7 +439,13 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
             <p className="t-sm" style={{ marginTop: 6 }}>{error || 'Could not start practice.'}</p>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button className="pd-btn ghost" onClick={() => onNavigate?.('home')}>Back to home</button>
-              <button className="pd-btn primary" onClick={() => { setPhase('loading'); setError('') }}>Retry</button>
+              <button className="pd-btn primary" onClick={() => {
+                // Bump loadAttempt to force the load effect to re-run.
+                // Setting phase=loading alone wouldn't re-trigger because
+                // subject/concept/className/questionCount don't change.
+                setError('')
+                setLoadAttempt(n => n + 1)
+              }}>Retry</button>
             </div>
           </div>
         </div>
@@ -449,13 +512,22 @@ export default function PracticeRunScreenV4({ onNavigate, initialSubject, initia
     )
     const xpAdjustment = xp - xpFromCorrect
 
-    // Level math (100 XP/level, simple). totalXP refresh fires via refreshUser.
+    // Level math via getLevelInfo (canonical LEVEL_TIERS table from
+    // UserContext + server's teacher.ts). The previous 100-XP-per-level
+    // math was wrong — at 800 XP it said "Level 9, 0% to Level 10" while
+    // the canonical tiers said "Level 3 Learner, 200 XP to Level 4".
     const totalXP = (homeData?.totalXP || 0)
-    const xpPerLevel = 100
-    const currentLevel = Math.floor(totalXP / xpPerLevel) + 1
-    const xpInLevel = totalXP % xpPerLevel
-    const xpToNext = xpPerLevel - xpInLevel
-    const levelPct = Math.round((xpInLevel / xpPerLevel) * 100)
+    const levelInfo = getLevelInfo(totalXP)
+    const currentLevel = levelInfo.level
+    // xpToNext + levelPct: from current level's floor to next level's floor.
+    const xpToNext = levelInfo.nextLevelMinXP != null
+      ? Math.max(0, levelInfo.nextLevelMinXP - totalXP)
+      : 0
+    const xpInLevel = totalXP - levelInfo.levelMinXP
+    const xpBandSize = levelInfo.nextLevelMinXP != null
+      ? levelInfo.nextLevelMinXP - levelInfo.levelMinXP
+      : 0
+    const levelPct = xpBandSize > 0 ? Math.round((xpInLevel / xpBandSize) * 100) : 100
 
     return (
       <div className="home-v4 practice-v4">

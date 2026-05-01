@@ -51,7 +51,16 @@ export default function TestActiveScreenV4({ onNavigate }) {
   const [error, setError] = useState('')
 
   const startTimeRef = useRef(null)
+  // Wall-clock end of the test. Set once at /start success. The countdown
+  // derives `remainingSecs` from `endTimeRef.current - Date.now()` on each
+  // tick, so a backgrounded tab (where setInterval is throttled) doesn't
+  // grant the student extra time.
+  const endTimeRef = useRef(null)
   const submittedRef = useRef(false)
+  // Tracks whether the most recent submit attempt was triggered by the
+  // timer (auto) vs. the Submit button. Retry-on-error preserves the
+  // original mode so the results page knows.
+  const lastSubmitWasAutoRef = useRef(false)
 
   // ─── Mount: read params from sessionStorage, hit /api/test/start ───
   useEffect(() => {
@@ -75,10 +84,16 @@ export default function TestActiveScreenV4({ onNavigate }) {
         const data = await r.json()
         if (cancelled) return
         if (!r.ok) { setError(data.error || 'Failed to start'); setPhase('error'); return }
-        if (!data.questions?.length || !data.sessionId) {
-          setError(data.sessionId ? 'No questions returned' : 'Missing test session')
-          setPhase('error')
-          return
+        // Split the validation so the error message reflects the actual
+        // missing piece rather than picking based on whichever field happens
+        // to be present.
+        if (!data.sessionId) {
+          setError('Server didn\'t return a test session — please try again.')
+          setPhase('error'); return
+        }
+        if (!data.questions?.length) {
+          setError('No questions were returned for this test. Please pick a different test or try again.')
+          setPhase('error'); return
         }
         setTestMeta({
           sessionId: data.sessionId,
@@ -93,6 +108,7 @@ export default function TestActiveScreenV4({ onNavigate }) {
         setQuestions(data.questions)
         setRemainingSecs(data.totalSeconds)
         startTimeRef.current = Date.now()
+        endTimeRef.current = Date.now() + data.totalSeconds * 1000
         setPhase('active')
       } catch (err) {
         if (!cancelled) { setError(err.message || 'Failed'); setPhase('error') }
@@ -102,27 +118,36 @@ export default function TestActiveScreenV4({ onNavigate }) {
     return () => { cancelled = true }
   }, [])
 
-  // ─── Countdown timer ───
+  // ─── Countdown timer (wall-clock-derived) ───
+  // Important: derive remaining from endTimeRef each tick rather than
+  // counting down via setInterval. setInterval can be throttled in a
+  // backgrounded tab (especially mobile Safari → ~1/min), which would
+  // pause the displayed timer AND delay the auto-submit when time runs
+  // out. Wall-clock derivation makes the timer correct regardless of
+  // tick frequency.
   useEffect(() => {
-    if (phase !== 'active') return
-    if (remainingSecs <= 0) { handleSubmit(true); return }
-    const timer = setInterval(() => {
-      setRemainingSecs(s => {
-        if (s <= 1) {
-          clearInterval(timer)
-          setTimeout(() => handleSubmit(true), 0)
-          return 0
-        }
-        return s - 1
-      })
-    }, 1000)
-    return () => clearInterval(timer)
+    if (phase !== 'active' || !endTimeRef.current) return
+    function tick() {
+      const left = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000))
+      setRemainingSecs(left)
+      if (left <= 0) {
+        clearInterval(id)
+        // Trigger from effect body (no state-updater side effect).
+        handleSubmit(true)
+      }
+    }
+    tick()  // immediate first sync — covers the case where we re-enter active phase after retry with timer already expired
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  // ─── Warn-on-unload while active ───
+  // ─── Warn-on-unload while a session is in flight ───
+  // Covers active (student is still answering) + submitting (request in
+  // flight; closing the tab cancels it server-side) + error (we're
+  // showing a retry path; closing kills the chance to recover).
   useEffect(() => {
-    if (phase !== 'active') return
+    if (phase !== 'active' && phase !== 'submitting' && phase !== 'error') return
     const handler = (e) => { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
@@ -149,8 +174,13 @@ export default function TestActiveScreenV4({ onNavigate }) {
   function goNext() { goTo(currentIdx + 1) }
 
   async function handleSubmit(auto = false) {
-    if (submittedRef.current) return
-    submittedRef.current = true
+    // Guard: if a submit is already in flight or already succeeded, no-op.
+    // submittedRef is set ONLY on success below — prior versions set it
+    // before the fetch, which left the student permanently locked out
+    // after a network blip. We use phase==='submitting' as the in-flight
+    // signal instead.
+    if (submittedRef.current || phase === 'submitting') return
+    lastSubmitWasAutoRef.current = auto
     setPhase('submitting')
 
     const timeTakenSeconds = startTimeRef.current
@@ -176,29 +206,59 @@ export default function TestActiveScreenV4({ onNavigate }) {
         }),
       })
       const data = await r.json()
-      sessionStorage.removeItem('padee-test-start')
       if (!r.ok) throw new Error(data.error || 'Submit failed')
+      // Lock against further submits ONLY after the server accepted the
+      // submission. Failures fall through to catch and re-allow retry.
+      submittedRef.current = true
+      // Clear the in-flight params so a back-button press doesn't accidentally
+      // re-mount the test with the same questions. Only after success.
+      try { sessionStorage.removeItem('padee-test-start') } catch {}
       user.refreshUser?.()
-      sessionStorage.setItem('padee-test-result', JSON.stringify({
-        sessionId: data.sessionId,
-        accuracy: data.accuracy,
-        correctCount: data.correctCount,
-        totalQuestions: data.totalQuestions,
-        xpAwarded: data.xpAwarded,
-        bonusAwarded: data.bonusAwarded,
-        aiInsights: data.aiInsights,
-        questions: data.questions,
-        subject: testMeta.subject,
-        title: testMeta.title,
-        timeTakenSeconds,
-        autoSubmitted: auto,
-      }))
+      try {
+        sessionStorage.setItem('padee-test-result', JSON.stringify({
+          sessionId: data.sessionId,
+          accuracy: data.accuracy,
+          correctCount: data.correctCount,
+          totalQuestions: data.totalQuestions,
+          xpAwarded: data.xpAwarded,
+          bonusAwarded: data.bonusAwarded,
+          aiInsights: data.aiInsights,
+          questions: data.questions,
+          subject: testMeta.subject,
+          title: testMeta.title,
+          timeTakenSeconds,
+          autoSubmitted: auto,
+        }))
+      } catch (storageErr) {
+        // sessionStorage quota exceeded (large questions JSON on mobile
+        // Safari, e.g.). Results page reads from this; without it we'd
+        // land on a blank screen. Surface as a retryable error rather
+        // than swallowing — the student's submission is in the DB but
+        // the UI can't render results until storage is unblocked.
+        console.error('[Test] sessionStorage write failed:', storageErr)
+        setError('Could not store test results locally. Try clearing browser storage and reloading.')
+        setPhase('error')
+        return
+      }
       onNavigate('test-results')
     } catch (err) {
       console.error('[Test] submit error:', err)
-      setError(err.message || 'Submission failed')
+      // Friendly message for the student; the raw err.message can leak
+      // server internals (Postgres column errors etc.).
+      const friendly = /^(Submit failed|fetch failed|NetworkError|Failed to fetch)/i.test(err.message || '')
+        ? 'Couldn\'t reach the server. Your answers are still here — try again.'
+        : err.message?.slice(0, 200) || 'Submission failed'
+      setError(friendly)
       setPhase('error')
     }
+  }
+
+  // Retry from the error screen. Resets the in-flight phase + re-fires
+  // the submit. Selections + sessionId + timer state all preserved in
+  // refs and state — the student doesn't lose their answers.
+  function retrySubmit() {
+    setError('')
+    handleSubmit(lastSubmitWasAutoRef.current)
   }
 
   // ═══ LOADING / SUBMITTING ═══
@@ -224,6 +284,10 @@ export default function TestActiveScreenV4({ onNavigate }) {
 
   // ═══ ERROR ═══
   if (phase === 'error') {
+    // If we got past /start (questions + sessionId loaded) but submit
+    // failed, show a retry path. Without this, a transient network blip
+    // on submit was losing the student's entire test.
+    const canRetrySubmit = testMeta?.sessionId && questions.length > 0
     return (
       <div className="home-v4 test-v4">
         <Header minimal />
@@ -232,8 +296,21 @@ export default function TestActiveScreenV4({ onNavigate }) {
           <h1 className="t-h2" style={{ marginTop: 14 }}>Something went wrong</h1>
           <p className="t-sm" style={{ marginTop: 6 }}>{error}</p>
           <div className="test-error-actions">
-            <button className="pd-btn ghost" onClick={() => onNavigate('tests')}>Back to tests</button>
-            <button className="pd-btn primary" onClick={() => onNavigate('home')}>Home</button>
+            {canRetrySubmit ? (
+              <>
+                <button className="pd-btn ghost" onClick={() => onNavigate('tests')}>
+                  Discard and exit
+                </button>
+                <button className="pd-btn primary" onClick={retrySubmit}>
+                  Try submitting again
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="pd-btn ghost" onClick={() => onNavigate('tests')}>Back to tests</button>
+                <button className="pd-btn primary" onClick={() => onNavigate('home')}>Home</button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -242,6 +319,11 @@ export default function TestActiveScreenV4({ onNavigate }) {
 
   // ═══ ACTIVE ═══
   const current = questions[currentIdx]
+  // Defensive: phase==='active' should imply questions[0] exists (the
+  // load effect verified data.questions.length), but a stale state combo
+  // (HMR mid-dev, or future code paths) could land here with empty
+  // questions. Render nothing rather than crash on `current.question`.
+  if (!current) return null
   const answeredCount = Object.keys(selections).length
   const flaggedCount = flagged.size
   const progressPct = Math.round((answeredCount / questions.length) * 100)

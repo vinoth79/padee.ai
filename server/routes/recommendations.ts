@@ -1,10 +1,9 @@
 import { Hono } from 'hono'
 import { supabase, getUserFromToken } from '../lib/supabase.js'
 import { recomputeForStudent, recomputeAll } from '../cron/recompute-recommendations.js'
+import { ADMIN_PASSWORD } from '../lib/adminAuth.js'
 
 const recommendations = new Hono()
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'padee-admin-2026'
 
 // ═══ GET /api/recommendations/today ═══
 // Student-facing: returns pre-computed recommendation + supporting cards.

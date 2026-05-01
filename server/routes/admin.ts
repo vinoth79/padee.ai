@@ -1,33 +1,33 @@
 import { Hono } from 'hono'
 import { supabase } from '../lib/supabase.js'
 import { getRecentCalls } from '../lib/llmLog.js'
+import { ADMIN_PASSWORD } from '../lib/adminAuth.js'
 import OpenAI from 'openai'
 import { promises as fs } from 'fs'
 import path from 'path'
 
-// ── App config (in-memory cache + file persistence) ──
+// ── App config (file-backed, always fresh) ──
+// Previously kept an in-memory cache for "performance", but config.json is tiny
+// (< 2 KB) and reading it per request is trivial. The cache caused stale data
+// when admins edited the file directly on disk (e.g. via git pull or manual
+// tweak) — the running server kept serving the old version until restart.
+// Re-reading always is the simpler, correct default.
 const CONFIG_PATH = path.resolve(process.cwd(), 'server/config.json')
-let configCache: any = null
 
 export async function getAppConfig() {
-  if (configCache) return configCache
   try {
     const raw = await fs.readFile(CONFIG_PATH, 'utf-8')
-    configCache = JSON.parse(raw)
+    return JSON.parse(raw)
   } catch {
-    configCache = { dailyChallenge: { questionCount: 5, xpReward: 30, preferWeakSubject: true }, badges: [], weakTopicThreshold: 70 }
+    return { dailyChallenge: { questionCount: 5, xpReward: 30, preferWeakSubject: true }, badges: [], weakTopicThreshold: 70 }
   }
-  return configCache
 }
 
 async function saveAppConfig(config: any) {
-  configCache = config
   await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n')
 }
 
 const admin = new Hono()
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'padee-admin-2026'
 
 // Simple admin auth middleware
 function checkAdmin(c: any, next: any) {

@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import { supabase, getUserFromToken } from '../lib/supabase.js'
+import { ADMIN_PASSWORD } from '../lib/adminAuth.js'
+import { istTodayStartUTC, istDateAddDays, istTodayStr } from '../lib/dateIST.js'
 
 const teacher = new Hono()
 
@@ -12,6 +14,26 @@ async function requireTeacher(authHeader?: string) {
     return { error: 'Forbidden', status: 403 as const }
   }
   return { userId: u.id, profile }
+}
+
+// Dual-auth for the review queue: accepts EITHER an X-Admin-Password header
+// (admin panel) OR a Bearer token with role=admin/teacher. Lets the moderation
+// queue live inside the admin panel without forcing admins to also be Supabase-
+// authed users, while keeping the real teacher flow working.
+//
+// Attribution convention: when reviewed via admin password, `userId` is null
+// and `flagged_responses.reviewed_by` is left null. The review path stamps a
+// "[admin panel]" prefix on `teacher_notes` so the source is recoverable
+// without a schema change. Pilot follow-up (migration 012): add a dedicated
+// `reviewed_via` enum column for cleaner audit.
+async function requireReviewer(c: any) {
+  const adminPwd = c.req.header('X-Admin-Password')
+  if (adminPwd && adminPwd === ADMIN_PASSWORD) {
+    return { source: 'password' as const, userId: null as string | null }
+  }
+  const authResult = await requireTeacher(c.req.header('Authorization'))
+  if ('error' in authResult) return authResult
+  return { source: 'token' as const, userId: authResult.userId, profile: authResult.profile }
 }
 
 // ═══ GET /api/teacher/alerts — active alerts for this teacher ═══
@@ -83,7 +105,7 @@ teacher.get('/class-health', async (c) => {
 // GET /api/teacher/flagged?status=pending|reviewed|all&subject=&limit=
 // Default: status=pending, newest first, limit 100.
 teacher.get('/flagged', async (c) => {
-  const auth = await requireTeacher(c.req.header('Authorization'))
+  const auth = await requireReviewer(c)
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
   const status = c.req.query('status') || 'pending'
@@ -109,16 +131,22 @@ teacher.get('/flagged', async (c) => {
   const { data, error } = await q
   if (error) return c.json({ error: error.message }, 500)
 
-  // Per-status count summary for the UI header
-  const { data: counts } = await supabase
-    .from('flagged_responses')
-    .select('status')
-  const summary = { pending: 0, correct: 0, wrong: 0, partial: 0, total: 0 }
-  for (const r of counts || []) {
-    summary.total++
-    if (summary[r.status as keyof typeof summary] !== undefined) {
-      ;(summary as any)[r.status]++
-    }
+  // Per-status counts via 4 parallel head-only count queries instead of a
+  // full-table scan. At pilot scale the difference is small; at school scale
+  // the prior pattern (SELECT status FROM flagged_responses) would scan
+  // every row on every dashboard load.
+  const [pendingC, correctC, wrongC, partialC] = await Promise.all([
+    supabase.from('flagged_responses').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('flagged_responses').select('*', { count: 'exact', head: true }).eq('status', 'correct'),
+    supabase.from('flagged_responses').select('*', { count: 'exact', head: true }).eq('status', 'wrong'),
+    supabase.from('flagged_responses').select('*', { count: 'exact', head: true }).eq('status', 'partial'),
+  ])
+  const summary = {
+    pending: pendingC.count || 0,
+    correct: correctC.count || 0,
+    wrong: wrongC.count || 0,
+    partial: partialC.count || 0,
+    total: (pendingC.count || 0) + (correctC.count || 0) + (wrongC.count || 0) + (partialC.count || 0),
   }
 
   return c.json({ flagged: data || [], summary })
@@ -126,7 +154,7 @@ teacher.get('/flagged', async (c) => {
 
 // GET /api/teacher/flagged/:id — full detail incl. original doubt session context
 teacher.get('/flagged/:id', async (c) => {
-  const auth = await requireTeacher(c.req.header('Authorization'))
+  const auth = await requireReviewer(c)
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
   const id = c.req.param('id')
@@ -158,7 +186,7 @@ teacher.get('/flagged/:id', async (c) => {
 // POST /api/teacher/flagged/:id/review
 // body: { status: 'correct'|'wrong'|'partial', teacher_notes: string }
 teacher.post('/flagged/:id/review', async (c) => {
-  const auth = await requireTeacher(c.req.header('Authorization'))
+  const auth = await requireReviewer(c)
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
   const id = c.req.param('id')
@@ -167,11 +195,20 @@ teacher.post('/flagged/:id/review', async (c) => {
     return c.json({ error: 'status must be correct, wrong or partial' }, 400)
   }
 
+  // Attribution: token-auth → reviewed_by = user id; password-auth → null
+  // (no Supabase user) but we prefix teacher_notes with "[admin panel] " so
+  // the source is recoverable. Schema-clean follow-up is a migration that
+  // adds a `reviewed_via` enum column.
+  const rawNotes = typeof teacher_notes === 'string' ? teacher_notes.slice(0, 5000) : ''
+  const notesWithSource = auth.source === 'password' && rawNotes
+    ? `[admin panel] ${rawNotes}`
+    : (rawNotes || null)
+
   const { data, error } = await supabase
     .from('flagged_responses')
     .update({
       status,
-      teacher_notes: typeof teacher_notes === 'string' ? teacher_notes.slice(0, 5000) : null,
+      teacher_notes: notesWithSource,
       reviewed_by: auth.userId,
       reviewed_at: new Date().toISOString(),
     })
@@ -183,12 +220,31 @@ teacher.post('/flagged/:id/review', async (c) => {
   return c.json({ flagged: data })
 })
 
-// POST /api/teacher/flagged/:id/reopen — undo a review (in case of mis-click)
+// POST /api/teacher/flagged/:id/reopen — undo a review (in case of mis-click).
+// Authorisation rule: only the reviewer who originally closed it can reopen,
+// OR the admin (via admin password) can override. Without this guard, any
+// teacher could overwrite another teacher's review notes by reopen + re-review.
 teacher.post('/flagged/:id/reopen', async (c) => {
-  const auth = await requireTeacher(c.req.header('Authorization'))
+  const auth = await requireReviewer(c)
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
   const id = c.req.param('id')
+
+  // Pull the existing row to check who reviewed it.
+  const { data: existing, error: fetchErr } = await supabase
+    .from('flagged_responses')
+    .select('reviewed_by, status')
+    .eq('id', id)
+    .maybeSingle()
+  if (fetchErr || !existing) return c.json({ error: 'Not found' }, 404)
+  if (existing.status === 'pending') return c.json({ ok: true, alreadyPending: true })
+
+  const isAdminOverride = auth.source === 'password' || auth.profile?.role === 'admin'
+  const isOriginalReviewer = auth.source === 'token' && existing.reviewed_by === auth.userId
+  if (!isAdminOverride && !isOriginalReviewer) {
+    return c.json({ error: 'Only the original reviewer or an admin can reopen this' }, 403)
+  }
+
   const { error } = await supabase
     .from('flagged_responses')
     .update({
@@ -211,7 +267,20 @@ teacher.get('/students', async (c) => {
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
   const q = c.req.query('q')?.toLowerCase() || ''
-  const classFilter = parseInt(c.req.query('class') || '0')
+  const requestedClass = parseInt(c.req.query('class') || '0')
+
+  // Class-scoping: a teacher can only browse students in their own class
+  // (class_level on their profile). Admins can override via ?class=N.
+  // Without this, a Class 10 teacher could pass ?class=8 and read every
+  // Class 8 student's name + email.
+  const isAdmin = auth.profile?.role === 'admin'
+  const teacherClass = auth.profile?.class_level
+  if (!isAdmin && requestedClass && requestedClass !== teacherClass) {
+    return c.json({ error: 'You can only view your own class' }, 403)
+  }
+  const effectiveClass = isAdmin
+    ? (requestedClass || null)        // admin: no class filter unless asked
+    : (teacherClass || requestedClass) // teacher: always pinned to own class
 
   // student_xp is a ledger (many rows per student). We'd have to sum per row,
   // which doesn't belong in a list query — level/XP is shown on the profile
@@ -226,7 +295,7 @@ teacher.get('/students', async (c) => {
     .order('created_at', { ascending: false })
     .limit(200)
 
-  if (classFilter) query = query.eq('class_level', classFilter)
+  if (effectiveClass) query = query.eq('class_level', effectiveClass)
 
   const { data, error } = await query
   if (error) return c.json({ error: error.message }, 500)
@@ -264,6 +333,14 @@ teacher.get('/student/:id', async (c) => {
     return c.json({ error: 'Student not found' }, 404)
   }
 
+  // Class-scoping: teachers can only view profiles in their own class_level.
+  // Admins bypass. Without this, knowing the student's UUID is enough to
+  // read their full profile + recent doubts (full text) + practice + tests.
+  if (auth.profile?.role !== 'admin'
+      && profileRes.data.class_level !== auth.profile?.class_level) {
+    return c.json({ error: 'Forbidden — student is not in your class' }, 403)
+  }
+
   // Compute total XP + level (keep LEVEL_TIERS in sync with frontend UserContext.tsx)
   const totalXP = (xpLedger.data || []).reduce((s: number, r: any) => s + (r.amount || 0), 0)
   const LEVEL_TIERS = [
@@ -290,8 +367,8 @@ teacher.get('/student/:id', async (c) => {
     supabase
       .from('concept_mastery')
       .select(`
-        concept_slug, composite_score, accuracy, consistency, attempt_count,
-        doubt_count, last_practised_at,
+        concept_slug, composite_score, accuracy_score, consistency_score, attempt_count,
+        doubt_count, last_practiced_at,
         concept:concept_catalog (concept_name, chapter_name, subject, exam_weight_percent)
       `)
       .eq('student_id', studentId)
@@ -317,16 +394,26 @@ teacher.get('/student/:id', async (c) => {
       .limit(15),
   ])
 
-  // Day-by-day activity for the last 30 days: count doubts + practice + tests by date
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+  // Day-by-day activity for the last 30 days, IST-bound. UTC bucketing was
+  // misattributing 1-5 AM IST activity to the previous calendar day —
+  // teachers viewing student activity expected the student's local day.
+  // Convert each created_at (UTC) to its IST calendar day label, then count.
+  const istWindowStartUTC = new Date(
+    new Date(istTodayStartUTC()).getTime() - 30 * 86400000,
+  ).toISOString()
+  const cutoffISTDay = istDateAddDays(istTodayStr(), -30)
   const activityMap = new Map<string, number>()
-  const bump = (ts: string) => {
-    const day = ts.split('T')[0]
-    activityMap.set(day, (activityMap.get(day) || 0) + 1)
+  const bumpIST = (utcTs: string) => {
+    if (utcTs < istWindowStartUTC) return
+    // Shift UTC → IST then take the date part = IST calendar day.
+    const ms = new Date(utcTs).getTime() + 5.5 * 60 * 60 * 1000
+    const istDay = new Date(ms).toISOString().split('T')[0]
+    if (istDay <= cutoffISTDay) return  // belt + braces against fence-post drift
+    activityMap.set(istDay, (activityMap.get(istDay) || 0) + 1)
   }
-  ;(doubtsRes.data || []).forEach(r => { if (r.created_at > thirtyDaysAgo) bump(r.created_at) })
-  ;(practiceRes.data || []).forEach(r => { if (r.created_at > thirtyDaysAgo) bump(r.created_at) })
-  ;(testsRes.data || []).forEach(r => { if (r.created_at > thirtyDaysAgo) bump(r.created_at) })
+  ;(doubtsRes.data || []).forEach(r => bumpIST(r.created_at))
+  ;(practiceRes.data || []).forEach(r => bumpIST(r.created_at))
+  ;(testsRes.data || []).forEach(r => bumpIST(r.created_at))
   const activity30d = Array.from(activityMap.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([date, count]) => ({ date, count }))
@@ -388,12 +475,18 @@ teacher.get('/dashboard', async (c) => {
       .select('id', { count: 'exact', head: true })
       .eq('role', 'student')
       .eq('class_level', classLevel),
-    // Active alerts (not dismissed, not expired)
+    // Active alerts (not dismissed, not expired) — return the rows AND the count
     supabase.from('teacher_alerts')
-      .select('id, alert_type', { count: 'exact' })
+      .select(`
+        id, alert_type, title, message, action_label, action_type, action_payload,
+        student_id, concept_slug, generated_at,
+        student:profiles!teacher_alerts_student_id_fkey (id, name)
+      `, { count: 'exact' })
       .eq('teacher_id', auth.userId)
       .is('dismissed_at', null)
-      .gt('expires_at', nowISO),
+      .gt('expires_at', nowISO)
+      .order('generated_at', { ascending: false })
+      .limit(20),
     // Pending flagged responses (class-scoped)
     supabase.from('flagged_responses')
       .select('id', { count: 'exact', head: true })
@@ -532,6 +625,7 @@ teacher.get('/dashboard', async (c) => {
       flaggedPending: flaggedRes.count || 0,
       testsThisWeek: testsWeekRes.count || 0,
     },
+    alerts: alertsRes.data || [],
     classHealth,
     hotspots,
     recentActivity,

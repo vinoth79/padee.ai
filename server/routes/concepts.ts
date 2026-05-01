@@ -2,12 +2,11 @@ import { Hono } from 'hono'
 import { supabase, getUserFromToken } from '../lib/supabase.js'
 import { logLLMCall } from '../lib/llmLog.js'
 import { clearConceptCache } from '../lib/conceptDetection.js'
+import { ADMIN_PASSWORD } from '../lib/adminAuth.js'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const concepts = new Hono()
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'padee-admin-2026'
 
 // ═══ Admin auth helper ═══
 // Accepts EITHER:

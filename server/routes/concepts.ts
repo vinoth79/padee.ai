@@ -3,6 +3,8 @@ import { supabase, getUserFromToken } from '../lib/supabase.js'
 import { logLLMCall } from '../lib/llmLog.js'
 import { clearConceptCache } from '../lib/conceptDetection.js'
 import { ADMIN_PASSWORD } from '../lib/adminAuth.js'
+import { safeParseLLMJson } from '../lib/latexValidate.js'
+import { toSlug, buildConceptRows } from '../lib/conceptHelpers.js'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -27,16 +29,8 @@ async function requireAdmin(c: any) {
   return { source: 'token' as const, userId: u.id, profile }
 }
 
-// ═══ Slug generator (kebab-case, chapter-prefixed) ═══
-function toSlug(chapterNo: number, name: string) {
-  const clean = name.toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60)
-  return `ch${chapterNo}-${clean}`
-}
+// toSlug + buildConceptRows live in lib/conceptHelpers.ts (pure functions,
+// independently unit-tested in tests/conceptExtract.test.mjs).
 
 // ═══ extractConceptsFromChapter ═══
 // Pulls NCERT chunks for a chapter and asks GPT-4o to extract concepts.
@@ -126,8 +120,11 @@ ${chapterText}
     metadata: { action: 'concept_extract', subject, classLevel, chapterNo, chunkCount: chunks.length },
   }).catch(() => {})
 
-  const parsed = JSON.parse(raw)
-  const extracted: any[] = Array.isArray(parsed.concepts) ? parsed.concepts : []
+  // safeParseLLMJson handles the LaTeX-mangled-JSON edge case (\frac → form
+  // feed + "rac"). Concept names are usually plain prose but can contain
+  // formula symbols, so apply the same defence as /practice and /worksheet.
+  const parsed = safeParseLLMJson(raw)
+  const extracted: any[] = Array.isArray(parsed?.concepts) ? parsed.concepts : []
   if (extracted.length === 0) throw new Error('AI returned no concepts')
 
   // Determine syllabus_order offset: find max existing order for this subject/class
@@ -141,24 +138,18 @@ ${chapterText}
     .limit(1)
     .maybeSingle()
 
-  let nextOrder = maxOrderRow?.syllabus_order != null
+  const startingOrder = maxOrderRow?.syllabus_order != null
     ? maxOrderRow.syllabus_order + 1
     : chapterNo * 100  // simple scheme: chapter N concepts get orders N00-N99
 
-  // Build rows
-  const rows = extracted.map((c: any) => ({
-    concept_slug: toSlug(chapterNo, c.concept_name || ''),
-    concept_name: (c.concept_name || '').slice(0, 120),
-    subject,
-    class_level: classLevel,
-    chapter_no: chapterNo,
-    chapter_name: chapterName,
-    syllabus_order: nextOrder++,
-    exam_weight_percent: Number(c.exam_weight_percent) || 0,
-    brief_summary: (c.brief_summary || '').slice(0, 300),
-    status: 'draft',
-    source: 'ai_extracted',
-  }))
+  // Build rows via pure helper — empties filtered, slug collisions deduped.
+  const rows = buildConceptRows({
+    extracted, subject, classLevel, chapterNo, chapterName, startingOrder,
+  })
+
+  if (rows.length === 0) {
+    throw new Error('All extracted concepts had empty/invalid names')
+  }
 
   // Upsert (preserves existing concepts with same slug — admin might have edited them)
   const inserted: any[] = []

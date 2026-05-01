@@ -35,6 +35,9 @@ phase_done $? "safeParseLLMJson unit tests"
 npx tsx tests/conceptExtract.test.mjs
 phase_done $? "conceptExtract unit tests"
 
+npx tsx tests/conceptDetect.test.mjs
+phase_done $? "conceptDetect unit tests"
+
 echo -e "\n\033[1;36m═══ Phase 3/3: Integration tests (backend on :3001) ═══\033[0m"
 # Check backend is up first; bail with a hint if not.
 if ! curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health | grep -q "200"; then

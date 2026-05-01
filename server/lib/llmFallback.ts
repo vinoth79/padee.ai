@@ -12,8 +12,15 @@
 import Groq from 'groq-sdk'
 import OpenAI from 'openai'
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+// 30s timeout on every API call. Without this, a network hang inside the
+// for-await-of stream loop (or a slow OpenAI call) waits forever — Hono
+// has no per-request timeout, and the SSE stream stays open until the
+// client disconnects. 30s comfortably covers the slowest legitimate
+// response (~12s for gpt-4o on a long worksheet) while bounding the
+// runaway case.
+const LLM_TIMEOUT_MS = 30_000
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: LLM_TIMEOUT_MS })
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: LLM_TIMEOUT_MS })
 
 export interface FallbackResult {
   modelUsed: string

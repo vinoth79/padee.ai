@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "bash tests/run-all.sh",
-    "test:unit": "npx tsx tests/safeParseLLMJson.test.mjs && npx tsx tests/conceptExtract.test.mjs",
+    "test:unit": "npx tsx tests/safeParseLLMJson.test.mjs && npx tsx tests/conceptExtract.test.mjs && npx tsx tests/conceptDetect.test.mjs",
     "test:integration": "bash tests/grading.integration.sh && bash tests/onboarding.integration.sh && bash tests/cors.integration.sh && bash tests/teacher.integration.sh && bash tests/recommendations.integration.sh",
     "typecheck": "npx tsc --noEmit"
   },

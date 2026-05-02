@@ -11,6 +11,8 @@
     "test": "bash tests/run-all.sh",
     "test:unit": "npx tsx tests/safeParseLLMJson.test.mjs && npx tsx tests/conceptExtract.test.mjs && npx tsx tests/conceptDetect.test.mjs",
     "test:integration": "bash tests/grading.integration.sh && bash tests/onboarding.integration.sh && bash tests/cors.integration.sh && bash tests/teacher.integration.sh && bash tests/recommendations.integration.sh",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "typecheck": "npx tsc --noEmit"
   },
   "dependencies": {
@@ -36,6 +38,7 @@
     "tsx": "^4.21.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.2.1",

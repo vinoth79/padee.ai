@@ -7,3 +7,7 @@ dist/
 server/dist/
 logs/
 supabase/.temp/
+# Playwright artifacts (screenshots + traces from failed runs, HTML report)
+test-results/
+playwright-report/
+playwright/.cache/

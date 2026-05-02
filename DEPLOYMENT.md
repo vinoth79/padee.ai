@@ -223,7 +223,7 @@ These are not pre-pilot blockers but worth tracking:
 - [ ] **Rate-limit defence**: per-user limits ship in code (commit 045e33e), but nothing caps total spend per day. Add a Stripe billing alert on the OpenAI dashboard ($X/day threshold) at minimum.
 - [ ] **Scheduled DB backups**: Supabase auto-backups every 24h on free tier; verify retention is sufficient for your pilot's data-loss tolerance.
 - [ ] **DPDP**: per CLAUDE.md follow-ups — parent OTP for under-18, /privacy and /terms pages, data-deletion endpoint. Code-side PII minimisation shipped (commit a0d5d0c); UI/legal work pending.
-- [ ] **Frontend tests**: Playwright smoke test for the student journey (signup → home → ask → practice → test → results). Adds ~5min to CI but catches the bugs that backend tests can't see.
+- [x] **Frontend smoke test**: `npm run test:e2e` runs a Playwright suite that signs in, lands on home, asks a doubt, verifies the streaming response, and checks localStorage namespacing. Run locally with `npm run dev:all` already up. ~18s, no CI wiring yet.
 
 ---
 

@@ -228,6 +228,12 @@ export default function TestActiveScreenV4({ onNavigate }) {
           title: testMeta.title,
           timeTakenSeconds,
           autoSubmitted: auto,
+          // Stamp here so the results screen can render the same date
+          // for fresh-submit + review-past modes from a single field.
+          // Previously results defaulted to "now" on read for fresh
+          // submits, which drifted from the server's completed_at if
+          // the student lingered before clicking through.
+          submittedAt: new Date().toISOString(),
         }))
       } catch (storageErr) {
         // sessionStorage quota exceeded (large questions JSON on mobile

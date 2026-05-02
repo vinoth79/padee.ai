@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useUser } from '../context/UserContext'
+import { useAuth } from '../context/AuthContext'
 import HomeTopNav from '../components/home-v4/HomeTopNav'
 import FooterStrip from '../components/home-v4/FooterStrip'
 import AskHeader from '../components/ask-v4/AskHeader'
@@ -69,8 +70,42 @@ function getToken() {
   catch { return null }
 }
 
+// localStorage key for chat history. Namespaced by Supabase user.id so a
+// shared device (school computer, family iPad) doesn't show student A's
+// doubts to student B on the next login. Keys for previous users stay
+// behind; trivial to clean up later. Falls back to a sentinel for the
+// brief moment between mount and auth-context resolution.
+function chatKeyFor(userId) {
+  return userId ? `padee-ask-ai-messages:${userId}` : 'padee-ask-ai-messages:anon'
+}
+
+function readSavedMessages(userId) {
+  try {
+    const saved = localStorage.getItem(chatKeyFor(userId))
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed)) {
+        // Sanitise orphaned streaming:true messages with no text (broken sessions)
+        const pruned = []
+        for (const m of parsed) {
+          const isEmptyAi = m.role === 'ai' && (!m.text || !m.text.trim())
+          if (isEmptyAi) {
+            if (pruned.length && pruned[pruned.length - 1].role === 'student') pruned.pop()
+            continue
+          }
+          pruned.push(m)
+        }
+        return pruned
+      }
+    }
+  } catch {}
+  return []
+}
+
 export default function DoubtSolverScreenV4({ onNavigate, initialQuestion, initialSubject }) {
   const user = useUser()
+  const auth = useAuth()
+  const userId = auth?.user?.id
 
   const availableSubjects = user.selectedSubjects?.length > 0
     ? user.selectedSubjects
@@ -78,28 +113,20 @@ export default function DoubtSolverScreenV4({ onNavigate, initialQuestion, initi
 
   // ─── State (mirrors v3) ───
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState(() => {
-    try {
-      const saved = localStorage.getItem('padee-ask-ai-messages')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed)) {
-          // Sanitise orphaned streaming:true messages with no text (from broken sessions)
-          const pruned = []
-          for (const m of parsed) {
-            const isEmptyAi = m.role === 'ai' && (!m.text || !m.text.trim())
-            if (isEmptyAi) {
-              if (pruned.length && pruned[pruned.length - 1].role === 'student') pruned.pop()
-              continue
-            }
-            pruned.push(m)
-          }
-          return pruned
-        }
-      }
-    } catch {}
-    return []
-  })
+  const [messages, setMessages] = useState(() => readSavedMessages(userId))
+
+  // Re-load messages when the auth user changes (e.g., logout → login on a
+  // shared device). Avoids leaking student A's doubt history into student
+  // B's session. The dependency is only userId; mount-time read is handled
+  // by the lazy useState initializer above.
+  const lastUserIdRef = useRef(userId)
+  useEffect(() => {
+    if (lastUserIdRef.current === userId) return
+    lastUserIdRef.current = userId
+    setMessages(readSavedMessages(userId))
+    setFeedbackState({})
+    AUTO_SENT_QUESTIONS.clear()
+  }, [userId])
   const [loading, setLoading] = useState(false)
   const [thinkingPhase, setThinkingPhase] = useState('')
   const [feedbackState, setFeedbackState] = useState({})
@@ -133,13 +160,15 @@ export default function DoubtSolverScreenV4({ onNavigate, initialQuestion, initi
     setMessages(updater)
   }
 
-  // Persist messages (stripping streaming flag to prevent orphan state)
+  // Persist messages (stripping streaming flag to prevent orphan state).
+  // Per-user-namespaced key keeps student A's doubts out of student B's
+  // session on shared devices.
   useEffect(() => {
     try {
       const tail = messages.slice(-30).map(m => m.streaming ? { ...m, streaming: false } : m)
-      localStorage.setItem('padee-ask-ai-messages', JSON.stringify(tail))
+      localStorage.setItem(chatKeyFor(userId), JSON.stringify(tail))
     } catch {}
-  }, [messages])
+  }, [messages, userId])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])

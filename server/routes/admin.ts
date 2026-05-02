@@ -172,16 +172,24 @@ admin.put('/config', async (c) => {
 })
 
 // ── List all users with stats ──
+// Default response: NO email. Most admin workflows (browse roster, see XP
+// distribution) don't need parent contact info. Email is opt-in via
+// `?include=email` so the field still surfaces for the support flow that
+// genuinely needs it (e.g., looking up a student by email to set their
+// role). Reduces blast radius if the admin password leaks; helps with
+// DPDP under-18 minimisation.
 admin.get('/users', async (c) => {
+  const includeEmail = c.req.query('include') === 'email'
+  const profileSelect = includeEmail
+    ? 'id, name, email, role, class_level, active_track, school_code, created_at, updated_at'
+    : 'id, name, role, class_level, active_track, school_code, created_at, updated_at'
+
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('id, name, email, role, class_level, active_track, school_code, created_at, updated_at')
+    .select(profileSelect)
     .order('created_at', { ascending: false })
 
   if (error) return c.json({ error: error.message }, 500)
-
-  // Get XP + doubt counts per user in parallel
-  const userIds = (profiles || []).map((p: any) => p.id)
 
   const [{ data: xpData }, { data: doubtCounts }, { data: streakData }] = await Promise.all([
     supabase.from('student_xp').select('student_id, amount'),
@@ -214,7 +222,7 @@ admin.get('/users', async (c) => {
     currentStreak: streakByUser[p.id]?.current_streak || 0,
   }))
 
-  return c.json({ users })
+  return c.json({ users, includesEmail: includeEmail })
 })
 
 // ── Set user role (for Phase 1 demo: promote a user to teacher) ──

@@ -320,11 +320,21 @@ teacher.get('/student/:id', async (c) => {
 
   const studentId = c.req.param('id')
 
+  // PII minimisation (DPDP under-18): teachers don't need student email
+  // by default — class roster identification works on name + class.
+  // Admins opt-in via ?include=email for the rare support flow that
+  // actually needs the parent's contact (locked-out account, DPDP
+  // deletion request, etc.).
+  const wantsEmail = c.req.query('include') === 'email' && auth.profile?.role === 'admin'
+  const profileSelect = wantsEmail
+    ? 'id, name, email, class_level, active_track, avatar_url, created_at'
+    : 'id, name, class_level, active_track, avatar_url, created_at'
+
   // Profile + streak + xp first (fast).
   // student_xp is an event ledger (one row per XP award) — SUM(amount) gives the total.
   // Level is derived from total XP via the shared LEVEL_TIERS ladder below.
   const [profileRes, streakRes, xpLedger] = await Promise.all([
-    supabase.from('profiles').select('id, name, email, class_level, active_track, avatar_url, created_at').eq('id', studentId).single(),
+    supabase.from('profiles').select(profileSelect).eq('id', studentId).single(),
     supabase.from('student_streaks').select('current_streak, longest_streak, last_active_date').eq('student_id', studentId).single(),
     supabase.from('student_xp').select('amount').eq('student_id', studentId),
   ])

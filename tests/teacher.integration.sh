@@ -230,6 +230,32 @@ assert_eq "0" "$BAD_DATES" "all activity_30d rows have YYYY-MM-DD date format"
 SORTED_OK=$(echo "$ACTIVITY" | jq 'reduce .[] as $r ([true, ""]; if .[1] != "" and $r.date < .[1] then [false, $r.date] else [true, $r.date] end) | .[0]')
 assert_eq "true" "$SORTED_OK" "activity_30d sorted ascending by date"
 
+# ─── Test 9: PII opt-in shapes (DPDP minimisation) ──────────────────────
+note "Test 9: PII fields opt-in only (DPDP minimisation)"
+# 9a: /api/admin/users default response — NO email
+DEF=$(curl -s "http://localhost:3001/api/admin/users" -H "X-Admin-Password: $ADMIN_PASSWORD")
+HAS_EMAIL_DEFAULT=$(echo "$DEF" | jq '[.users[] | has("email")] | any')
+assert_eq "false" "$HAS_EMAIL_DEFAULT" "/admin/users default does NOT include email"
+INCLUDES_EMAIL_FLAG=$(echo "$DEF" | jq '.includesEmail // false')
+assert_eq "false" "$INCLUDES_EMAIL_FLAG" "/admin/users default response.includesEmail = false"
+
+# 9b: /api/admin/users?include=email — email present
+WITH=$(curl -s "http://localhost:3001/api/admin/users?include=email" -H "X-Admin-Password: $ADMIN_PASSWORD")
+HAS_EMAIL=$(echo "$WITH" | jq '[.users[] | has("email")] | any')
+assert_eq "true" "$HAS_EMAIL" "/admin/users?include=email returns email field"
+INCLUDES_FLAG=$(echo "$WITH" | jq '.includesEmail')
+assert_eq "true" "$INCLUDES_FLAG" "/admin/users?include=email response.includesEmail = true"
+
+# 9c: /api/teacher/student/:id default response (teacher token) — NO email
+RESP=$(curl -s "http://localhost:3001/api/teacher/student/$TEST_UID" -H "Authorization: Bearer $TOKEN")
+HAS_STUDENT_EMAIL=$(echo "$RESP" | jq '.student | has("email")')
+assert_eq "false" "$HAS_STUDENT_EMAIL" "/teacher/student/:id default has no email"
+
+# 9d: ?include=email from a TEACHER (non-admin) is ignored — still no email
+RESP=$(curl -s "http://localhost:3001/api/teacher/student/$TEST_UID?include=email" -H "Authorization: Bearer $TOKEN")
+HAS_STUDENT_EMAIL=$(echo "$RESP" | jq '.student | has("email")')
+assert_eq "false" "$HAS_STUDENT_EMAIL" "/teacher/student/:id?include=email ignored for non-admin teacher"
+
 # ─── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo -e "\033[1m──────────────────────────────────────\033[0m"

@@ -150,7 +150,31 @@ ai.post('/doubt', async (c) => {
   const u = await getUserFromToken(c.req.header('Authorization'))
   if (!u) return c.json({ error: 'Unauthorized' }, 401)
 
-  // Phase 1: app is completely free, no daily cap
+  // Phase 1: per-USER doubts are uncapped (free product). The cap that DOES
+  // apply is the per-SCHOOL daily cap (max_doubts_per_day on the schools
+  // row, default 5000). Protects against a single school running our LLM
+  // budget into the ground. B2C users (school_id NULL) are uncapped.
+  const { data: callerProfile } = await supabase
+    .from('profiles').select('school_id, tutor_language').eq('id', u.id).single()
+  if (callerProfile?.school_id) {
+    const { data: schoolRow } = await supabase
+      .from('schools').select('max_doubts_per_day, name')
+      .eq('id', callerProfile.school_id).single()
+    if (schoolRow?.max_doubts_per_day) {
+      const { count } = await supabase
+        .from('doubt_sessions')
+        .select('id, profiles!inner(school_id)', { count: 'exact', head: true })
+        .eq('profiles.school_id', callerProfile.school_id)
+        .gte('created_at', istTodayStartUTC().toISOString())
+      if ((count || 0) >= schoolRow.max_doubts_per_day) {
+        return c.json({
+          error: `${schoolRow.name || 'Your school'} has used today's doubt allowance. Pa will be back tomorrow!`,
+          schoolCapReached: true,
+        }, 429)
+      }
+    }
+  }
+
   const body = await c.req.json()
   const { messages, subject, className, imageDataUrl } = body
   const lastMsg = messages[messages.length - 1]

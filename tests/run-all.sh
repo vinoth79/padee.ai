@@ -61,6 +61,9 @@ phase_done $? "Teacher integration"
 bash tests/recommendations.integration.sh
 phase_done $? "Recommendations integration"
 
+bash tests/multitenant.integration.sh
+phase_done $? "Multi-tenant integration"
+
 echo ""
 echo -e "\033[1m═══════════════════════════════════════════\033[0m"
 if [ "$PHASES_FAILED" -eq 0 ]; then

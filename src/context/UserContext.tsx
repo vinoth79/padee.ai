@@ -6,6 +6,10 @@ export type Board = 'CBSE' | 'ICSE' | 'IGCSE' | 'IB' | 'STATE' | 'OTHER'
 
 interface BadgeInfo { id: string; name: string; icon: string }
 
+// v5 role expansion (migration 012). 'admin' = legacy ops admin (Vinoth /
+// dev team). 'school_admin' = per-school admin. 'super_admin' = Padee staff.
+export type Role = 'student' | 'teacher' | 'parent' | 'admin' | 'school_admin' | 'super_admin'
+
 interface UserState {
   studentName: string
   studentClass: number
@@ -26,6 +30,15 @@ interface UserState {
   school: string
   isOnboarded: boolean
   isTeacher: boolean
+  // ── v5 fields (Sprint 0) ──────────────────────────────────────────────
+  // Raw role string. Use this for RoleRoute checks instead of isTeacher
+  // (which is preserved for back-compat with existing screens).
+  role: Role
+  schoolId: string | null
+  // 'en' | 'hi' — toggled in /settings, defaults 'en'. Drives the language
+  // directive injected into doubt prompts and the TTS voice selection.
+  tutorLanguage: 'en' | 'hi'
+  // ──────────────────────────────────────────────────────────────────────
   profileLoaded: boolean
   mastery: { subject: string; accuracy_percent: number }[]
   badges: BadgeInfo[]
@@ -65,6 +78,9 @@ const defaults: UserState = {
   school: '',
   isOnboarded: false,
   isTeacher: false,
+  role: 'student',
+  schoolId: null,
+  tutorLanguage: 'en',
   profileLoaded: false,
   mastery: [],
   badges: [],
@@ -171,6 +187,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
       avatar: name.slice(0, 2).toUpperCase(),
       isOnboarded: !!profile.class_level,
       isTeacher: profile.role === 'teacher',
+      // v5: surface raw role + multi-tenant + Hindi fields. profile.school
+      // is the joined { id, name } object the backend hydrates (Sprint 0
+      // adds it to /api/user/home-data — see server/routes/user.ts).
+      role: (profile.role as Role) || 'student',
+      schoolId: profile.school_id || null,
+      school: profile.school?.name || prev.school,
+      tutorLanguage: (profile.tutor_language as 'en' | 'hi') || 'en',
       profileLoaded: true,
       mastery: data.mastery || [],
       badges: incomingBadges,

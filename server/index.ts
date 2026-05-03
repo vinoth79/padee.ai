@@ -12,6 +12,9 @@ import test from './routes/test.js'
 import concepts from './routes/concepts.js'
 import recommendations from './routes/recommendations.js'
 import teacher from './routes/teacher.js'
+import school from './routes/school.js'
+import authRoutes from './routes/auth.js'
+import superAdmin from './routes/superAdmin.js'
 import { loadExistingLog } from './lib/llmLog.js'
 
 const app = new Hono()
@@ -47,6 +50,11 @@ app.route('/api/admin', admin)
 app.route('/api/test', test)
 app.route('/api/recommendations', recommendations)
 app.route('/api/teacher', teacher)
+
+// v5 multi-tenancy (Sprint 0)
+app.route('/api/school', school)
+app.route('/api/auth', authRoutes)
+app.route('/api/super-admin', superAdmin)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

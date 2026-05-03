@@ -9,8 +9,10 @@ async function requireTeacher(authHeader?: string) {
   const u = await getUserFromToken(authHeader)
   if (!u) return { error: 'Unauthorized', status: 401 as const }
   const { data: profile } = await supabase
-    .from('profiles').select('role, class_level').eq('id', u.id).single()
-  if (profile?.role !== 'teacher' && profile?.role !== 'admin') {
+    .from('profiles').select('role, class_level, school_id').eq('id', u.id).single()
+  // 'teacher' and 'school_admin' both browse the class roster.
+  // 'admin' (legacy ops) bypasses school filter — they see the whole platform.
+  if (profile?.role !== 'teacher' && profile?.role !== 'admin' && profile?.role !== 'school_admin') {
     return { error: 'Forbidden', status: 403 as const }
   }
   return { userId: u.id, profile }
@@ -259,9 +261,16 @@ teacher.post('/flagged/:id/reopen', async (c) => {
 })
 
 // ═══ STUDENT LIST (for teachers to browse their class) ═══
-// Phase 1: returns all students matching the teacher's class_level. Without a
-// `school_id` linkage (Phase 2), we can't scope tighter. Enough for pilot where
-// one teacher per class_level handles everyone.
+// Multi-tenant rules (migration 012):
+//   - Teachers + school_admins: scoped to their own school's students.
+//     If their profile.school_id is NULL (legacy/B2C teacher), fall back to
+//     class_level-only filter for back-compat (no cross-school leak because
+//     a NULL-school teacher only matches NULL-school students).
+//   - 'admin' (legacy ops role): bypasses school filter, sees all schools.
+//
+// The class_level filter is preserved on top of school_id so a Maths teacher
+// in DPS who teaches Class 10 only sees Class 10 students at DPS, not the
+// whole school.
 teacher.get('/students', async (c) => {
   const auth = await requireTeacher(c.req.header('Authorization'))
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
@@ -275,6 +284,7 @@ teacher.get('/students', async (c) => {
   // Class 8 student's name + email.
   const isAdmin = auth.profile?.role === 'admin'
   const teacherClass = auth.profile?.class_level
+  const teacherSchoolId = auth.profile?.school_id
   if (!isAdmin && requestedClass && requestedClass !== teacherClass) {
     return c.json({ error: 'You can only view your own class' }, 403)
   }
@@ -296,6 +306,17 @@ teacher.get('/students', async (c) => {
     .limit(200)
 
   if (effectiveClass) query = query.eq('class_level', effectiveClass)
+  // School-scoping (defence-in-depth on top of class_level):
+  //   - Non-admin with school_id: must match exactly. Prevents a teacher at
+  //     School A from reading School B's students even if both teach Class 10.
+  //   - Non-admin without school_id (legacy/B2C teacher): match NULL only.
+  //     Without `is null` filter, the previous query would have returned
+  //     EVERY student across EVERY school in the matching class — this is
+  //     the silent cross-school leak the contract test catches.
+  if (!isAdmin) {
+    if (teacherSchoolId) query = query.eq('school_id', teacherSchoolId)
+    else                 query = query.is('school_id', null)
+  }
 
   const { data, error } = await query
   if (error) return c.json({ error: error.message }, 500)
@@ -326,9 +347,13 @@ teacher.get('/student/:id', async (c) => {
   // actually needs the parent's contact (locked-out account, DPDP
   // deletion request, etc.).
   const wantsEmail = c.req.query('include') === 'email' && auth.profile?.role === 'admin'
+  // school_id is selected unconditionally — it's used by the school-scoping
+  // check below, NOT returned to the caller. Strip it before the response if
+  // the caller shouldn't see it (currently we don't expose it; but if we
+  // ever do, gate it like email).
   const profileSelect = wantsEmail
-    ? 'id, name, email, class_level, active_track, avatar_url, created_at'
-    : 'id, name, class_level, active_track, avatar_url, created_at'
+    ? 'id, name, email, class_level, active_track, avatar_url, created_at, school_id'
+    : 'id, name, class_level, active_track, avatar_url, created_at, school_id'
 
   // Profile + streak + xp first (fast).
   // student_xp is an event ledger (one row per XP award) — SUM(amount) gives the total.
@@ -349,6 +374,20 @@ teacher.get('/student/:id', async (c) => {
   if (auth.profile?.role !== 'admin'
       && profileRes.data.class_level !== auth.profile?.class_level) {
     return c.json({ error: 'Forbidden — student is not in your class' }, 403)
+  }
+
+  // School-scoping (defence-in-depth on top of class_level):
+  //   - Non-admin teacher: school_id must match. Prevents the cross-school
+  //     "guess UUID + same class_level" attack.
+  //   - Teacher with NULL school_id (legacy/B2C): student must also have
+  //     NULL school_id.
+  //   - admin (legacy ops): bypasses.
+  if (auth.profile?.role !== 'admin') {
+    const teacherSchoolId = auth.profile?.school_id ?? null
+    const studentSchoolId = (profileRes.data as any).school_id ?? null
+    if (teacherSchoolId !== studentSchoolId) {
+      return c.json({ error: 'Forbidden — student is not in your school' }, 403)
+    }
   }
 
   // Compute total XP + level (keep LEVEL_TIERS in sync with frontend UserContext.tsx)

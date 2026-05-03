@@ -30,17 +30,36 @@ export default function LoginScreen() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+      // v5 routing table — covers all 6 roles. school_admin without a
+      // provisioned school lands on /onboarding/school (post-signup state);
+      // teacher without school_id lands on /onboarding/invite-code (B2B
+      // expectation). Legacy ops `admin` keeps going to /admin.
       const { data: profile } = await supabase
         .from('profiles')
-        .select('class_level, role')
+        .select('class_level, role, school_id')
         .single()
-      if (profile?.role === 'teacher') nav('/teacher', { replace: true })
-      else if (profile?.role === 'parent') nav('/parent', { replace: true })
-      else nav(profile?.class_level ? '/home' : '/onboarding/class', { replace: true })
+      const dest = routeByRole(profile)
+      nav(dest, { replace: true })
     } catch (err: any) {
       setError(err.message || 'Something went wrong')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Single source of truth for "where does this role go after login".
+  // Mirrored on the backend in server/lib/schoolAuth.ts comments — keep in
+  // sync if either side changes.
+  function routeByRole(p: { class_level?: number | null; role?: string; school_id?: string | null } | null): string {
+    if (!p) return '/home'
+    switch (p.role) {
+      case 'teacher':      return p.school_id ? '/teacher' : '/onboarding/invite-code'
+      case 'parent':       return '/parent'
+      case 'school_admin': return p.school_id ? '/school' : '/onboarding/school'
+      case 'super_admin':  return '/super-admin'
+      case 'admin':        return '/admin'
+      // 'student' (default)
+      default:             return p.class_level ? '/home' : '/onboarding/class'
     }
   }
 

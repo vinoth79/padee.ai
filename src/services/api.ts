@@ -308,3 +308,87 @@ export async function assignTest(token: string, payload: {
   })
   return r.json()
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v5 multi-tenancy (Sprint 0)
+// ═══════════════════════════════════════════════════════════════════════════
+// All endpoints below assume migration 012 is applied. Each throws on
+// non-2xx so callers can surface server messages directly to the user.
+// (We *don't* `throw` on 4xx in older parts of api.ts; v5 follows the new
+// convention because school flows have specific user-facing error copy.)
+
+async function jsonOrThrow(r: Response): Promise<any> {
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const err: any = new Error(data?.error || `HTTP ${r.status}`)
+    err.status = r.status
+    err.payload = data
+    throw err
+  }
+  return data
+}
+
+// ── Schools (school_admin only, except .create which any auth'd user calls) ──
+export const schoolApi = {
+  async create(token: string, name: string) {
+    const r = await fetch(`${BASE}/school/create`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ name }),
+    })
+    return jsonOrThrow(r) as Promise<{ school: {
+      id: string; name: string;
+      inviteCodeStudent: string; inviteCodeTeacher: string;
+      maxStudents: number; maxDoubtsPerDay: number;
+      createdAt: string;
+    }}>
+  },
+
+  async regenerateCode(token: string, type: 'student' | 'teacher') {
+    const r = await fetch(`${BASE}/school/regenerate-code`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ type }),
+    })
+    return jsonOrThrow(r) as Promise<{ code: string; type: 'student' | 'teacher' }>
+  },
+
+  async dashboard(token: string) {
+    const r = await fetch(`${BASE}/school/dashboard`, { headers: authHeader(token) })
+    return jsonOrThrow(r)
+  },
+}
+
+// ── Auth: invite-code redemption (called by student/teacher post-signup) ──
+export const authApi = {
+  async redeemInvite(token: string, code: string) {
+    const r = await fetch(`${BASE}/auth/redeem-invite`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ code }),
+    })
+    return jsonOrThrow(r) as Promise<{
+      school: { id: string; name: string };
+      role: string;
+      promoted: boolean;
+    }>
+  },
+}
+
+// ── Super admin (Padee staff, role=super_admin) ──
+export const superAdminApi = {
+  async schools(token: string) {
+    const r = await fetch(`${BASE}/super-admin/schools`, { headers: authHeader(token) })
+    return jsonOrThrow(r)
+  },
+
+  async metrics(token: string) {
+    const r = await fetch(`${BASE}/super-admin/metrics`, { headers: authHeader(token) })
+    return jsonOrThrow(r)
+  },
+
+  async school(token: string, id: string) {
+    const r = await fetch(`${BASE}/super-admin/school/${id}`, { headers: authHeader(token) })
+    return jsonOrThrow(r)
+  },
+}

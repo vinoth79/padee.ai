@@ -305,8 +305,24 @@ user.get('/home-data', async (c) => {
     .eq('status', 'completed')
     .order('subject')
 
+  // v5: hydrate the joined school { id, name } when school_id is set so the
+  // frontend topnav can show the school pill without a second round-trip.
+  // Profiles.* already includes school_id + role + tutor_language since
+  // migration 012; this adds the friendly school name on top.
+  let profileWithSchool: any = profile.data
+  if (profile.data && (profile.data as any).school_id) {
+    const { data: schoolRow } = await supabase
+      .from('schools')
+      .select('id, name')
+      .eq('id', (profile.data as any).school_id)
+      .single()
+    if (schoolRow) {
+      profileWithSchool = { ...profile.data, school: schoolRow }
+    }
+  }
+
   return c.json({
-    profile: profile.data,
+    profile: profileWithSchool,
     ncertContent: ncertContent || [],
     totalXP,
     todayXP,

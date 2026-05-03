@@ -201,7 +201,12 @@ export async function getProfile(token: string) {
 }
 
 export async function saveOnboarding(token: string, data: {
-  className: number; subjects: string[]; track: string
+  className: number
+  subjects: string[]
+  track: string
+  board?: 'CBSE' | 'ICSE' | 'IGCSE' | 'IB' | 'STATE' | 'OTHER'
+  dailyPledgeXp?: number
+  studyDays?: string[]
 }) {
   const r = await fetch(`${BASE}/user/onboarding`, {
     method: 'POST',
@@ -275,5 +280,31 @@ export async function getStudentProfile(token: string, studentId: string) {
 // ═══ Teacher dashboard (command centre) ═══
 export async function getTeacherDashboard(token: string) {
   const r = await fetch(`${BASE}/teacher/dashboard`, { headers: authHeader(token) })
+  return r.json()
+}
+
+// ═══ Concept catalog (teacher + admin) ═══
+// Returns published concepts grouped by subject/class/chapter — used by the
+// worksheet generator to populate scope dropdowns.
+export async function listConcepts(token: string) {
+  const r = await fetch(`${BASE}/admin/concepts/list`, { headers: authHeader(token) })
+  return r.json()
+}
+
+// ═══ Test assignment (teacher) ═══
+export async function assignTest(token: string, payload: {
+  title: string
+  subject: string
+  classLevel: number
+  questionCount?: number
+  difficulty?: string
+  deadline?: string | null
+  questions?: any[]
+}) {
+  const r = await fetch(`${BASE}/test/assign`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(payload),
+  })
   return r.json()
 }

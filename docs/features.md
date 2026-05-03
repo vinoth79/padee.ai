@@ -20,6 +20,8 @@
 - NCERT source citation shown only when confidence > 0.55
 - Memory-aware indicator shown when `memoryUsed: true`
 - Daily usage cap removed (Phase 1 is free)
+- **LaTeX permitted** — LLM uses `$...$` and `$$...$$`; frontend renders typeset math via KaTeX (`MathText` component). Server-side `validateLatex()` post-stream strips malformed `$` before caching.
+- **Listen button** on every AI bubble — Google Cloud TTS (en-IN-Wavenet-D); Pa mascot bobs while audio plays via the global `SpeechContext`. Browser Web Speech API fallback when `GOOGLE_TTS_API_KEY` unset.
 
 ---
 
@@ -68,41 +70,67 @@
 
 ## Quiz Me (Inline MCQ from Doubt Context)
 
-**What it does**: After an AI doubt response, students can tap "Quiz me" to get an MCQ based on the concept just explained. Appears inline in the chat.
+**What it does**: After an AI doubt response, students can tap "Quiz me" to get an MCQ based on the concept just explained. Appears inline in the chat as an interactive widget — the chip does NOT round-trip through the doubt LLM.
 
-**Endpoints**: `POST /api/ai/practice`
+**Component**: `src/components/ask-v4/InlineQuiz.jsx` (rendered inside `PaBubble` when `msg.showQuiz === true`)
 
-**Tables read/written**: None for generation. Completion handled by practice/complete.
+**Endpoints**: `POST /api/ai/practice` with `count: 1` and the AI answer as `context`
 
-**LLM model**: Groq `llama-3.1-8b-instant` with `response_format: json_object` (max_tokens: 500, temperature: 0.4)
+**LLM model**: Groq `llama-3.3-70b-versatile` with `response_format: json_object` (max_tokens scales with count, temperature: 0.4)
 
-**Data flow**: Context (AI's last response) + subject -> MCQ system prompt -> Groq JSON response -> validate structure (4 options, valid correctIndex) -> return questions
+**Data flow**: Context (AI's last response) + subject + className → MCQ system prompt → Groq JSON response → validate structure (4 options, valid correctIndex, balance LaTeX `$` count) → return question + difficulty + hint
 
 **Key behaviours**:
 - Strict validation: exactly 4 options, correctIndex 0-3, mutually exclusive options
-- `count` parameter controls number of questions (default 1 for inline quiz)
-- Frontend shows Try another / Done / Close buttons
+- KaTeX renders math in question + options (via `MathText` with `inlineOnly`)
+- Per-question difficulty + always-visible hint (same shape as the full Practice screen)
+- Frontend shows Check answer → correct/wrong feedback + explanation → Try another / Done buttons
+
+---
+
+## Challenge Me (gated-reveal harder problem)
+
+**What it does**: Tapping "Challenge me" on an AI answer asks the LLM for a harder problem with the solution hidden behind a "Show solution" reveal — the student must attempt it before peeking.
+
+**Component**: `src/components/ask-v4/ChallengeView.jsx`
+
+**Endpoint**: `POST /api/ai/doubt` (uses regular doubt streaming, with a structured-format prompt)
+
+**Contract**: LLM is instructed to format the response as:
+```
+[Problem statement here]
+
+---SOLUTION---
+
+[Step-by-step solution here]
+```
+
+**Frontend**: splits on `\n?-{2,}\s*SOLUTION\s*-{2,}\n?` (case-insensitive). Renders the problem; gates the solution behind a Show solution / Hide solution button. If the LLM forgets the marker, falls back to rendering the entire response as plain text (no reveal).
 
 ---
 
 ## Practice MCQ Screen (Full Flow)
 
-**What it does**: Dedicated practice screen at `/practice` with multi-question MCQ sessions, progress tracking, and results.
+**What it does**: Dedicated practice screen at `/practice` (`PracticeRunScreenV4`) with multi-question MCQ sessions, per-question difficulty + hint + skip, concept-tagged mastery updates, results.
+
+**Entry points**: home Daily Challenge / Weak Spots / Revise. Each passes `{ subject, concept? }` via `onNavigate('practice', ...)`.
 
 **Endpoints**: `POST /api/ai/practice` (generate), `POST /api/ai/practice/complete` (save results)
 
-**Tables written (on complete)**: `practice_sessions`, `student_xp`, `student_streaks`, `subject_mastery`
+**Tables written (on complete)**: `practice_sessions`, `student_xp`, `student_streaks`, `subject_mastery`, `concept_mastery` (via `update_concept_mastery()` RPC per question)
 
-**LLM model**: Same as Quiz Me (Groq `llama-3.1-8b-instant`)
+**LLM model**: Groq `llama-3.3-70b-versatile` with `response_format: json_object` (token budget scales with count: `max(600, count * 320 + 200)`)
 
 **Data flow**:
-1. Home screen pre-generates questions in background, stores in localStorage
-2. Practice screen reads cache first for instant start
-3. Student answers questions with A/B/C/D cards
-4. On finish: `POST /api/ai/practice/complete` with results
-5. Backend saves `practice_sessions`, awards XP (admin-configurable, default 15), updates streak
-6. `subject_mastery` updated with running average: `new_accuracy = (total_correct / total_questions) * 100`
-7. Results screen shows accuracy ring, correct/wrong/XP stats
+1. Home screen pre-generates questions in background, stores in localStorage (versioned cache key — discarded if cached size < requested count)
+2. Practice screen reads cache first for instant start; if absent, calls `/api/ai/practice` with `{ subject, count, concept? }`
+3. Each returned question carries: `question`, `options[4]`, `correctIndex`, `explanation`, `difficulty` (easy/medium/hard), `hint`, `hint_subtitle`, `concept_slug`
+4. Student answers with A/B/C/D cards; per-question Skip button (counts as wrong, 0 XP); always-visible hint box; per-question Report → `flagged_responses`
+5. KaTeX renders math in question + options + hint
+6. On finish: `POST /api/ai/practice/complete` with answers + per-question difficulty
+7. Backend sums XP per CORRECT answer by difficulty (3/6/10 default, admin-configurable in `xpRewards.practiceDifficulty`), updates `subject_mastery` running average, calls `update_concept_mastery()` per question
+8. Triggers `recomputeForStudent()` async (non-blocking)
+9. Results screen shows accuracy ring, correct/wrong/XP stats, retry / done buttons
 
 ---
 
@@ -223,9 +251,13 @@ All data is computed from pure DB queries -- NO LLM calls.
 |--------|-----------|-------------|---------|
 | Text doubt | 10 | `doubt` | After saving doubt session |
 | Photo doubt | 10 | `doubt` | After saving photo session (metadata: `{ photo: true }`) |
-| Practice session | 15 | `practice` | `POST /api/ai/practice/complete` |
-| Test completion | 25 | `test` | Not yet wired |
-| Streak bonus | 5 | `streak` | Once per day when streak >= 2 |
+| Practice — per correct answer (easy) | 3 | `practice` | Sum at `POST /api/ai/practice/complete` |
+| Practice — per correct answer (medium) | 6 | `practice` | Sum at `POST /api/ai/practice/complete` |
+| Practice — per correct answer (hard) | 10 | `practice` | Sum at `POST /api/ai/practice/complete` |
+| Practice — legacy fallback (flat) | 15 | `practice` | Applied only when no per-difficulty math computes a value |
+| Test base | 25 | `test` | `POST /api/test/complete` |
+| Test bonus (≥80% accuracy) | 20 | `test` | Same endpoint, additive |
+| Streak bonus | 5 | `streak` | Once per day, only when streak grew (frozen streaks don't earn this) |
 
 **Level system** (computed in `UserContext.tsx`):
 
@@ -244,17 +276,24 @@ All data is computed from pure DB queries -- NO LLM calls.
 
 ---
 
-## Streak Automation
+## Streak Automation (pledge-aware, IST-bound)
 
 **How `updateStreak` works** (in `server/routes/ai.ts`):
-1. Called after every XP award (doubt, photo doubt, practice complete)
-2. Fetch `student_streaks` row for the user
-3. If `last_active_date` is already today: no-op (already counted)
-4. If `last_active_date` is yesterday: increment `current_streak` by 1
-5. If `last_active_date` is null (first activity): set streak to 1
-6. If missed a day (any other case): reset streak to 1
-7. Update `longest_streak` if new streak exceeds it
-8. **Streak bonus**: if new streak >= 2, check if streak XP already awarded today. If not, insert streak bonus XP row (default 5 XP, admin-configurable)
+
+1. Called after every XP award (doubt, photo doubt, practice complete, test complete).
+2. **All day comparisons use IST midnight** (`server/lib/dateIST.ts`) — a 1 AM IST study session correctly counts as the new day, not the previous UTC day.
+3. Pull `profiles.study_days` (mig 010) — the array of weekday codes (`mon`..`sun`) the student pledged. NULL → treat all 7 days as pledged (legacy users).
+4. **Rest day** (today not in `study_days`) → no-op. Row left alone. The XP / doubt / practice was still logged by the calling endpoint; the streak just doesn't change.
+5. **Pledged day** with `last_active_date` already = today → no-op (already counted today).
+6. **First-ever pledged-day activity** (no `last_active_date`) → set `current_streak = 1`, `pledged_days_missed = 0`.
+7. **Pledged day with no missed pledged days** between `last_active_date` and today → increment `current_streak` by 1, reset `pledged_days_missed` to 0.
+8. **Pledged day after missing 1+ pledged days** → **freeze** `current_streak` (NOT reset to 1). Increment `pledged_days_missed` by the count of missed pledged days. Frontend shows the re-plan check-in banner when the counter ≥ 3.
+9. Update `longest_streak` if new streak exceeds it.
+10. **Streak bonus** (default 5 XP, admin-configurable): only fires when streak actually grew (rule 7), not when frozen (rule 8). Once per day, IST-bound check.
+
+**Re-plan acknowledgement**: when the student dismisses the home re-plan banner ("Got it"), `POST /api/user/replan-acknowledged` resets `pledged_days_missed` to 0 server-side.
+
+**Known follow-up**: `server/routes/test.ts` has its own duplicate `updateStreak()` (called by `/api/test/complete`) that is IST-bound but **not yet pledge-aware**. Unifying the two is a planned cleanup.
 
 ---
 
@@ -279,14 +318,80 @@ All data is computed from pure DB queries -- NO LLM calls.
 
 ---
 
-## What Remains (Phase 1)
+## Voice TTS (Listen button)
 
-- Test mode (`/tests/active`) -- timed exam with AI insights
-- Gamification celebrations -- level-up overlay, badge unlock animation
-- Worksheet generator (POST /api/ai/worksheet)
-- Worksheet validation agent
-- Teacher command centre (currently mock)
-- Teacher review queue for flagged responses
-- Quality metrics dashboard
+**What it does**: Every AI bubble + practice hint + Pa's test debrief has a 🔊 Listen button. Reads the text aloud with a warm Indian English voice. Pa mascot mouth bobs while audio plays.
+
+**Endpoints**: `POST /api/ai/tts`, `GET /api/ai/tts/stats`
+
+**Backends** (tried in order):
+1. **Server (Google Cloud TTS)** — when `GOOGLE_TTS_API_KEY` is set. Default voice `en-IN-Wavenet-D` (overridable via `LLM_TTS_VOICE`). Returns raw `audio/mpeg`. In-memory LRU cache (500 entries, keyed by `sha256(text::voice)`). 5000-char per-call cap.
+2. **Browser (Web Speech API)** — fallback when server unavailable / 501. Uses `window.speechSynthesis` with `en-IN` voice if installed. Free, on-device, robotic-ish.
+
+**LaTeX handling**: `latexToSpeech()` in `src/lib/latexToSpeech.ts` unparses `$F = mg \sin\theta$` into "F equals m g sine theta" before sending to either backend.
+
+**Single audio source app-wide**: `SpeechContext` provider in `src/context/SpeechContext.jsx`. Starting a new Listen anywhere stops any previously-playing audio. Pa mascots with `syncWithSpeech={true}` subscribe to the speaking state and switch mood/animation accordingly.
+
+---
+
+## Pa's Debrief (Test results)
+
+**What it does**: After a test, the results screen's right-column sticky sidebar shows a multi-paragraph diagnosis from Pa. Structure: assessment with topic stats → misconception correction with mental model + analogy → next-step recommendation.
+
+**Endpoint**: `POST /api/test/complete` (debrief is generated as part of test submission)
+
+**LLM model**: `gpt-4o-mini` (configurable via `LLM_TEST_INSIGHTS`). Llama 3.3-70b is the fallback (flatter prose).
+
+**Prompt structure**:
+- Per-topic stats computed server-side from question correctness (aced + slipped lists)
+- Wrong-question detail with student's pick + correct answer + explanation
+- Strict 3-paragraph output format (~100-130 words total)
+
+**Cost**: ~₹0.05 per debrief at gpt-4o-mini pricing.
+
+**Frontend rendering**: response split on blank lines into paragraphs; per-topic stat chips above the prose; Listen button reads aloud (LaTeX-free unparsed); Pa mascot bobs while audio plays.
+
+---
+
+## Daily Pledge & Re-plan Check-in
+
+**What it does**: At onboarding step 3, students pledge an XP target (15/35/60/100) and which weekdays they'll show up. The home screen goal ring uses their pledge as the daily goal (overrides admin's `config.dailyGoal`). When they miss 3+ pledged days, a soft amber banner appears on home: "Pa wants to check in — let's re-plan your week."
+
+**Tables**: `profiles.daily_pledge_xp` + `profiles.study_days` (mig 010), `student_streaks.pledged_days_missed` (mig 011)
+
+**Endpoints**:
+- Set/edit pledge: `POST /api/user/onboarding` (also reused by `/settings`)
+- Acknowledge check-in: `POST /api/user/replan-acknowledged` (resets `pledged_days_missed` to 0)
+
+**UI surfaces**:
+- Onboarding step 3: pledge XP tile picker + day picker
+- Settings (`/settings`): edit pledge + days independently
+- Home banner: shown when `streak.pledged_days_missed >= 3`
+
+---
+
+## Settings (`/settings`)
+
+**What it does**: Edit daily pledge, study days, goal track, and subjects after onboarding. Each section saves independently — the partial-update-safe `/api/user/onboarding` endpoint persists only the fields explicitly sent.
+
+**Class + board are read-only** (changing mid-year would invalidate XP/mastery — points to support email).
+
+**Entry points**:
+- HomeTopNav user-chip dropdown → "Settings & plan"
+- Home re-plan check-in banner → "Re-plan my week" CTA
+
+---
+
+## What Remains (Phase 2 / not built)
+
+- Parent dashboard v4 (`/parent` is currently `Navigate to /home` placeholder)
+- Teacher v4 UI rebuild (backend complete; visuals are still v3)
+- JEE/NEET/CA tracks (disabled at signup with "Coming soon")
+- Class 6-7 support (picker is 8-12 only)
+- Real-time descriptive answer evaluation (`POST /api/ai/evaluate` is 501 stub)
+- Gamification celebrations (level-up overlay, badge unlock animation)
+- Quality metrics dashboard (helpful_rate / flag_rate per subject)
 - PostHog + Sentry integration
+- Automated nightly cron for recommendation recompute (currently manual admin trigger)
+- Parent OTP verification (DPDP-grade) — currently self-attestation
 - Deployment to Vercel + Railway

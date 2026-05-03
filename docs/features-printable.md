@@ -1,6 +1,6 @@
 # Padee.ai — Complete Feature List
 
-**Generated:** April 22, 2026
+**Generated:** April 26, 2026
 **For:** Printable / shareable reference
 
 **Legend:** ✅ Shipped | 🟡 Partial | ❌ Pending | 🚫 Deferred (Phase 2+)
@@ -12,25 +12,29 @@
 | # | Feature | Status |
 |---|---|---|
 | 1.1 | Supabase project (`ifxekwenhidotyqlrpty`, us-east-1) | ✅ |
-| 1.2 | 8 database migrations (001–008) | ✅ |
+| 1.2 | 11 database migrations (001–011) | ✅ |
 | 1.3 | Real auth (signup / login / email confirmation) | ✅ |
-| 1.4 | Role-based routing (student / teacher / parent) | ✅ |
-| 1.5 | Protected routes with `ProtectedRoute` wrapper | ✅ |
-| 1.6 | Auto-profile trigger on signup (creates profile + streak row) | ✅ |
-| 1.7 | Admin role management (UI + `POST /api/admin/set-role`) | ✅ |
-| 1.8 | Admin password auth (`padee-admin-2026`) | ✅ |
+| 1.4 | v4 LoginScreen (two-column with dark stats panel) | ✅ |
+| 1.5 | v4 SignupScreen (separate route + role picker + DPDP-aligned consent) | ✅ |
+| 1.6 | Role-based routing (student → /home / teacher → /teacher / parent → /home placeholder) | ✅ |
+| 1.7 | Protected routes with `ProtectedRoute` wrapper | ✅ |
+| 1.8 | Auto-profile trigger on signup (creates profile + streak row) | ✅ |
+| 1.9 | Admin role management (UI + `POST /api/admin/set-role`) | ✅ |
+| 1.10 | Admin password auth (`padee-admin-2026`) | ✅ |
 
 ---
 
-## 2. ONBOARDING
+## 2. ONBOARDING (v4, 3 steps)
 
 | # | Feature | Status |
 |---|---|---|
-| 2.1 | 3-step flow: Class → Subjects → Track | ✅ |
-| 2.2 | Commerce subjects for Class 11–12 | ✅ |
-| 2.3 | Track selection (School / JEE / NEET / CA) | ✅ |
-| 2.4 | Writes to `student_subjects` table | ✅ |
-| 2.5 | Onboarding — Board selection (from v4 UI) | 🚫 |
+| 2.1 | Step 1: Class (8-12) + Board picker (CBSE/ICSE/IGCSE/IB/STATE/OTHER, mig 009) | ✅ |
+| 2.2 | Step 2: Subjects with Pa auto-select (5 standard CBSE) + Reset button | ✅ |
+| 2.3 | Step 3: Goal track + Daily XP pledge (15/35/60/100) + Study days picker (mig 010) | ✅ |
+| 2.4 | Commerce subjects for Class 11–12 | ✅ |
+| 2.5 | School / JEE / NEET / CA tracks (JEE/NEET/CA disabled with "Coming soon") | 🟡 — School only in Phase 1 |
+| 2.6 | Writes to `student_subjects` table + `profiles.{board, daily_pledge_xp, study_days}` | ✅ |
+| 2.7 | Partial-update-safe `/api/user/onboarding` (reused by /settings) | ✅ |
 
 ---
 
@@ -55,12 +59,12 @@
 
 ---
 
-## 4. STUDENT — ASK AI (Doubt Solver)
+## 4. STUDENT — ASK AI (Doubt Solver, v4)
 
 | # | Feature | Status |
 |---|---|---|
 | 4.1 | Streaming SSE (`POST /api/ai/doubt`) | ✅ |
-| 4.2 | RAG retrieval from NCERT chunks (pgvector, threshold 0.35) | ✅ |
+| 4.2 | RAG retrieval from NCERT chunks (pgvector, threshold 0.5) | ✅ |
 | 4.3 | Semantic cache (threshold 0.92) | ✅ |
 | 4.4 | Student memory injection (name, weak subjects, recent doubts) | ✅ |
 | 4.5 | NCERT source citation chip | ✅ |
@@ -68,17 +72,22 @@
 | 4.7 | Subject auto-detection (keyword match + Learn-click preservation) | ✅ |
 | 4.8 | Conversation history (last 6 turns sent to LLM) | ✅ |
 | 4.9 | 8 action chips: visual / simpler / exam / quiz / similar / challenge / real-life / mistakes | ✅ |
-| 4.10 | Chip prompts interpolate topic text (stops drift) | ✅ |
-| 4.11 | Thumbs up/down with inline reason chips | ✅ |
-| 4.12 | Report incorrect bottom-sheet modal | ✅ |
-| 4.13 | Copy button on every AI bubble | ✅ |
-| 4.14 | Clear chat button | ✅ |
-| 4.15 | localStorage persistence (last 30 messages) | ✅ |
-| 4.16 | Orphan-state sanitization on load | ✅ |
-| 4.17 | Photo doubt (Llama-4-Scout vision) | ✅ |
-| 4.18 | Cold-start 6 action cards + sample questions | ✅ |
-| 4.19 | Voice input (mic + Whisper) | ❌ |
-| 4.20 | Share doubt / shareable card | ❌ |
+| 4.10 | Chip prompts interpolate topic text (skips chip-generated messages so it doesn't nest) | ✅ |
+| 4.11 | **KaTeX math rendering** (LLM uses `$...$`, frontend `MathText` typesets) | ✅ |
+| 4.12 | **Server-side LaTeX validation** (sanitises malformed `$` before caching) | ✅ |
+| 4.13 | **Listen button** (Google Cloud TTS en-IN-Wavenet-D + browser fallback) | ✅ |
+| 4.14 | **Pa mascot speech sync** (mood + mouth-bob animation while audio plays) | ✅ |
+| 4.15 | **Quiz Me as inline widget** (`InlineQuiz` — 1 MCQ from chat context) | ✅ |
+| 4.16 | **Challenge Me with hidden solution** (`---SOLUTION---` marker, gated reveal button) | ✅ |
+| 4.17 | **Visual Explanation in-bubble** (sandboxed iframe with auto-size + Expand modal) | ✅ |
+| 4.18 | Thumbs up/down with inline reason chips | ✅ |
+| 4.19 | Report incorrect bottom-sheet modal | ✅ |
+| 4.20 | Copy button on every AI bubble | ✅ |
+| 4.21 | Clear chat button | ✅ |
+| 4.22 | localStorage persistence (last 30 messages) | ✅ |
+| 4.23 | Photo doubt (Llama-4-Scout vision) | ✅ |
+| 4.24 | Voice input (mic + Whisper) | ❌ |
+| 4.25 | Share doubt / shareable card | ❌ |
 
 ---
 
@@ -96,32 +105,53 @@
 
 ---
 
-## 6. STUDENT — PRACTICE MCQ
+## 6. STUDENT — PRACTICE MCQ (`PracticeRunScreenV4`)
 
 | # | Feature | Status |
 |---|---|---|
-| 6.1 | Inline "Quiz me" in Ask AI (contextual single MCQ) | ✅ |
+| 6.1 | Inline `InlineQuiz` widget (Quiz Me chip in Ask AI) | ✅ |
 | 6.2 | Full practice screen (`/practice`) | ✅ |
-| 6.3 | `POST /api/ai/practice/complete` saves + awards XP + updates mastery | ✅ |
-| 6.4 | Results screen (accuracy ring, XP, retry) | ✅ |
-| 6.5 | Pre-loading from home screen (instant start) | ✅ |
-| 6.6 | Adaptive difficulty | 🚫 Phase 2 |
+| 6.3 | Per-question difficulty (easy/medium/hard) + XP chip | ✅ |
+| 6.4 | Always-visible hint per question | ✅ |
+| 6.5 | Question progress strip (correct ✓ / wrong ✗ / skipped — / current / upcoming) | ✅ |
+| 6.6 | Skip button (counts as wrong, 0 XP, advances) | ✅ |
+| 6.7 | Per-question Report → flagged_responses | ✅ |
+| 6.8 | KaTeX math in question + options + hint | ✅ |
+| 6.9 | Concept slug per question → mastery update via RPC | ✅ |
+| 6.10 | Per-difficulty XP (3/6/10 per correct) admin-configurable | ✅ |
+| 6.11 | `POST /api/ai/practice/complete` saves + awards XP + updates mastery + recompute | ✅ |
+| 6.12 | Results screen (accuracy ring, XP, retry) | ✅ |
+| 6.13 | Pre-loading from home screen (instant start, versioned cache) | ✅ |
+| 6.14 | Adaptive difficulty | 🚫 Phase 2 |
 
 ---
 
-## 7. STUDENT — TEST MODE
+## 7. STUDENT — TEST MODE (v4)
 
 | # | Feature | Status |
 |---|---|---|
 | 7.1 | Migration 007 (`test_assignments`, extended `test_sessions`) | ✅ |
-| 7.2 | Self-picked test (subject + length + difficulty) | ✅ |
-| 7.3 | AI-recommended test (weakest subject) | ✅ |
-| 7.4 | Teacher-assigned test (pre-generated questions) | ✅ |
-| 7.5 | Timer + auto-submit on expiry | ✅ |
-| 7.6 | Question navigation drawer + flag for review | ✅ |
-| 7.7 | Results screen with AI insights per question | ✅ |
-| 7.8 | XP award + bonus for ≥80% | ✅ |
-| 7.9 | "Prep for test" flow (exam date → study plan) | ❌ |
+| 7.2 | `TestListScreenV4` with 3 sections always visible | ✅ |
+| 7.3 | Self-picked test (subject + length 5/10/15 + difficulty) | ✅ |
+| 7.4 | AI-recommended test (weakest subject, auto-tuned difficulty) | ✅ |
+| 7.5 | Teacher-assigned test (Prep + Take test buttons) | ✅ |
+| 7.6 | `TestActiveScreenV4` — minimal "test mode" top bar with timer | ✅ |
+| 7.7 | Timer color shifts (green → amber <3min → coral <1min) + auto-submit | ✅ |
+| 7.8 | Question strip + Flag for review + Drawer modal | ✅ |
+| 7.9 | KaTeX in question + options | ✅ |
+| 7.10 | Submit + exit confirm modals + beforeunload guard | ✅ |
+| 7.11 | `TestResultsScreenV4` — full v4 redesign | ✅ |
+| 7.12 | Hero ring + tone-aware grade headline | ✅ |
+| 7.13 | Question-by-question grid (color-coded with topic tags) | ✅ |
+| 7.14 | What went wrong section with Re-learn buttons | ✅ |
+| 7.15 | **Pa's Debrief sticky sidebar** (multi-paragraph diagnosis via gpt-4o-mini) | ✅ |
+| 7.16 | Per-topic stat chips above debrief prose | ✅ |
+| 7.17 | Listen button on debrief (LaTeX-free TTS) | ✅ |
+| 7.18 | Concept Mastery Updated row (3-up cards) | ✅ |
+| 7.19 | XP award + bonus for ≥80% | ✅ |
+| 7.20 | Class rank / class avg / last-attempt comparison | ❌ — frontend renders if backend supplies; backend doesn't yet |
+| 7.21 | Mid-test save / resume | ❌ |
+| 7.22 | "Prep for test" flow (exam date → study plan) | ❌ |
 
 ---
 
@@ -135,7 +165,10 @@
 | 8.4 | Celebration queue + host | ✅ |
 | 8.5 | `refreshUser()` triggers detection automatically | ✅ |
 | 8.6 | 8 admin-configurable badges | ✅ |
-| 8.7 | Streak automation (increment / reset / bonus XP ≥ 2 days) | ✅ |
+| 8.7 | **Pledge-aware streak engine** (rest day = no change, missed pledged days = freeze) | ✅ |
+| 8.8 | **IST-bound day boundaries** (`server/lib/dateIST.ts`) | ✅ |
+| 8.9 | Streak bonus XP — only when streak grew, not frozen | ✅ |
+| 8.10 | Re-plan check-in banner (when `pledged_days_missed >= 3`) | ✅ |
 
 ---
 
@@ -270,13 +303,28 @@
 
 ---
 
-## 16. UI DESIGN SYSTEM
+## 16. UI DESIGN SYSTEM (v4)
 
 | # | Feature | Status |
 |---|---|---|
-| 16.1 | v3 UI (teal + coral, DM Sans) — current production | ✅ |
-| 16.2 | v4 UI spec (Lexend Deca + vermillion + topbar) | 🚫 rolled back |
-| 16.3 | Incremental v4 rollout (one piece at a time) | ❌ post-pilot |
+| 16.1 | v4 UI design system (Lexend Deca + coral + dark topnav + Pa mascot) | ✅ — **all student screens shipped** |
+| 16.2 | Landing page v4 | ✅ |
+| 16.3 | Login + Signup (separate routes, role picker, DPDP consent) | ✅ |
+| 16.4 | Onboarding (3 steps) | ✅ |
+| 16.5 | Home v4 (Boss Quest hero + 3-up + cards + rail + footer) | ✅ |
+| 16.6 | Ask AI v4 (Pa identity, 8 chips, KaTeX, Listen, InlineQuiz, ChallengeView) | ✅ |
+| 16.7 | Learn v4 | ✅ |
+| 16.8 | Tests list v4 (3 sections: teacher / Pa rec / self-pick) | ✅ |
+| 16.9 | Test active v4 (timed exam UI, drawer, KaTeX) | ✅ |
+| 16.10 | Test results v4 (hero ring + grid + Pa's Debrief) | ✅ |
+| 16.11 | Practice run v4 | ✅ |
+| 16.12 | Progress v4 | ✅ |
+| 16.13 | Settings v4 (`/settings`) | ✅ |
+| 16.14 | KaTeX rendering across student journey | ✅ |
+| 16.15 | Voice TTS via Google Cloud + Pa speech-sync animations | ✅ |
+| 16.16 | v3 fallback screens deleted; flag mechanism removed | ✅ |
+| 16.17 | Teacher v4 UI rebuild | ❌ — next planned work |
+| 16.18 | Parent dashboard v4 | ❌ — next planned student-side build |
 
 ---
 
@@ -284,13 +332,17 @@
 
 | Feature | Why deferred |
 |---|---|
+| Parent dashboard v4 | Placeholder route currently redirects to /home. Real screen pending. **Next planned student-side build.** |
+| Teacher v4 UI rebuild | Backend complete, visuals are still v3. **Next planned teacher-side work.** |
+| JEE/NEET/CA track dashboards | Tracks disabled at signup; will build when track ships |
+| Class 6-7 support | UI blocks 8-12 only; NCERT content + concept catalog need expansion |
+| Parent OTP verification (DPDP-grade) | Currently self-attestation; phone OTP for verifiable consent — needed before B2B school deals |
+| Automated nightly cron | Currently manual admin trigger; Railway scheduled job pending |
 | School onboarding (invite codes, school linkage) | Needs `schools` table + teacher invite flow |
 | Teacher concept-catalog tools (mark-as-taught, teaching date, flag) | Only needed at 20+ schools |
 | Student diagnosis agent | Needs 30+ sessions of history |
 | Adaptive difficulty | Needs concept-tagged question bank |
 | Exam readiness score | Needs full catalog |
-| Parent dashboard (dedicated) | Currently shares progress screen |
-| JEE/NEET track dashboard | Currently shares home |
 | Hindi support (Qwen-2.5-72B) | Content + language model work |
 | Pre-built SVG templates | All visuals currently LLM-generated |
 
@@ -382,6 +434,9 @@ Teacher-led synchronous session with AI co-pilot. Chat-first, not video. ~2.5–
 11. Full Class 8–12 NCERT catalog seed (rolling)
 12. RAG for worksheet + practice generators (quick wins, 3 hrs)
 13. Student nice-to-haves based on pilot feedback (voice, flashcards, calendar)
+
+**After v4 validation — queued cleanup (feature-status.md Section 20)**
+14. **Delete v3 frontend code** — once NEW_HOME_V4 has been on for ≥ 2 weeks with no regression. Removes ~2k LOC (StudentHomeScreen, DoubtSolverScreen, RecommendationCards, BottomNav, v3 CSS tokens). Simplifies routes, retires the feature flag. ~1 day with testing. **DO NOT start until pilot feedback signs off on v4.**
 
 ---
 

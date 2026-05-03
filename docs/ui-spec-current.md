@@ -1,498 +1,338 @@
-# Padee.ai — Current UI Spec
+# Padee.ai — Current UI Spec (v4)
 
-**Generated:** April 23, 2026
-**Purpose:** Faithful documentation of the UI that exists today. Use as input for **Claude Design** to produce visual refinements without breaking functionality.
-**Scope:** Visual redesign only. Do NOT change routes, state shapes, API contracts, or component prop interfaces.
-
----
-
-## 0. How to use this document
-
-If you're Claude Design reading this: the goal is to **refresh the visual language** of Padee — typography, spacing, colour harmony, depth, motion — while keeping every screen, every interaction, and every component prop contract exactly as-is.
-
-**Hard constraints (do not violate):**
-- Don't change route paths (`/home`, `/ask`, `/teacher/worksheet`, etc.)
-- Don't change the `<Outlet />` structure in layouts — the current single-Outlet design fixed a critical streaming bug. Adding animation keyed on `location.pathname` will re-introduce it.
-- Don't restructure components' public props — other screens import them
-- Don't remove "hidden" test accessibility hooks (e.g. data-testid attributes if added later, ARIA labels on interactive elements)
-- Keep existing animation keyframes (`orbIdle`, `xpFloat`, `flameSway`, `stepReveal`) — they're wired into specific features
-
-**Soft constraints (preferred but adjustable):**
-- Keep the Forest Teal + Coral Orange brand family. Shift tones, not identity.
-- Keep DM Sans as the body face — we've ruled out font changes for Phase 1.
-- Keep 16px base, scale `xs (12) / sm (14) / base (16) / lg (18) / xl (20) / 2xl (22) / 3xl (26) / 4xl (30) / 5xl (36)`.
-
-**Free to change:**
-- Shadows, border treatments, card radii, spacing rhythm
-- Colour accents within the existing palette (amber / emerald / coral / teal intensities)
-- Hero card gradients, empty-state illustrations
-- Icon styling and sizing
-- Button shapes + hover states
-- Micro-interactions and transitions
+**Generated:** April 26, 2026
+**Purpose:** Faithful reference for the v4 UI as it ships today. Use this when extending the design system or onboarding a new engineer/designer.
+**Scope:** Documents what exists. For prescriptive design changes, update CSS first, then update this doc.
 
 ---
 
-## 1. Design tokens (as implemented)
+## 0. How to read this document
 
-### 1.1 Colours — `tailwind.config.js` + `src/index.css`
+1. **Tokens** are scoped under `.home-v4` (see `src/styles/home-v4.css`). Per-screen tweaks live in `*-v4.css` files that compose with the shared tokens.
+2. **All v4 screens are full-bleed** — they own their own `HomeTopNav` + `FooterStrip`, do **not** nest inside `StudentLayout`. The legacy `StudentLayout` is now a near-empty shell holding only Phase-2 placeholder routes (`/parent`, `/jee-neet`).
+3. **Screen list is in `src/routes.tsx`** — that is the source of truth.
+
+---
+
+## 1. Design tokens
+
+### 1.1 Colours
+
+Tokens defined at the top of `src/styles/home-v4.css` and inherited by every v4 screen. Inline-equivalents used directly in `.tsx` for screens that mount before the v4 stylesheet loads (Landing, Login, Signup, Onboarding).
 
 ```
-BRAND — Forest Teal
-  primary       #0D9488   main brand (CTAs, primary buttons, active nav)
-  mid           #14B8A6   mid-tone teal
-  light         #CCFBF1   light fill (student avatars, badges)
-  pale          #99F6E4   paler fill (border-teal)
-  dark          #0F766E   darker hover / active text
-  darker        #134E4A   deepest teal
-  hero          #0F1729   dark navy (hero cards, AI recommendation)
+BRAND — Coral / Pa palette
+  c-accent       #E85D3A   primary action — buttons, eyebrows, focus borders
+  c-accent-d     #B2381B   ink shadow under primary buttons (3px-4px drop)
+  c-accent-l     #FFE7DD   tinted button hover, selected-tile fills, error backgrounds
+
+INK — Pa's mascot + dark surfaces
+  c-ink          #13131A   primary text, dark hero cards, dark top nav
+  c-ink-2        #2A2A36   secondary text on light surfaces
+  c-ink-bg       #13131A   dark hero card / minimal test-mode top bar background
 
 SURFACES
-  bg            #F8F7F4   page background (warm off-white, not pure gray)
-  landing       #F0FDFA   landing page background (very pale teal)
-  card          #FFFFFF   card fill
-  surface       #F9FAFB   subtle section fill
-  border        #E5E7EB   default border
+  c-paper        #FAF8F4   page background (warm off-white)
+  c-paper-2      #F1EDE2   alt paper (subtle section fill)
+  c-card         #FFFFFF   card fill
+  c-hair         #ECECEE   default border / divider hairline
+  c-hair-2       #F3EFE4   warm-tinted divider (used inside cards)
+
+ACCENTS — semantic + subject
+  c-amber        #FFB547   streak / Pa antenna / warnings / "almost there"
+  c-amber-l      #FFEFC9   tinted backgrounds (hint box, "Coming soon" pills)
+  c-green        #36D399   correct, mastered, online indicator
+  c-green-l      #DDF6E9   correct option fill, success card backgrounds
+  c-pink         #FF4D8B   wrong answers, alerts (used sparingly)
+  c-pink-l       #FFE0EC   wrong-answer card backgrounds
+  c-purple       #7C5CFF   maths subject / "main goal" accent
+  c-purple-l     #ECE5FF   maths icon background
+  c-blue         #4C7CFF   physics subject / Challenge Me block
+  c-blue-l       #E0ECFF
+  c-cyan         #2BD3F5   computer science subject
+  c-violet       #9B5DE5
 
 TEXT
-  navy          #111827   primary text
-  hint          #4B5563   secondary text
-  slate         #6B7280   tertiary text (labels, meta)
-  muted         #9CA3AF   muted text (timestamps, placeholders)
+  c-muted        #8A8A95   secondary text, eyebrows, labels
+  c-muted-2      #B8B8C0   tertiary / placeholders / disabled
 
-ACTION — Coral
-  coral          #EA580C   secondary action
-  coral-dark     #C2410C
-  coral-light    #FFF7ED
-  coral-pale     #FFEDD5
-
-SEMANTIC
-  amber         #D97706   XP, alerts, warnings
-  amber-light   #FEF3C7
-  amber-dark    #B45309
-  emerald       #059669   success, positive progress
-  emerald-light #ECFDF5
-  emerald-dark  #065F46
-  error         #DC2626
-
-SUBJECT ACCENTS
-  physics       #2563EB   blue
-  chemistry     #EA580C   coral (shared with action)
-  biology       #059669   emerald (shared with success)
-  maths         #7C3AED   violet
-  cs            #0891B2   cyan
-  english       #E11D48   rose
-  social        #D97706   amber
+DEPRECATED — v3 tokens, no longer used
+  Forest Teal #0D9488 — gone. Replaced by coral c-accent.
+  DM Sans — gone. Replaced by Lexend Deca.
 ```
 
 ### 1.2 Typography
 
-**Family:** DM Sans (body), DM Mono (code/numbers)
-**Base size:** 16px
-**Scale:**
-```
-xs    12px  line 1.5    — meta, timestamps, labels
-sm    14px  line 1.55   — body small, secondary
-base  16px  line 1.6    — body default
-lg    18px  line 1.55   — emphasis body
-xl    20px  line 1.5    — subheadings
-2xl   22px  line 1.4    — screen titles
-3xl   26px  line 1.35   — large emphasis
-4xl   30px  line 1.25   — display
-5xl   36px  line 1.2    — hero numbers (XP, level)
-```
+**Family:** **Lexend Deca** (body, all UI). **Kalam** for handwritten flourishes (Pa's whiteboard equation on landing). **DM Mono** for tabular numerals where used. KaTeX ships its own math fonts.
 
-**Weights in use:** 400 (default), 500 (medium), 600 (semibold), 700 (bold), 900 (black, rarely — only landing page).
+**Base size:** 14-15px (compact, comfortable for K12 readability on phones).
+
+```
+t-display  44px  weight 700  letter-spacing -1px       — landing headline
+t-h1       30px  weight 700  letter-spacing -0.6px     — page titles, results-screen hero
+t-h2       22px  weight 700  letter-spacing -0.4px     — card titles, modal headers
+t-h3       18px  weight 600  letter-spacing -0.2px     — minor headings
+t-body     14px  line 1.5
+t-sm       13px  line 1.5    color c-muted             — secondary copy
+t-xs       12px  line 1.4    color c-muted             — meta, captions
+t-eyebrow  11px  weight 700  letter-spacing 0.12em     — section labels (uppercase)
+.tabular   font-variant-numeric: tabular-nums           — XP counts, timers
+```
 
 ### 1.3 Shadows
+
 ```
-card         0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)
-card-hover   0 2px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05)
-orb          0 0 32px rgba(13,148,136,0.4), 0 0 64px rgba(13,148,136,0.2)   — AI orb glow
-orb-sm       0 0 16px rgba(13,148,136,0.35)
-action       0 4px 16px rgba(13,148,136,0.15)                                — primary CTAs
+shadow-flat       0 1px 0 rgba(19,19,26,0.04)                                — subtle card edge
+shadow-card       0 1px 0 rgba(19,19,26,0.04), 0 8px 22px rgba(19,19,26,0.05) — elevated card
+shadow-pop        0 4px 0 rgba(19,19,26,0.05), 0 24px 48px rgba(19,19,26,0.10) — modals, floating chips
+ink shadow        0 3px 0 #B2381B (under primary coral CTAs — gives the "pressable" depth)
+button active     transform: translateY(1px) — buttons compress on click
 ```
 
 ### 1.4 Radii
-- `rounded` — 4px — tight chips
-- `rounded-md` — 6px — small buttons
-- `rounded-lg` — 8px — buttons, inputs
-- `rounded-xl` — 12px — cards (most common)
-- `rounded-2xl` — 16px — large surfaces, hero cards
-- `rounded-full` — avatars, streak flame, pills
 
-**Empirically dominant: `rounded-full` (26 uses) > `rounded-lg` (10) > `rounded-xl` (5)**
+```
+r-sm   8px    chips, small pills
+r-md   10px   inputs, secondary buttons
+r-lg   12px   primary buttons, option cards
+r-xl   14-18px  cards, modals
+r-2xl  22-28px  hero cards (landing, test results)
+99px / 999px  full pill — chips, streak/user-mini badges, listen button
+```
 
 ### 1.5 Motion
+
 ```
-pulse-slow     3s pulse            — idle AI orb
-pulse-gentle   2.5s ease-in-out    — subtle attention
-orb-idle       4s ease-in-out      — AI orb breathing
-bounce-slow    2s                  — level-up celebrations
-spin-slow      3s linear           — loading rings
-fade-in        200ms               — content appearance
-slide-up       200ms               — bottom sheets, toasts
-slide-in       300ms               — side panels
-scale-in       200ms ease-bounce   — modals, badges
-float-up       2.5s                — XP particles
-xp-float       2.2s                — XP toast
-step-reveal    300ms               — step-by-step answer cards
-shimmer        1.5s                — skeleton loaders
-flame-sway     3s                  — streak flame icon
+quick      120-180ms ease       — hover, click, focus transitions
+medium     200-350ms ease-out   — modal pop, banner reveal
+slow       1.2s ease-out        — score-ring stroke fill on results screen
+
+pa-breathe          3.2s — Pa mascot idle scale pulse (always on)
+pa-celebrate        0.9s loop — bounce + scale (when student crushes goal)
+pa-glow            1.6s — antenna ball drop-shadow pulse (streak ≥ 3)
+pa-mouth-bob       0.32s loop — speaking-mood mouth scaleY (drives off SpeechContext)
+listen-pulse       1.2s — Listen button icon scale while audio plays
+listen-spin        0.9s linear — loading spinner on Listen button (server fetch)
+load-bounce        0.9s — generic three-dot loader
+
+prefers-reduced-motion: all looping animations disabled.
 ```
 
 ---
 
 ## 2. Layout primitives
 
-### 2.1 Student Layout (`src/layouts/StudentLayout.tsx`)
+### 2.1 Full-bleed v4 screen shell
 
-Single-Outlet design (critical — do not change to multi-Outlet or AnimatePresence-with-key).
+Every student-facing v4 screen has this structure:
 
-**Breakpoints:**
-- **Desktop (≥ lg, 1024px+):** 220px sidebar (left) + main (max-width 1200px) + optional 300px right panel on home
-- **Tablet (sm–lg, 640–1024px):** 64px icon-only rail (left) + main. No right panel.
-- **Mobile (< sm, < 640px):** main column only + fixed bottom tab bar (z-30, 4 tabs: Home / Ask / Learn / Tests / Progress → one of these condensed)
-
-**Chrome elements:**
-- **Sidebar (desktop):** Logo cell (Padee + vermillion dot) → user card (avatar + name + class/level) → nav list (5 items with icons) → bottom actions (Settings, Logout).
-- **Top bar:** only on pages that need one (Ask AI has a compact one with Class chip + Clear button; most screens have no top bar — the screen header IS the page title).
-- **Bottom tab bar (mobile):** 4–5 icons with labels below, active one gets teal fill.
-
-**Celebration overlays:**
-- `CelebrationHost` mounted at layout root — absolute-positioned modals for level-up and badge unlock. Never blocks nav, auto-dismisses.
-
-### 2.2 Teacher Layout (`src/layouts/TeacherLayout.tsx`)
-
-Similar single-Outlet structure.
-
-- **Desktop:** 220px sidebar with 3 sections (Overview / Create / Monitor) and 6 nav items
-- **Tablet + mobile:** Compact 48px top bar with logo + "Teacher" badge. No sidebar. No bottom tabs (teachers use desktop)
-
-**Sidebar sections:**
 ```
-Overview        Command Center
-Create          Worksheet, Paper Mimic, Test Paper, Live Class
-Monitor         Students, Review queue
+<div className="home-v4 [screen-specific class]">
+  <HomeTopNav user streak active onNavigate />     ← sticky, dark, 60px
+  <div className="pd-page">                          ← max-width container
+    <div className="pd-body-grid">                   ← main + 280px right rail
+      <main className="pd-body-main">…</main>
+      <aside className="pd-body-rail">…</aside>
+    </div>
+  </div>
+  <FooterStrip xpToday week mastery badges totalBadges />  ← sticky, 68px
+</div>
 ```
 
-### 2.3 Admin layout
-AdminScreen is standalone (no chrome). Password gate at the top, then tabs: NCERT Content / Concept Catalog / LLM Audit / Users / Config.
+`StudentHomeScreenV4`, `LearnScreenV4`, `TestListScreenV4`, `ProgressScreenV4`, `DoubtSolverScreenV4`, `PracticeRunScreenV4`, `SettingsScreen`, `TestResultsScreenV4` all use this shell.
 
-### 2.4 Auth + Onboarding
-No layout chrome. Full-bleed single column. Logo + card.
+### 2.2 Test-mode shell (`TestActiveScreenV4`)
+
+Stripped chrome — minimal "test mode" top bar (logo + title + prominent timer + All Qs + Exit). **No nav pills** during the timed test. No right rail. No footer strip. Single column. Bottom progress bar on the top nav fills as the student answers.
+
+### 2.3 Auth + onboarding shells
+
+Landing, Login, Signup, OnboardingClass/Subjects/Track all render full-bleed with their own minimal top bars (logo + role-switch CTA / step indicator). Inline-styled — no `home-v4.css` token dependency, so they load fast before any auth state settles.
+
+### 2.4 StudentLayout (legacy)
+
+Now wraps only `/parent`, `/jee-neet`, `/dashboard` — all of which are `<Navigate to="/home" replace />` placeholders. The sidebar inside StudentLayout is effectively dormant. Will be deletable once parent v4 lands.
+
+### 2.5 TeacherLayout
+
+Still v3-styled. Wraps every `/teacher/*` route. **Next planned UI rebuild target.**
 
 ---
 
 ## 3. Screen inventory
 
-Every screen, with its purpose and current visual shape.
-
-### 3.1 Public + Auth
-
-| Screen | Path | Visual shape |
-|---|---|---|
-| `LandingPage` | `/` | Full-bleed hero + feature grid + CTA. Pale teal background. |
-| `SplashScreen` | `/splash` | Centered logo + orb, auto-redirects in 1.5s. |
-| `LoginScreen` | `/login` | Centered card (420px) with email + password. Single "Sign in" button. |
-
-### 3.2 Onboarding
-
-| Screen | Path | Visual shape |
-|---|---|---|
-| `OnboardingClass` | `/onboarding/class` | 5 class-level cards (8/9/10/11/12) with emoji + description |
-| `OnboardingSubjects` | `/onboarding/subjects` | Subject grid with tickable cards; shows chosen count |
-| `OnboardingTrack` | `/onboarding/track` | 4 track cards: School / JEE / NEET / CA |
-
-Progress indicator: 3 dots at top, filled on complete.
-
-### 3.3 Student
-
-| Screen | Path | Key visual blocks |
-|---|---|---|
-| `StudentHomeScreen` | `/home` | Greeting + streak banner + concept-level recommendation cards (Hero/Weak/Revision/Next) + daily challenge + recent wins + subject rings + right panel (desktop) |
-| `DoubtSolverScreen` | `/ask` | Top bar (Class chip, Clear) → message list (student right, AI left with orb avatar) → action chips row → input bar with camera icon + send |
-| `LearnScreen` | `/learn` | Today's Focus hero → Pick Up Where You Left Off (3 cards) → Subject sections with expandable chapter lists → concept rows clickable |
-| `PracticeModeScreen` | `/practice` | Loading → question card with ABCD options → explanation → next → results (accuracy ring, stats, retry) |
-| `ProgressScreen` | `/progress` | Profile card → stat row → streak section → badge grid → subject mastery bars → today's activity |
-| `TestListScreen` | `/tests` | Card grid of available tests + "Start AI-recommended" hero card |
-| `TestActiveScreen` | `/tests/active` | Top timer bar + question + ABCD options + navigation drawer |
-| `TestResultsScreen` | `/tests/results` | Hero score ring + question-by-question review + AI insights + retry CTA |
-
-### 3.4 Teacher
-
-| Screen | Path | Key visual blocks |
-|---|---|---|
-| `TeacherDashboardScreen` | `/teacher` | Greeting → 4-card stat strip (students, alerts, flagged, tests-this-week) → 2-col: alert feed + recent activity (left) / right panel with concept hotspots + quick actions + class health bars |
-| `WorksheetGeneratorScreen` | `/teacher/worksheet` | Input (free-text box + sample chips + validation toggle) → generating spinner → preview (summary card + Questions/Answers tabs) with Save/PDF/DOCX actions |
-| `PaperMimicScreen` | `/teacher/mimic` | Dropzone → hint field → validation toggle → generate → preview (reuses `WorksheetPreview`) |
-| `TeacherReviewQueueScreen` | `/teacher/review` | 2-col: left list (tabs Pending/Reviewed/All, subject filter, status chips) / right detail (student question, AI answer with NCERT chips, report text, teacher notes textarea, 3 verdict buttons) |
-| `TeacherAssignTestScreen` | `/teacher/test` | Step form: subject → chapter → question count → AI preview → publish. Submission stats below when assignments exist. |
-| `StudentPerformanceScreen` | `/teacher/students` | Search + class filter + list of students (avatar, name, email, streak, level chevron) |
-| `TeacherStudentProfileScreen` | `/teacher/student/:id` | Header (avatar, name, last-active chip, streak/level/XP) → 5-stat row → activity sparkline → subject mastery bars → weak concepts (amber cards) → recent tests + practice → doubt history (expandable) |
-| `LiveClassScreen` | `/teacher/live` | **Currently stub/mock. Rebuild per PRD Section 19.** |
-
-### 3.5 Admin
-`AdminScreen` — 5 tabs, data tables, file upload drop zones, inline edit forms.
-
-### 3.6 Misc
-- `ParentSummaryScreen` — shares progress layout
-- `JEENEETScreen` — shares home layout
-- `ChapterViewScreen` — deprecated, consider removing
+| Path | Component | Type | Purpose |
+|---|---|---|---|
+| `/` | `LandingPage` (v4) | Public | Marketing landing with Pa chat mockup hero |
+| `/login` | `LoginScreen` (v4) | Public | Two-column login + dark stats panel |
+| `/signup` | `SignupScreen` (v4) | Public | Role picker (Student / Parent / Teacher) + DPDP-aligned consent |
+| `/admin` | `AdminScreen` | Public-but-gated | Internal admin panel — separate visual treatment, not v4 |
+| `/onboarding/class` | `OnboardingClass` (v4) | Auth | Step 1 — class (8-12) + board picker |
+| `/onboarding/subjects` | `OnboardingSubjects` (v4) | Auth | Step 2 — subjects with Pa auto-select + Reset |
+| `/onboarding/track` | `OnboardingTrack` (v4) | Auth | Step 3 — goal track + daily XP pledge + study days |
+| `/onboarding` | `OnboardingScreen` | Auth | Legacy fallback (rarely hit) |
+| `/splash` | `SplashScreen` | Public | Auto-redirect splash |
+| `/home` | `StudentHomeScreenV4` | Student | Boss Quest hero + 3-up cards + weak spots + upcoming tests + right rail + re-plan banner |
+| `/ask` | `DoubtSolverScreenV4` | Student | Doubt solver with KaTeX, Listen, InlineQuiz, ChallengeView, Visual Explanation |
+| `/learn` | `LearnScreenV4` | Student | Subject pill tabs + dark subject hero + Pa cue + chapter rows |
+| `/practice` | `PracticeRunScreenV4` | Student | Per-question difficulty + hint + skip + KaTeX + concept-tagged mastery |
+| `/tests` | `TestListScreenV4` | Student | 3 sections: TEACHER-ASSIGNED, PA RECOMMENDS, BUILD YOUR OWN |
+| `/tests/active` | `TestActiveScreenV4` | Student | Minimal "test mode" timed exam UI |
+| `/tests/results` | `TestResultsScreenV4` | Student | Hero ring + grid + What went wrong + Pa's Debrief sticky sidebar |
+| `/progress` | `ProgressScreenV4` | Student | Dark profile hero + weekly XP bars + mastery rows |
+| `/settings` | `SettingsScreen` | Student | Edit pledge / days / track / subjects independently |
+| `/parent` | `Navigate to /home` | Phase-2 placeholder | Parent v4 pending |
+| `/jee-neet` | `Navigate to /home` | Phase-2 placeholder | JEE/NEET track pending |
+| `/dashboard` | `Navigate to /home` | Alias | Legacy redirect |
+| `/teacher/*` | TeacherDashboardScreen, etc. | Teacher | All v3-styled — **next UI rebuild** |
 
 ---
 
 ## 4. Component inventory
 
-### 4.1 Shared — `src/components/`
+### 4.1 Shared chrome — `src/components/home-v4/`
 
-| Component | Purpose | Where used |
-|---|---|---|
-| `AIOrb` | Animated teal-blue orb; states: `idle`, `thinking`, `speaking` | AI bubble avatar, cold-start greeting |
-| `AIBar` | Input bar with camera icon + send button | Ask AI screen |
-| `BottomNav` | Mobile 4–5 icon tab bar | StudentLayout |
-| `TeacherTopNav` | Compact teacher top bar on tablet/mobile | TeacherLayout |
-| `ScoreRing` | Circular progress with centered % label | TestResults, Practice results |
-| `XPToast` | Floating "+10 XP" pill | After any XP-earning action |
-| `LevelUpOverlay` | Full-screen celebration with confetti | Triggered on level-up |
-| `Confetti` | Particle burst | Celebrations |
-| `ScreenBridge` | HOC that injects `onNavigate`, `initialQuestion`, `initialSubject` from URL | Every routed screen |
-| `ProtectedRoute` | Auth wrapper | All protected routes |
-| `RateLimitErrorCard` | Amber actionable card shown in Ask AI on LLM rate-limit failures | DoubtSolverScreen |
+- `HomeTopNav.jsx` — dark 60px top bar with logo + nav pills (Home/Ask Pa/Learn/Tests/Progress) + search box + streak badge + user-mini chip with dropdown menu (Profile / Settings / Logout)
+- `FooterStrip.jsx` — sticky 68px footer with today XP ring, weekly bar chart, subject mastery dots, badge row
+- `Ico.jsx` — inline SVG icon library (home/ask/learn/tests/progress/clock/sparkle/heart/arrow/chevronR/search/play/flag/flame/trophy/check/x/bulb)
+- `PaMascot.jsx` — the orange Pa mascot SVG. Props: `size`, `mood` (idle/thinking/speaking/celebrate), `glow` (antenna), `syncWithSpeech` (subscribes to global TTS state for mouth-bob)
 
-### 4.2 UI primitives — `src/components/ui/`
+### 4.2 Home cards — `src/components/home-v4/`
 
-| Component | Shape |
-|---|---|
-| `ProgressBar` | Horizontal bar, configurable colour + label |
-| `ScoreRing` | SVG circle with stroke-dashoffset animation |
-| `LevelBadge` | Pill with level number + name |
-| `DifficultyBadge` | Small pill: easy (emerald) / medium (amber) / hard (red) |
-| `SubjectPill` | Coloured pill using subject accent palette |
-| `MasteryChip` | Small inline chip showing mastery % |
-| `XPToast` | Duplicate of outer XPToast — **candidate for consolidation** |
+- `BossQuestCard.jsx` — concept-level recommendation hero (4 hero types)
+- `QuestCard.jsx` — generic 3-up row card
+- `YourProgressCard.jsx` — strengths + weak spots
+- `RailWidgets.jsx` — `PaStatusCard`, `QuickQuestCard`, `AskPaSuggestions`, `ResumeCard`
+- `StreakAtRiskBanner.jsx` — amber strip when today's pledge XP not hit
+- `ReplanCheckInBanner.jsx` — soft amber strip when `pledged_days_missed >= 3`
+- `RecentDoubts.jsx`, `RecentWins.jsx`, `TodayActivity.jsx`, `SubjectsGrid.jsx`, `WeakSpotsCard.jsx`, `UpcomingTestsCard.jsx`
 
-### 4.3 Recommendation cards — `src/components/recommendations/`
+### 4.3 Ask Pa — `src/components/ask-v4/`
 
-`RecommendationCards.jsx` exports 4 card types:
-| Card | Colour | Layout |
-|---|---|---|
-| `HeroCard` | Navy gradient `#0F1729` → slight teal tint, with accent dot + "AI RECOMMENDATION FOR TODAY" label, title (white 19px), description (55% white), 2 buttons (primary accent + ghost outline) |
-| `WeakConceptCard` | Amber background `#FEF3C7` with left accent strip, title + failure count + "Fix in N questions →" |
-| `RevisionCard` | Teal background `#ECFDF5` with left teal accent, title + "not revised in N days" + "2-min refresh →" |
-| `NextToLearnCard` | Blue background `#EFF6FF` with left blue accent, chapter name + "the next step in your [subject] journey" |
+- `PaBubble.jsx` — Pa response bubble with mascot, MathText body, chip row, feedback icons, copy button, Listen button
+- `StudentBubble.jsx` — student message bubble (dark)
+- `AskInput.jsx` — pill-shaped input with camera + send
+- `AskHeader.jsx` — clear chat / subject indicator
+- `InlineQuiz.jsx` — Quiz Me chip widget (1 MCQ from chat context)
+- `ChallengeView.jsx` — Challenge Me chip widget (problem with gated solution reveal)
+- `VisualExplanationBubble.jsx` — Visual chip widget (sandboxed iframe + Expand modal)
+- `FeedbackIcons.jsx` — thumbs up/down + flag icons
 
-### 4.4 Teacher components — `src/components/teacher/`
+### 4.4 Practice + Tests — `src/components/practice-v4/`, `src/components/tests-v4/`, `src/components/test-v4/`
 
-| Component | Shape |
-|---|---|
-| `TeacherSidebar` | 220px vertical nav with 3 section groupings, Settings + Logout pinned bottom |
-| `TeacherAlertFeed` | List of red/amber/green alert cards with one-tap action button per alert |
-| `TeacherRightPanel` | 300px dashboard sidebar: concept hotspots card (dark) + quick actions + class health bars |
-| `WorksheetPreview` | Shared preview component: summary card + Questions/Answers tabs + sections with numbered questions. Used by worksheet + mimic screens. |
+- Practice: `QuestionStrip.jsx`, `OptionCard.jsx`, `HintBox.jsx`, `ReportModal.jsx`, `ExitConfirm.jsx`
+- Tests list: `TabRow.jsx`, `UrgentPrepBanner.jsx`, `UpcomingTestRow.jsx`, `PaRecommendsCard.jsx`, `SelfPickTestCard.jsx`, `PastTestCard.jsx`
+- Tests active/results: inline-defined components inside the screen files (Header, Modal, ScoreRing, AiInsightsCard, ReviewItem, etc.)
 
-### 4.5 Admin components — `src/components/admin/`
+### 4.5 Learn + Progress — `src/components/learn-v4/`, `src/components/progress-v4/`
 
-| Component | Shape |
-|---|---|
-| `ConceptCatalogTab` | Tree: Subject → Class → Chapter → concepts. Inline edit (name, exam weight, summary). Draft → Publish workflow. Bulk actions per chapter. |
+Per-section cards matching the v4 design language. See routes.tsx for the screens that mount them.
 
-### 4.6 Celebrations — `src/components/celebrations/`
+### 4.6 UI primitives — `src/components/ui/`
 
-Full-screen overlays for level-up and badge unlock — confetti, scale-in animations, bouncing emoji. Queue managed via CelebrationHost.
+- `MathText.tsx` — splits text on `$...$` / `$$...$$`, renders math via KaTeX, plain segments via inline markdown (bold/italic/code). Streaming-aware (renders plain pre-wrap until stream completes, then swaps to typeset).
+- `ListenButton.jsx` — 🔊 / ⏸ / spinner toggle, drives off `useSpeech()`. Hidden when speech unsupported. Variants: `icon` (compact) and `labeled` (with text).
+- `DifficultyBadge.jsx`, `LevelBadge.jsx`, `MasteryChip.jsx`, `ProgressBar.jsx`, `ScoreRing.jsx`, `SubjectPill.jsx`, `XPToast.jsx`
+
+### 4.7 Recommendation cards — `src/components/recommendations/`
+
+`RecommendationCards.jsx` exports `HeroCard`, `WeakConceptCard`, `RevisionCard`, `NextToLearnCard`, `SupportingCardsRow`. Used by the home Boss Quest section.
+
+### 4.8 Teacher — `src/components/teacher/`
+
+`TeacherAlertFeed.tsx` and others. **All v3-styled.**
+
+### 4.9 Admin — `src/components/admin/`
+
+`ConceptCatalogTab.tsx` and others. Internal tool, intentionally separate styling.
+
+### 4.10 Celebrations — `src/components/celebrations/`
+
+`CelebrationHost.jsx`, `LevelUpOverlay.jsx`, `BadgeUnlockSheet.jsx`, `Confetti.jsx`. Mounted in StudentLayout (currently dormant since v4 screens are full-bleed). **Known follow-up**: re-mount under the v4 shells.
 
 ---
 
 ## 5. Interaction patterns currently in use
 
-These patterns are part of the product feel. Preserve their spirit even if visuals change.
+### 5.1 Streaming SSE responses (Ask Pa)
 
-### 5.1 Streaming AI responses
-- AI Tutor label appears first (with `orb-idle` animation)
-- Text streams token-by-token into a white rounded-xl bubble
-- Subtle teal pulsing cursor at the end until stream completes
-- "Copy" button hover-reveals on completed bubbles
-- Citation chip (NCERT source) appears after completion
+Token-by-token text streaming. During streaming `MathText` renders plain pre-wrap (no math rendering — half-rendered LaTeX would look broken mid-stream). When `streaming=false`, swaps to typeset KaTeX. ~3-5 second "pop" when stream completes.
 
-### 5.2 Action chips (Ask AI)
-- 6 primary chips visible at once; "More ↓" collapses overflow on mobile
-- Each chip: emoji + label, lg rounded-full, coral/amber mix
-- Tap = send the interpolated prompt as a new student message
+### 5.2 Action chips (Ask Pa, 8 chips)
 
-### 5.3 Quality signals (Ask AI)
-- Thumbs up/down appear below each AI bubble (muted until hovered)
-- Tapping 👎 reveals inline reason chips [Unclear] [Inaccurate] [Not NCERT] [Skip]
-- "Report incorrect" opens a bottom-sheet modal (slide-up animation)
+Render only on completed AI bubbles. Clicking dispatches `handleChip(key)` in the parent. Quiz Me toggles an inline widget on the message; Challenge Me sends a structured prompt and tags the resulting bubble; other chips send a topic-anchored doubt message with `fromChip: true` so the next chip's topic-lookup loop skips them (no nesting).
 
-### 5.4 Celebration queue
-- XP toast slides up from bottom-right every time XP is awarded
-- Level-up overlay blocks interaction briefly with confetti + new level name
-- Badge unlock bottom sheet with spinning conic ring
+### 5.3 Quality signals
 
-### 5.5 Loading states
-- Streaming thinking state: 5 phase labels cycling every 700ms
-- Non-streaming async (worksheet generate, visual explain): spinner with explanatory text
-- List loading: skeleton rows with shimmer
+Thumbs up/down → inline reason chips → `doubt_feedback` write. Flag icon opens bottom-sheet modal with reason chips → `flagged_responses` write.
 
-### 5.6 Optimistic UI
-- Student submits practice answer → immediately shows feedback, then server confirms
-- Teacher saves worksheet → button flips to "✓ Saved" before response lands, reverts on error
+### 5.4 Speech / Listen
+
+Single `SpeechContext` provider mounted in `main.tsx` between `UserProvider` and `RouterProvider`. `useSpeech()` hook returns `{ supported, speaking, loading, speak, stop, toggle, rate, setRate }`. Only one TTS plays at a time across the app — starting a new Listen anywhere stops any in-flight audio. Pa mascots with `syncWithSpeech={true}` subscribe to the speaking state and force mood to `'speaking'` + apply mouth-bob animation. Tab-hide auto-stops speech.
+
+### 5.5 Celebration queue
+
+`CelebrationHost` consumes a queue of `{ type, payload }` events from `UserContext.celebrations`. Currently mounts inside `StudentLayout`, which is dormant. The queue still fires but visuals don't show — **known follow-up**: re-mount under v4 shells.
+
+### 5.6 Loading states
+
+Dot-bounce pattern (3 coral dots cycling 0.18s offset) used everywhere. Skeleton blocks for whole-page loads (see Home screen profile-loading branch).
 
 ### 5.7 Error states
-- Rate limit: `RateLimitErrorCard` in-place with retry countdown + actionable alternatives
-- Generic 500: amber banner at top of screen (dismissible)
-- Empty states: large emoji + friendly message + CTA to fill the space
+
+Soft errors: amber strip with retry. Hard errors (e.g. test submission failure): full-page Pa-thinking message with Back-to-tests / Retry buttons.
 
 ---
 
 ## 6. Responsive behaviour
 
-### 6.1 Breakpoints (Tailwind defaults)
-- `sm` 640px
-- `md` 768px
-- `lg` 1024px
-- `xl` 1280px
-
-### 6.2 What changes at each breakpoint
-
-| Element | < sm (mobile) | sm–lg (tablet) | ≥ lg (desktop) |
-|---|---|---|---|
-| Student chrome | Bottom tab bar | 64px icon rail | 220px sidebar |
-| Teacher chrome | Top bar | Top bar | 220px sidebar |
-| Right panel (home, teacher dashboard) | Stacked below main | Hidden | 300px fixed |
-| Action chip row | First 4 + More ↓ | All 6 visible | All 6 visible |
-| Stat cards | 2-column | 2-column | 4-column |
-| Worksheet preview | Full-width stacked | Full-width stacked | Max-width 4xl centered |
-| Review queue | List top / detail below | 380px list + detail | 380px list + detail |
-
-### 6.3 Mobile-first concerns
-- Touch targets: 44px minimum (currently respected via `py-2` on buttons)
-- Bottom tab bar is `fixed bottom-0` with safe-area padding
-- Modals must leave tap-away affordance (backdrop click to dismiss)
-- Input bars are sticky bottom on Ask AI; iOS keyboard push is respected via `h-screen` + `flex-col`
-
----
-
-## 7. Known visual inconsistencies to fix
-
-Candid list — Claude Design can use this as a punch list.
-
-| Issue | Where | Suggested fix |
-|---|---|---|
-| Card radii inconsistent (12px vs 16px vs full) | Everywhere | Standardize: cards 12px, hero cards 16px, chips full |
-| Border width inconsistent (0.5px vs 1px vs 1.5px) | Throughout | Pick two tiers: 1px default, 2px emphasis |
-| Shadow system underused — most cards use borders instead | Dashboard cards, teacher panel | Pick one: shadows OR borders, not both |
-| Colour palette leakage: mock teal-300 / emerald-100 Tailwind classes coexist with CSS variable system | Older screens (LoginScreen, some Onboarding) | Migrate everything to CSS variables or the `brand.*` palette |
-| Font weight usage inconsistent (500 / 600 / 700 used interchangeably for "medium") | All | Define: body 400, meta 500, strong 600, heading 700 |
-| Spacing rhythm — some screens use 4/8/12/16/20/24, others use 12/18/30 | Screen-to-screen | Stick to 4/8/12/16/20/24/32 rhythm |
-| Icon sizes unpredictable (14 / 16 / 18 / 20 mixed) | Buttons, nav | Rules: nav 18, inline 14, action button 16 |
-| Empty states inconsistent (some emoji+text, some plain text, some illustration) | Learn, Teacher queue, Students list | Standard empty state: 48px emoji + title + subtitle + CTA |
-| Hover affordances irregular (some buttons have them, some don't) | Mainly teacher screens | Hover: background tint OR elevation, never both |
-| Mobile touch targets in some nested cards are < 44px | Subject health rows, concept hotspot list items | Enforce `min-h-[44px]` |
-| Dark navy hero card (`#0F1729`) gradient is flat; could benefit from depth | AI recommendation, concept hotspots | Add subtle inner glow or gradient overlay |
-
----
-
-## 8. Design opportunities (Claude Design, pick your battles)
-
-Things that would visibly elevate the product without reshaping it.
-
-### 8.1 Typography refinement
-- Tighten heading leading; currently 1.4 for 22px is a bit loose
-- Consider a tabular-nums variant for XP numbers, percentages, scores
-- Reconsider weight pairing: body 400 + heading 700 feels stark; try 500 + 600
-
-### 8.2 Depth system
-- Currently flat-ish. Shadows exist but barely used.
-- Three-tier depth: flat (surface) / raised (interactive cards) / floating (modals, toasts)
-- Subtle gradients on hero cards would make the navy feel intentional, not default
-
-### 8.3 Colour vibrancy
-- Current palette is correct but muted. Amber/coral/emerald can push slightly warmer.
-- Consider a cool-warm cycle: cool teal for primary, warm coral/amber for user actions
-
-### 8.4 Iconography
-- Mixed: lucide-react icons + emoji + custom SVGs (AIOrb, streak flame). Choose: either emoji-friendly consumer or all-icon prosumer.
-- Icon stroke weight: currently default 2; try 1.75 for a softer feel
-
-### 8.5 Motion
-- Most micro-interactions are present but could be more confident. `scale-in` on buttons tap is good; extend to all interactive surfaces.
-- Page transitions currently NONE (removed on purpose to fix the streaming bug). A fade-only transition via CSS (not keyed to location) would be safe.
-
-### 8.6 Data visualization
-- Score rings are good. Activity sparkline on student profile is minimal — consider more polish.
-- Progress bars are thin (2px); dashboard feel demands 4–6px with rounded ends.
-
-### 8.7 Empty and loading states
-- Skeleton loaders with shimmer are defined but only used in a couple of places. Extend to all async surfaces.
-- Empty states often feel clinical — lean into personality (Padee is a tutor persona).
-
-### 8.8 Mobile
-- Mobile feels like a shrunken desktop in places. Consider mobile-first patterns (bottom sheets instead of modals, swipe-to-dismiss on AI bubbles).
-
----
-
-## 9. Files Claude Design can change freely
+### 6.1 Breakpoints
 
 ```
-SAFE TO TOUCH (visual layer):
-  tailwind.config.js                     — design tokens
-  src/index.css                          — CSS variables + global styles
-  src/components/ui/*                    — UI primitives
-  src/components/AIOrb.jsx               — animated orb
-  src/components/XPToast.jsx             — toast
-  src/components/celebrations/*          — overlays
-  Any screen's JSX styling               — Tailwind classes, inline styles
-
-DO NOT TOUCH (structural or behavioural):
-  src/layouts/StudentLayout.tsx          — single-Outlet structure is load-bearing
-  src/layouts/TeacherLayout.tsx          — ditto
-  src/routes.tsx                         — path contracts
-  src/hooks/useAppNavigate.ts            — navigation map
-  src/services/api.ts                    — API contracts
-  src/context/*                          — state shape
-  server/**                              — backend entirely
-  src/components/ScreenBridge.tsx        — screen HOC wiring
-  Any `use*` hook                        — state machines
+< 480px    tight phone — chips column-stack, hero ring centered, results actions full-width
+< 600px    phone — multi-CTA rows wrap, action lists stack vertically
+< 720px    small tablet — hero card flex-direction: column (results screen)
+< 760px    tablet — test active strip-row stacks, options compact
+< 860px    medium tablet — practice rail drops below main column
+< 980px    medium tablet — results Pa debrief sidebar drops below main, no longer sticky
+< 1024px   small desktop — right rail can shrink/collapse depending on screen
 ```
 
----
+### 6.2 Mobile-first concerns
 
-## 10. Working mode for Claude Design
-
-Recommended sequence for Claude Design working from this spec:
-
-1. **Read this spec, the tailwind config, and `src/index.css` first.**
-2. **Propose updated design tokens** — colours / shadows / radii / typography. Write them into tailwind.config.js + CSS variables. Commit alone.
-3. **Refresh UI primitives** (`src/components/ui/*` + `AIOrb.jsx`). Commit.
-4. **One screen at a time** — pick the 5 highest-leverage screens (Home, Ask AI, Worksheet generator, Command Centre, Student profile) and refresh their visuals. Commit after each.
-5. **Cross-screen consistency pass** — hunt down the inconsistencies listed in Section 7.
-6. **Ship** — do not attempt all screens in one PR. We've been burned by big-bang UI changes before (v4 rollback, April 17).
-
-**Never:**
-- Add `AnimatePresence mode="wait"` keyed on `location.pathname` around the Outlet. It unmounts screens mid-stream. (Was the root cause of the Ask AI streaming bug.)
-- Change the shape of streaming SSE handlers or message rendering logic in `DoubtSolverScreen.jsx` — purely visual changes in that file only.
-- Remove the `mountedRef` guard in `DoubtSolverScreen.jsx` — it's defensive against future remount bugs.
-
-**Always:**
-- Run `npm run build` after each commit. Fix TypeScript errors.
-- Test streaming still works: click a concept in Learn, verify the AI bubble fills with text.
-- Test layout doesn't double-mount: open Network tab, click anywhere, verify `/api/user/home-data` fires once per mount.
+- HomeTopNav nav pills hide their text labels on `< 760px`, showing icon-only
+- Footer strip collapses to a thin XP-only bar on phones
+- KaTeX displays use `overflow-x: auto` so long equations scroll instead of break the layout
+- Inline iframes (visual explanations) cap at `max-width: 480px` then auto-size
+- Listen button hides label on small screens (icon-only variant)
 
 ---
 
-## 11. Meta — what's NOT in this spec
+## 7. Where to look when extending the v4 system
 
-This is a UI-focused spec. For everything else:
-
-- **Features list** → `docs/features-printable.md`
-- **Feature build status** → `docs/feature-status.md`
-- **Backend architecture** → `docs/architecture.md`
-- **API reference** → `docs/api-reference.md`
-- **Database schema** → `docs/database.md`
-- **LLM prompts** → `docs/llm-prompts.md`
-- **Admin guide** → `docs/admin-guide.md`
+| Need | Source of truth |
+|---|---|
+| Add a new student screen | `src/routes.tsx` + new `*-v4.css` + screen file using `<HomeTopNav />` + `<FooterStrip />` |
+| Add a new color | `src/styles/home-v4.css` `:root .home-v4 { ... }` block |
+| Add a new icon | `src/components/home-v4/Ico.jsx` PATHS map |
+| Add a new mood / animation to Pa | `src/components/home-v4/PaMascot.jsx` + keyframes in `home-v4.css` |
+| Add new TTS behavior | `src/context/SpeechContext.jsx` |
+| Add LaTeX support to a new render point | wrap with `<MathText text={…} inlineOnly />` |
+| Wire a Listen button | drop `<ListenButton text={…} />` from `src/components/ui/` |
+| Test-mode UI | `src/styles/test-v4.css` (test active) and `src/styles/test-results-v4.css` |
+| Modify the home Boss Quest hero | `src/components/home-v4/BossQuestCard.jsx` |
+| New onboarding step | new screen + add to `src/routes.tsx` between `/onboarding/track` and `/home` |
 
 ---
 
-_End of UI spec._
-_If Claude Design has questions during the redesign, the fastest answer source is: load a specific screen in dev mode (`npm run dev:all`, login as `teststudent@padee.ai` / `TestPass123!`), and inspect the DOM + Tailwind classes directly._
+## 8. Stale / deprecated (do not use)
+
+These existed in v3 and are gone:
+
+- `tailwind.config.js` color palette (Forest Teal, etc.) — token-style classes still work via Tailwind but the v4 components don't use them
+- `src/index.css` legacy CSS variables — superseded by `home-v4.css`
+- DM Sans typography — replaced by Lexend Deca
+- `StudentLayout` sidebar chrome — visible only on the dormant `/parent` and `/jee-neet` routes
+- `NEW_HOME_V4` flag — removed entirely Apr 26
+- `stripLatex()` defensive frontend helper — removed; KaTeX is now the renderer
+- `padee-preloaded-practice-v1-*` localStorage cache key — discarded (v2 in use)

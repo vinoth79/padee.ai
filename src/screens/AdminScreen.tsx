@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import ConceptCatalogTab from '../components/admin/ConceptCatalogTab'
+import FlaggedReviewTab from '../components/admin/FlaggedReviewTab'
 
 const SUBJECTS = ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'Computer Science', 'English', 'Social Science', 'Economics', 'Accounts', 'Business Studies']
 const CLASSES = [8, 9, 10, 11, 12]
@@ -35,7 +36,7 @@ interface LLMCall {
 }
 
 export default function AdminScreen() {
-  const [tab, setTab] = useState<'content' | 'audit' | 'users' | 'config' | 'catalog'>('content')
+  const [tab, setTab] = useState<'content' | 'audit' | 'users' | 'config' | 'catalog' | 'review'>('content')
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [authError, setAuthError] = useState('')
@@ -347,6 +348,7 @@ export default function AdminScreen() {
                 : tab === 'audit' ? 'LLM Audit Log'
                 : tab === 'users' ? 'User Management'
                 : tab === 'catalog' ? 'Concept Catalog'
+                : tab === 'review' ? 'Flagged AI responses (moderation queue)'
                 : 'App Configuration'}
             </p>
           </div>
@@ -373,9 +375,10 @@ export default function AdminScreen() {
           {[
             { id: 'content' as const, label: 'NCERT Content' },
             { id: 'catalog' as const, label: 'Concept Catalog' },
-            { id: 'audit' as const, label: 'LLM Audit' },
-            { id: 'users' as const, label: 'Users' },
-            { id: 'config' as const, label: 'Config' },
+            { id: 'review' as const,  label: 'Flagged Review' },
+            { id: 'audit' as const,   label: 'LLM Audit' },
+            { id: 'users' as const,   label: 'Users' },
+            { id: 'config' as const,  label: 'Config' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
@@ -647,49 +650,85 @@ export default function AdminScreen() {
               {/* Badges */}
               <div className="bg-white border rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-semibold text-gray-900">Badges</h2>
-                  <button onClick={() => setAppConfig({...appConfig, badges: [...(appConfig.badges || []), { id: `badge_${Date.now()}`, name: 'New Badge', icon: '🏅', condition: 'doubts >= 1' }]})}
+                  <h2 className="text-base font-semibold text-gray-900">
+                    Badges <span className="text-xs text-gray-400 font-normal">· {(appConfig.badges || []).length} total</span>
+                  </h2>
+                  <button onClick={() => setAppConfig({...appConfig, badges: [...(appConfig.badges || []), { id: `badge_${Date.now()}`, group: 'Starter', name: 'New Badge', icon: '🏅', condition: 'doubts >= 1' }]})}
                     className="text-xs font-semibold text-teal-600 hover:underline">+ Add badge</button>
                 </div>
                 <p className="text-xs text-gray-500 mb-3">
                   Conditions: <code className="bg-gray-100 px-1">doubts &gt;= N</code>, <code className="bg-gray-100 px-1">photoDoubts &gt;= N</code>, <code className="bg-gray-100 px-1">streak &gt;= N</code>, <code className="bg-gray-100 px-1">xp &gt;= N</code>, <code className="bg-gray-100 px-1">subjects &gt;= N</code>
                 </p>
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b text-[11px] uppercase tracking-wide text-gray-500">
-                      <th className="py-2 font-medium">Icon</th>
-                      <th className="py-2 font-medium">Name</th>
-                      <th className="py-2 font-medium">Condition</th>
-                      <th className="py-2 font-medium w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(appConfig.badges || []).map((badge: any, i: number) => (
-                      <tr key={badge.id || i} className="border-b last:border-b-0">
-                        <td className="py-2 pr-2">
-                          <input value={badge.icon} onChange={e => {
-                            const b = [...appConfig.badges]; b[i] = {...b[i], icon: e.target.value}; setAppConfig({...appConfig, badges: b})
-                          }} className="w-12 border rounded px-2 py-1 text-center" />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <input value={badge.name} onChange={e => {
-                            const b = [...appConfig.badges]; b[i] = {...b[i], name: e.target.value}; setAppConfig({...appConfig, badges: b})
-                          }} className="w-full border rounded px-2 py-1 text-sm" />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <input value={badge.condition} onChange={e => {
-                            const b = [...appConfig.badges]; b[i] = {...b[i], condition: e.target.value}; setAppConfig({...appConfig, badges: b})
-                          }} className="w-full border rounded px-2 py-1 text-sm font-mono" />
-                        </td>
-                        <td className="py-2">
-                          <button onClick={() => {
-                            const b = appConfig.badges.filter((_:any, j:number) => j !== i); setAppConfig({...appConfig, badges: b})
-                          }} className="text-red-400 hover:text-red-600 text-xs">✕</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+                {/* Badges grouped by `group` field. Preserve insertion order within each group. */}
+                {(() => {
+                  const allBadges = appConfig.badges || []
+                  // Preserve group order by first-appearance
+                  const groupOrder: string[] = []
+                  const byGroup: Record<string, any[]> = {}
+                  allBadges.forEach((b: any, idx: number) => {
+                    const g = b.group || 'Ungrouped'
+                    if (!groupOrder.includes(g)) groupOrder.push(g)
+                    byGroup[g] = byGroup[g] || []
+                    byGroup[g].push({ ...b, _idx: idx })
+                  })
+
+                  return groupOrder.map(group => (
+                    <div key={group} className="mb-5 last:mb-0">
+                      <div className="flex items-center gap-2 mb-2 mt-3">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
+                          {group}
+                        </span>
+                        <span className="text-[10px] text-gray-400">· {byGroup[group].length}</span>
+                      </div>
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="border-b text-[10px] uppercase tracking-wide text-gray-400">
+                            <th className="py-1.5 font-medium w-14">Icon</th>
+                            <th className="py-1.5 font-medium w-40">Name</th>
+                            <th className="py-1.5 font-medium">Condition</th>
+                            <th className="py-1.5 font-medium w-28">Group</th>
+                            <th className="py-1.5 font-medium w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {byGroup[group].map(badge => {
+                            const i = badge._idx
+                            return (
+                              <tr key={badge.id || i} className="border-b last:border-b-0">
+                                <td className="py-2 pr-2">
+                                  <input value={badge.icon} onChange={e => {
+                                    const b = [...appConfig.badges]; b[i] = {...b[i], icon: e.target.value}; setAppConfig({...appConfig, badges: b})
+                                  }} className="w-12 border rounded px-2 py-1 text-center" />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <input value={badge.name} onChange={e => {
+                                    const b = [...appConfig.badges]; b[i] = {...b[i], name: e.target.value}; setAppConfig({...appConfig, badges: b})
+                                  }} className="w-full border rounded px-2 py-1 text-sm" />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <input value={badge.condition} onChange={e => {
+                                    const b = [...appConfig.badges]; b[i] = {...b[i], condition: e.target.value}; setAppConfig({...appConfig, badges: b})
+                                  }} className="w-full border rounded px-2 py-1 text-sm font-mono" />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <input value={badge.group || ''} onChange={e => {
+                                    const b = [...appConfig.badges]; b[i] = {...b[i], group: e.target.value}; setAppConfig({...appConfig, badges: b})
+                                  }} className="w-full border rounded px-2 py-1 text-xs text-gray-600" />
+                                </td>
+                                <td className="py-2">
+                                  <button onClick={() => {
+                                    const b = appConfig.badges.filter((_:any, j:number) => j !== i); setAppConfig({...appConfig, badges: b})
+                                  }} className="text-red-400 hover:text-red-600 text-xs">✕</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))
+                })()}
               </div>
 
               {/* Save */}
@@ -705,6 +744,8 @@ export default function AdminScreen() {
         </div>
       ) : tab === 'catalog' ? (
         <ConceptCatalogTab adminHeaders={adminHeaders} />
+      ) : tab === 'review' ? (
+        <FlaggedReviewTab adminHeaders={adminHeaders} />
       ) : tab === 'users' ? (
         <div className="max-w-6xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between mb-4">

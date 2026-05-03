@@ -4,7 +4,7 @@
 
 1. Navigate to `/admin` in your browser
 2. Enter the admin password (default: `padee-admin-2026`, configurable via `ADMIN_PASSWORD` env var)
-3. The panel has 4 tabs: NCERT Content, LLM Audit, Users, Config
+3. The panel has 5 tabs: **NCERT Content**, **LLM Audit**, **Concept Catalog**, **Users**, **Config**
 
 ---
 
@@ -84,6 +84,44 @@ Click any row to see:
 
 ---
 
+## Concept Catalog Tab
+
+The CBSE syllabus represented as a flat list of concepts. Each concept maps to a chapter and has an `exam_weight_percent`, a `brief_summary`, and a `status` (draft / published / archived).
+
+### How concepts get added
+
+Three paths:
+
+1. **Auto-extract on NCERT upload** (most common) — when a chapter PDF is uploaded, after pdf-parse + embeddings succeed, `extractConceptsFromChapter()` calls GPT-4o on the chapter chunks and inserts concepts as `draft`. Admin sees them on this tab.
+2. **Re-extract** — re-run the AI extraction for a chapter (uses the existing chunks, no PDF re-upload needed).
+3. **Manual** — type a concept directly via the "+" button at the chapter level.
+
+### Lifecycle
+
+- **draft** — visible only to admin. Doesn't drive recommendations.
+- **published** — used by the recommendation engine + practice/test concept tagging.
+- **archived** — soft-deleted (kept if any students have `concept_mastery` rows referencing it).
+
+### Editing a concept
+
+Click the concept row → inline edit name, exam_weight_percent (0-100), brief_summary. Save.
+
+### Bulk publish
+
+At the chapter level, "Publish all drafts" promotes every draft in that chapter to published.
+
+### Recompute recommendations
+
+Top of the tab: "Recompute recommendations" button. Triggers `POST /api/recommendations/recompute` which:
+- Recalculates `composite_score` for every active student's concepts (recency decay applied)
+- Picks each student's hero concept (priority: exam_weight → score_gap → recency)
+- Generates hero copy via gpt-4o-mini, caches to `student_recommendations`
+- Aggregates `class_concept_health`, writes red/amber/green `teacher_alerts`
+
+Use this after major changes (new chapter published, exam_weights edited). Phase 2 will move this to a Railway scheduled job.
+
+---
+
 ## Users Tab
 
 Displays all registered users with:
@@ -114,9 +152,13 @@ Admin-configurable settings stored in `server/config.json`. Changes take effect 
 |---------|---------|-------------|
 | `xpRewards.textDoubt` | 10 | XP awarded per text doubt |
 | `xpRewards.photoDoubt` | 10 | XP awarded per photo doubt |
-| `xpRewards.practiceSession` | 15 | XP awarded on practice completion |
-| `xpRewards.testCompletion` | 25 | XP for test completion (not yet wired) |
-| `xpRewards.streakBonus` | 5 | Bonus XP per day when streak >= 2 |
+| `xpRewards.practiceSession` | 15 | Legacy flat reward — still applied as fallback when no per-difficulty math computes a value |
+| `xpRewards.practiceDifficulty.easy` | 3 | XP per CORRECT answer at easy difficulty |
+| `xpRewards.practiceDifficulty.medium` | 6 | XP per correct answer at medium |
+| `xpRewards.practiceDifficulty.hard` | 10 | XP per correct answer at hard |
+| `xpRewards.practiceHintPenalty` | 2 | Currently unused (hints are free in v4); reserved for "Show hint (-2 XP)" UX if you ever switch hints to opt-in |
+| `xpRewards.testCompletion` | 25 | Test base XP |
+| `xpRewards.streakBonus` | 5 | Bonus XP awarded once per day when streak >= 2 (only fires when streak grew, not when frozen) |
 
 ### Daily Goal
 

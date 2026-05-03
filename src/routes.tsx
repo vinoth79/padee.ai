@@ -1,45 +1,44 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import StudentLayout from './layouts/StudentLayout'
-import TeacherLayout from './layouts/TeacherLayout'
 import { ScreenBridge } from './components/ScreenBridge'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 // Auth + onboarding + admin (TypeScript)
 import LoginScreen from './screens/LoginScreen'
+import SignupScreen from './screens/SignupScreen'
 import LandingPage from './screens/LandingPage'
 import AdminScreen from './screens/AdminScreen'
 import OnboardingClass from './screens/OnboardingClass'
 import OnboardingSubjects from './screens/OnboardingSubjects'
 import OnboardingTrack from './screens/OnboardingTrack'
 
-// Existing screens (JSX, loaded via bridge)
+// Student v4 screens (all full-bleed — own their HomeTopNav + FooterStrip)
 import SplashScreen from './screens/SplashScreen'
 import OnboardingScreen from './screens/OnboardingScreen'
-import StudentHomeScreen from './screens/StudentHomeScreen'
-import DoubtSolverScreen from './screens/DoubtSolverScreen'
-import LearnScreen from './screens/LearnScreen'
-import PracticeModeScreen from './screens/PracticeModeScreen'
-import TestListScreen from './screens/TestListScreen'
-import TestActiveScreen from './screens/TestActiveScreen'
-import TestResultsScreen from './screens/TestResultsScreen'
-import ProgressScreen from './screens/ProgressScreen'
-import JEENEETScreen from './screens/JEENEETScreen'
-import ParentSummaryScreen from './screens/ParentSummaryScreen'
+import StudentHomeScreenV4 from './screens/StudentHomeScreenV4'
+import DoubtSolverScreenV4 from './screens/DoubtSolverScreenV4'
+import LearnScreenV4 from './screens/LearnScreenV4'
+import TestListScreenV4 from './screens/TestListScreenV4'
+import TestActiveScreenV4 from './screens/TestActiveScreenV4'
+import TestResultsScreenV4 from './screens/TestResultsScreenV4'
+import ProgressScreenV4 from './screens/ProgressScreenV4'
+import PracticeRunScreenV4 from './screens/PracticeRunScreenV4'
+import SettingsScreen from './screens/SettingsScreen'
 
 // Teacher screens
-import TeacherDashboardScreen from './screens/TeacherDashboardScreen'
-import WorksheetGeneratorScreen from './screens/WorksheetGeneratorScreen'
-import TeacherAssignTestScreen from './screens/TeacherAssignTestScreen'
-import LiveClassScreen from './screens/LiveClassScreen'
-import StudentPerformanceScreen from './screens/StudentPerformanceScreen'
-import TeacherReviewQueueScreen from './screens/TeacherReviewQueueScreen'
-import TeacherStudentProfileScreen from './screens/TeacherStudentProfileScreen'
-import PaperMimicScreen from './screens/PaperMimicScreen'
+import TeacherDashboardScreenV4 from './screens/TeacherDashboardScreenV4'
+import WorksheetGeneratorScreenV4 from './screens/WorksheetGeneratorScreenV4'
+import TeacherAssignTestScreenV4 from './screens/TeacherAssignTestScreenV4'
+import LiveClassScreenV4 from './screens/LiveClassScreenV4'
+import StudentPerformanceScreenV4 from './screens/StudentPerformanceScreenV4'
+import TeacherStudentProfileScreenV4 from './screens/TeacherStudentProfileScreenV4'
+import PaperMimicScreenV4 from './screens/PaperMimicScreenV4'
 
 export const router = createBrowserRouter([
   // ── Public routes ──
   { path: '/',      element: <LandingPage /> },
   { path: '/login', element: <LoginScreen /> },
+  { path: '/signup', element: <SignupScreen /> },
   { path: '/admin', element: <AdminScreen /> },
 
   // ── Onboarding (requires auth, but no full layout) ──
@@ -47,46 +46,45 @@ export const router = createBrowserRouter([
   { path: '/onboarding/subjects', element: <ProtectedRoute><OnboardingSubjects /></ProtectedRoute> },
   { path: '/onboarding/track',    element: <ProtectedRoute><OnboardingTrack /></ProtectedRoute> },
 
-  // Legacy onboarding
+  // Legacy onboarding fallback (older sessions point here)
   { path: '/onboarding', element: <ProtectedRoute><ScreenBridge Component={OnboardingScreen} redirectTo="/home" isOnboarding /></ProtectedRoute> },
   { path: '/splash',     element: <ScreenBridge Component={SplashScreen} redirectTo="/onboarding/class" autoRedirect /> },
 
-  // ── Student shell (protected) ──
+  // ── Student v4 — full-bleed (each screen owns its HomeTopNav + FooterStrip) ──
+  { path: '/home',          element: <ProtectedRoute><ScreenBridge Component={StudentHomeScreenV4} /></ProtectedRoute> },
+  { path: '/ask',           element: <ProtectedRoute><ScreenBridge Component={DoubtSolverScreenV4} /></ProtectedRoute> },
+  { path: '/learn',         element: <ProtectedRoute><ScreenBridge Component={LearnScreenV4} /></ProtectedRoute> },
+  { path: '/tests',         element: <ProtectedRoute><ScreenBridge Component={TestListScreenV4} /></ProtectedRoute> },
+  { path: '/tests/active',  element: <ProtectedRoute><ScreenBridge Component={TestActiveScreenV4} /></ProtectedRoute> },
+  { path: '/tests/results', element: <ProtectedRoute><ScreenBridge Component={TestResultsScreenV4} /></ProtectedRoute> },
+  { path: '/progress',      element: <ProtectedRoute><ScreenBridge Component={ProgressScreenV4} /></ProtectedRoute> },
+  { path: '/practice',      element: <ProtectedRoute><ScreenBridge Component={PracticeRunScreenV4} /></ProtectedRoute> },
+  { path: '/settings',      element: <ProtectedRoute><ScreenBridge Component={SettingsScreen} /></ProtectedRoute> },
+
+  // ── Student shell (protected) — placeholder redirects for legacy routes ──
+  // /parent will get a real v4 screen in the next iteration.
+  // /jee-neet is Phase 2 (those tracks are disabled in onboarding for now).
+  // Until then both redirect to /home so stale links / parent logins don't 404.
   {
     element: <ProtectedRoute><StudentLayout /></ProtectedRoute>,
     children: [
-      { path: '/home',           element: <ScreenBridge Component={StudentHomeScreen} /> },
-      { path: '/dashboard',      element: <Navigate to="/home" replace /> },
-      { path: '/dashboard/neet', element: <ScreenBridge Component={StudentHomeScreen} /> },
-      { path: '/dashboard/jee',  element: <ScreenBridge Component={StudentHomeScreen} /> },
-      { path: '/dashboard/ca',   element: <ScreenBridge Component={StudentHomeScreen} /> },
-      { path: '/ask',            element: <ScreenBridge Component={DoubtSolverScreen} /> },
-      { path: '/learn',          element: <ScreenBridge Component={LearnScreen} /> },
-      { path: '/practice',       element: <ScreenBridge Component={PracticeModeScreen} /> },
-      { path: '/tests',          element: <ScreenBridge Component={TestListScreen} /> },
-      { path: '/tests/active',   element: <ScreenBridge Component={TestActiveScreen} /> },
-      { path: '/tests/results',  element: <ScreenBridge Component={TestResultsScreen} /> },
-      { path: '/progress',       element: <ScreenBridge Component={ProgressScreen} /> },
-      { path: '/jee-neet',       element: <ScreenBridge Component={JEENEETScreen} /> },
-      { path: '/parent',         element: <ScreenBridge Component={ParentSummaryScreen} /> },
-      { path: '/tutoring',       element: <ScreenBridge Component={ProgressScreen} /> },
+      { path: '/dashboard',   element: <Navigate to="/home" replace /> },
+      { path: '/jee-neet',    element: <Navigate to="/home" replace /> },
+      { path: '/parent',      element: <Navigate to="/home" replace /> },
     ],
   },
 
-  // ── Teacher shell (protected) ──
-  {
-    element: <ProtectedRoute><TeacherLayout /></ProtectedRoute>,
-    children: [
-      { path: '/teacher',            element: <ScreenBridge Component={TeacherDashboardScreen} /> },
-      { path: '/teacher/worksheet',  element: <ScreenBridge Component={WorksheetGeneratorScreen} /> },
-      { path: '/teacher/test',       element: <ScreenBridge Component={TeacherAssignTestScreen} /> },
-      { path: '/teacher/live',       element: <ScreenBridge Component={LiveClassScreen} /> },
-      { path: '/teacher/students',   element: <ScreenBridge Component={StudentPerformanceScreen} /> },
-      { path: '/teacher/review',     element: <ScreenBridge Component={TeacherReviewQueueScreen} /> },
-      { path: '/teacher/student/:id', element: <ScreenBridge Component={TeacherStudentProfileScreen} /> },
-      { path: '/teacher/mimic',       element: <ScreenBridge Component={PaperMimicScreen} /> },
-    ],
-  },
+  // ── Teacher v4 — full-bleed (each screen owns its TeacherTopNav) ──
+  { path: '/teacher',           element: <ProtectedRoute><ScreenBridge Component={TeacherDashboardScreenV4} /></ProtectedRoute> },
+  { path: '/teacher/worksheet', element: <ProtectedRoute><ScreenBridge Component={WorksheetGeneratorScreenV4} /></ProtectedRoute> },
+  { path: '/teacher/mimic',     element: <ProtectedRoute><ScreenBridge Component={PaperMimicScreenV4} /></ProtectedRoute> },
+  { path: '/teacher/test',         element: <ProtectedRoute><ScreenBridge Component={TeacherAssignTestScreenV4} /></ProtectedRoute> },
+  { path: '/teacher/student/:id',  element: <ProtectedRoute><ScreenBridge Component={TeacherStudentProfileScreenV4} /></ProtectedRoute> },
+  { path: '/teacher/live',         element: <ProtectedRoute><ScreenBridge Component={LiveClassScreenV4} /></ProtectedRoute> },
+  { path: '/teacher/students',     element: <ProtectedRoute><ScreenBridge Component={StudentPerformanceScreenV4} /></ProtectedRoute> },
+
+  // /teacher/review moved to /admin → "Flagged Review" tab. Old links redirect.
+  { path: '/teacher/review', element: <Navigate to="/admin" replace /> },
 
   // Catch-all
   { path: '*', element: <Navigate to="/" replace /> },

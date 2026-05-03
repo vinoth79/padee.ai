@@ -12,6 +12,7 @@ const SCREEN_TO_PATH: Record<string, string> = {
   'test-results': '/tests/results',
   'me': '/progress',
   'progress': '/progress',
+  'settings': '/settings',
   'jee-neet': '/progress',
   'parent-summary': '/progress',
   'teacher-dashboard': '/teacher',
@@ -20,7 +21,7 @@ const SCREEN_TO_PATH: Record<string, string> = {
   'test-generator': '/teacher/test',
   'live-class': '/teacher/live',
   'students': '/teacher/students',
-  'teacher-review': '/teacher/review',
+  'teacher-review': '/admin', // moderation queue lives in admin → Flagged Review tab
 }
 
 export function useAppNavigate() {

@@ -62,6 +62,8 @@ export function ScreenBridge({ Component, redirectTo, autoRedirect, isOnboarding
       onNavigate={onNavigate}
       initialQuestion={location.state?.question || searchParams.get('question')}
       initialSubject={location.state?.subject || searchParams.get('subject')}
+      initialConcept={location.state?.concept || searchParams.get('concept')}
+      initialCount={location.state?.count || searchParams.get('count')}
     />
   )
 }

@@ -1,208 +1,378 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// LandingPage — Padee.ai marketing front page.
+// ═══════════════════════════════════════════════════════════════════════════
+// Layout (matches design handoff Apr 25):
+//   • Top nav: logo+mascot · Product · For schools · For parents · Pricing · Log in · Start free
+//   • Hero (2-col on lg): copy on the left, chat mockup with floating XP + streak chips on the right
+//   • Trust strip: "Backed by NCERT-aligned curriculum" + "As seen in" press chips
+//
+// All Padee colour tokens are inline (this page renders before any auth/v4
+// stylesheet is mounted, so we don't depend on `.home-v4` scoped vars).
+// ═══════════════════════════════════════════════════════════════════════════
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BookOpen, Stethoscope, Calculator, ArrowRight, Zap, Camera, Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowRight, Camera, Menu, Play, Star, X } from 'lucide-react'
+import PaMascot from '../components/home-v4/PaMascot'
 
-const TRACKS = [
-  { name: 'School Learning', desc: 'CBSE · IGCSE · NEP 2020 aligned. Classes 8–12.', icon: BookOpen, bg: '#F0FDFA', border: '#5EEAD4', text: '#0F766E', iconBg: '#CCFBF1' },
-  { name: 'JEE Prep', desc: 'Main + Advanced. Physics, Chemistry, Maths.', icon: Zap, bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8', iconBg: '#DBEAFE' },
-  { name: 'NEET / Medical', desc: 'NEET · AIIMS · JIPMER. Full syllabus coverage.', icon: Stethoscope, bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46', iconBg: '#D1FAE5' },
-  { name: 'CA Foundation', desc: 'Accounts, Law, Economics, Maths.', icon: Calculator, bg: '#F5F3FF', border: '#DDD6FE', text: '#5B21B6', iconBg: '#EDE9FE' },
+const NAV_LINKS = [
+  { label: 'Product', href: '#product' },
+  { label: 'For schools', href: '#for-schools' },
+  { label: 'For parents', href: '#for-parents' },
+  { label: 'Pricing', href: '#pricing' },
 ]
 
-const CHIPS = ['CBSE Classes 8–12', 'IGCSE Cambridge', 'JEE Main + Advanced', 'NEET · AIIMS · JIPMER', 'CA Foundation']
+const PRESS = ['The Hindu', 'HT', 'YourStory']
+const SUBJECTS = ['Maths', 'Science', 'English', 'Social', 'Hindi']
 
-const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }
-const fadeUp = { hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
+const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }
+const fadeUp = { hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }
 
 export default function LandingPage() {
   const navigate = useNavigate()
   const [mobileMenu, setMobileMenu] = useState(false)
 
-  return (
-    <div className="min-h-screen" style={{ background: '#FFFFFF' }}>
+  const goLogin = () => navigate('/login')
 
-      {/* ═══ NAVBAR ═══ */}
-      <nav className="sticky top-0 z-40 bg-white" style={{ borderBottom: '0.5px solid #E5E7EB' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-[7px] flex items-center justify-center" style={{ background: '#0D9488' }}>
-              <div className="w-[9px] h-[9px] rounded-full" style={{ background: '#99F6E4' }} />
-            </div>
-            <span className="font-bold text-[16px]" style={{ color: '#111827' }}>Padee.ai</span>
-          </div>
-          <div className="hidden md:flex items-center gap-6">
-            {['School Learning', 'JEE', 'NEET', 'CA Foundation', 'For Schools'].map(link => (
-              <span key={link} className="text-[15px] font-medium cursor-pointer transition-colors hover:text-[#0D9488]" style={{ color: '#6B7280' }}>{link}</span>
+  return (
+    <div className="landing-v4" style={{
+      minHeight: '100vh',
+      background: '#FAF8F4',
+      fontFamily: "'Lexend Deca', -apple-system, system-ui, sans-serif",
+      color: '#13131A',
+      WebkitFontSmoothing: 'antialiased',
+    }}>
+
+      {/* ═══ TOP NAV ═══ */}
+      <header className="sticky top-0 z-40" style={{
+        background: 'rgba(250, 248, 244, 0.92)',
+        backdropFilter: 'blur(8px)',
+        borderBottom: '1px solid #ECECEE',
+      }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-7 flex items-center justify-between h-[60px]">
+          <button onClick={() => navigate('/')} className="flex items-center gap-2.5">
+            <PaMascot size={32} mood="idle" />
+            <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.4px' }}>
+              Padee<span style={{ color: '#E85D3A' }}>.ai</span>
+            </span>
+          </button>
+
+          <nav className="hidden md:flex items-center gap-7">
+            {NAV_LINKS.map(l => (
+              <a key={l.label} href={l.href}
+                style={{ fontSize: 14, fontWeight: 500, color: '#3A3A45' }}
+                className="hover:text-[#E85D3A] transition-colors">
+                {l.label}
+              </a>
             ))}
-          </div>
+          </nav>
+
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/login')}
-              className="text-[14px] font-semibold px-4 py-2 rounded-lg transition-all active:scale-95" style={{ background: '#EA580C', color: '#FFF7ED' }}>
+            <button onClick={goLogin} className="hidden sm:inline-block"
+              style={{ fontSize: 14, fontWeight: 600, color: '#3A3A45', padding: '8px 12px' }}>
               Log in
             </button>
-            <button className="md:hidden" onClick={() => setMobileMenu(!mobileMenu)}>
-              {mobileMenu ? <X size={20} color="#6B7280" /> : <Menu size={20} color="#6B7280" />}
+            <button onClick={goLogin}
+              style={{
+                fontSize: 14, fontWeight: 600, color: '#fff',
+                background: '#E85D3A',
+                padding: '10px 18px', borderRadius: 12,
+                boxShadow: '0 3px 0 #B2381B',
+              }}
+              className="active:translate-y-[1px] transition-transform">
+              Start free
+            </button>
+            <button className="md:hidden" onClick={() => setMobileMenu(v => !v)}>
+              {mobileMenu ? <X size={20} color="#3A3A45" /> : <Menu size={20} color="#3A3A45" />}
             </button>
           </div>
         </div>
-        {/* Mobile menu */}
         {mobileMenu && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="md:hidden bg-white px-4 pb-4 space-y-2" style={{ borderBottom: '0.5px solid #E5E7EB' }}>
-            {['School Learning', 'JEE', 'NEET', 'CA Foundation', 'For Schools'].map(link => (
-              <div key={link} className="py-2 text-sm font-medium" style={{ color: '#6B7280' }}>{link}</div>
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            className="md:hidden px-5 pb-4 space-y-2"
+            style={{ borderBottom: '1px solid #ECECEE', background: '#FAF8F4' }}>
+            {NAV_LINKS.map(l => (
+              <a key={l.label} href={l.href} className="block py-2"
+                style={{ fontSize: 15, fontWeight: 500, color: '#3A3A45' }}>
+                {l.label}
+              </a>
             ))}
+            <button onClick={goLogin} className="block py-2 w-full text-left sm:hidden"
+              style={{ fontSize: 15, fontWeight: 600, color: '#3A3A45' }}>
+              Log in
+            </button>
           </motion.div>
         )}
-      </nav>
+      </header>
 
       {/* ═══ HERO ═══ */}
-      <section style={{ background: '#F0FDFA' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 lg:py-[52px]">
-          <motion.div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-10 items-center"
-            variants={stagger} initial="hidden" animate="visible">
+      <section className="max-w-6xl mx-auto px-5 sm:px-7 pt-10 lg:pt-16 pb-10">
+        <motion.div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-10 lg:gap-12 items-center"
+          variants={stagger} initial="hidden" animate="visible">
 
-            {/* Left: Copy */}
-            <motion.div variants={fadeUp} className="space-y-5">
-              {/* Eyebrow */}
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#0D9488' }} />
-                <span className="text-[13px] font-semibold tracking-wide" style={{ color: '#0F766E' }}>NEP 2020 · CBSE · IGCSE · JEE · NEET · CA</span>
-              </div>
+          {/* ── Left: copy ── */}
+          <motion.div variants={fadeUp}>
+            {/* Eyebrow */}
+            <p style={{
+              fontSize: 12, fontWeight: 700, letterSpacing: '0.12em',
+              color: '#E85D3A', textTransform: 'uppercase', marginBottom: 18,
+            }}>
+              AI study buddy · CBSE · IGCSE · JEE · NEET
+            </p>
 
-              <h1 className="text-[30px] lg:text-[34px] font-bold leading-[1.2]" style={{ color: '#111827' }}>
-                One platform.<br />
-                <span style={{ color: '#0D9488' }}>Every exam.</span><br />
-                AI that never stops.
-              </h1>
+            {/* Headline */}
+            <h1 style={{
+              fontSize: 44, fontWeight: 700, lineHeight: 1.08,
+              letterSpacing: '-1.2px', marginBottom: 22,
+            }}
+              className="lg:text-[52px]">
+              Meet Pa.<br />
+              <span style={{ color: '#E85D3A' }}>Your personal tutor</span><br />
+              that actually teaches.
+            </h1>
 
-              <p className="text-[16px] leading-[1.65] max-w-md" style={{ color: '#4B5563' }}>
-                Padee.ai is your AI-powered study companion for CBSE, IGCSE, JEE, NEET, and CA Foundation.
-                Get doubts solved instantly, practice at your level, and know exactly where to improve — on any device, any time.
-              </p>
+            {/* Sub */}
+            <p style={{
+              fontSize: 16, lineHeight: 1.55, color: '#3A3A45',
+              maxWidth: 520, marginBottom: 28,
+            }}>
+              Snap a textbook question. Pa explains it in your language, grades your
+              practice, and builds a plan that fits the next three hours of your life
+              — not a 6-month course.
+            </p>
 
-              {/* Chips */}
-              <div className="flex flex-wrap gap-2">
-                {CHIPS.map(chip => (
-                  <span key={chip} className="text-[12px] font-semibold px-[11px] py-1 rounded-full" style={{ background: '#CCFBF1', color: '#0F766E', border: '0.5px solid #5EEAD4' }}>
-                    {chip}
-                  </span>
-                ))}
-              </div>
+            {/* CTAs */}
+            <div className="flex flex-wrap gap-3 items-center" style={{ marginBottom: 36 }}>
+              <button onClick={goLogin}
+                style={{
+                  fontSize: 15, fontWeight: 600, color: '#fff',
+                  background: '#E85D3A',
+                  padding: '14px 22px', borderRadius: 12,
+                  boxShadow: '0 4px 0 #B2381B',
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                }}
+                className="active:translate-y-[2px] transition-transform">
+                Start free — it's ₹0 <ArrowRight size={16} />
+              </button>
+              <button
+                style={{
+                  fontSize: 14, fontWeight: 600, color: '#13131A',
+                  background: 'transparent',
+                  padding: '13px 18px', borderRadius: 12,
+                  border: '1px solid #ECECEE',
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                }}
+                className="hover:bg-white transition-colors">
+                <Play size={14} fill="currentColor" /> Watch 90-second demo
+              </button>
+            </div>
 
-              {/* CTAs */}
-              <div className="flex flex-wrap gap-3 pt-1">
-                <button onClick={() => navigate('/login')}
-                  className="text-[15px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95 flex items-center gap-2" style={{ background: '#EA580C', color: '#FFF7ED' }}>
-                  Student Login <ArrowRight size={14} />
-                </button>
-                <button onClick={() => navigate('/login')}
-                  className="text-[14px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95" style={{ color: '#374151', border: '0.5px solid #D1D5DB' }}>
-                  Teacher Login →
-                </button>
-              </div>
-            </motion.div>
-
-            {/* Right: Product preview */}
-            <motion.div variants={fadeUp}>
-              <div className="rounded-[14px] p-5" style={{ background: '#FFFFFF', border: '0.5px solid #D1FAE5' }}>
-                {/* AI label */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#CCFBF1' }}>
-                    <div className="w-3 h-3 rounded-full" style={{ background: '#0D9488' }} />
-                  </div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#0F766E' }}>AI Recommendation for today</span>
-                </div>
-
-                {/* Navy inner card */}
-                <div className="rounded-[10px] p-4 mb-3" style={{ background: '#0F1729' }}>
-                  <p className="text-[10px] font-semibold mb-1" style={{ color: '#818CF8' }}>NEET · 47 DAYS TO EXAM</p>
-                  <p className="text-sm font-semibold mb-1" style={{ color: '#F1F5F9' }}>Organic Chemistry is your weakest at 43%.</p>
-                  <p className="text-xs mb-3" style={{ color: '#94A3B8' }}>I've prepared a 20-question targeted set — takes 15 minutes.</p>
-                  <button className="w-full text-xs font-semibold py-2 rounded-lg" style={{ background: '#0D9488', color: '#F0FDFA' }}>Fix Organic Chem now →</button>
-                </div>
-
-                {/* Mini cards row */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="rounded-lg p-3" style={{ background: '#ECFDF5', border: '0.5px solid #A7F3D0' }}>
-                    <p className="text-[10px] font-medium mb-1" style={{ color: '#065F46' }}>NEET Readiness</p>
-                    <p className="text-xl font-bold font-mono" style={{ color: '#059669' }}>68%</p>
-                    <p className="text-[10px]" style={{ color: '#6B7280' }}>↑ 5% this week</p>
-                  </div>
-                  <div className="rounded-lg p-3" style={{ background: '#FFF7ED', border: '0.5px solid #FED7AA' }}>
-                    <p className="text-[10px] font-medium mb-1" style={{ color: '#C2410C' }}>Weak Area</p>
-                    <p className="text-sm font-semibold" style={{ color: '#EA580C' }}>Organic Chem</p>
-                    <p className="text-[10px]" style={{ color: '#6B7280' }}>43% accuracy</p>
-                  </div>
-                </div>
-
-                {/* Ask bar */}
-                <div className="flex items-center gap-2 rounded-lg p-2" style={{ background: '#F9FAFB', border: '0.5px solid #E5E7EB' }}>
-                  <div className="w-6 h-6 ai-orb-sm rounded-full flex-shrink-0 flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white/50 rounded-full" />
-                  </div>
-                  <span className="flex-1 text-xs" style={{ color: '#9CA3AF' }}>Ask me anything from your syllabus...</span>
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#F9FAFB' }}>
-                    <Camera size={12} color="#9CA3AF" />
-                  </div>
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: '#0D9488' }}>
-                    <ArrowRight size={12} color="#F0FDFA" />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+            {/* Stats row */}
+            <div className="flex flex-wrap gap-x-9 gap-y-4">
+              <Stat number="18,400+" label="students studying now" />
+              <Stat number="240" label="schools · 9 states" />
+              <RatingStat />
+            </div>
           </motion.div>
-        </div>
-      </section>
 
-      {/* ═══ 5-TRACK SECTION ═══ */}
-      <section className="bg-white" style={{ borderTop: '0.5px solid #E5E7EB' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-9 lg:py-[36px]">
-          <p className="text-[11px] font-bold tracking-[0.15em] text-center mb-6" style={{ color: '#9CA3AF' }}>4 LEARNING TRACKS — ONE PLATFORM</p>
-          <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-3"
-            variants={stagger} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-            {TRACKS.map(track => {
-              const Icon = track.icon
-              return (
-                <motion.button key={track.name} variants={fadeUp}
-                  onClick={() => navigate('/login')}
-                  className="rounded-[10px] p-4 text-left transition-all active:scale-[0.98]" style={{ background: track.bg, border: `0.5px solid ${track.border}` }}>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-3" style={{ background: track.iconBg }}>
-                    <Icon size={18} color={track.text} />
+          {/* ── Right: chat mockup with floating chips ── */}
+          <motion.div variants={fadeUp} className="relative">
+            <div style={{
+              background: 'linear-gradient(135deg, #FFC9AE 0%, #FFB58E 100%)',
+              borderRadius: 28,
+              padding: 28,
+              boxShadow: '0 30px 60px rgba(232, 93, 58, 0.2)',
+              transform: 'rotate(-1.2deg)',
+              position: 'relative',
+            }}>
+              {/* Floating "+10 XP earned" chip */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.85, rotate: 6 }}
+                animate={{ opacity: 1, scale: 1, rotate: 4 }}
+                transition={{ delay: 0.6, duration: 0.4 }}
+                style={{
+                  position: 'absolute', top: -16, right: -10,
+                  background: '#fff', borderRadius: 999,
+                  padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 12, fontWeight: 700,
+                  boxShadow: '0 8px 22px rgba(19,19,26,0.12)',
+                  zIndex: 2,
+                }}>
+                <span style={{ fontSize: 14 }}>✨</span>
+                <span style={{ color: '#13131A' }}>+10 XP earned</span>
+              </motion.div>
+
+              {/* Chat card */}
+              <div style={{
+                background: '#fff',
+                borderRadius: 18,
+                padding: 16,
+                transform: 'rotate(1.2deg)',
+              }}>
+                {/* Pa header */}
+                <div className="flex items-center gap-2.5 pb-3" style={{ borderBottom: '1px solid #F3EFE4' }}>
+                  <PaMascot size={32} mood="idle" />
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>Pa · Class 9 Physics</div>
+                    <div style={{ fontSize: 11, color: '#36D399', display: 'flex', alignItems: 'center', gap: 5, marginTop: 1 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#36D399' }} />
+                      <span style={{ color: '#8A8A95' }}>Online · ready to help</span>
+                    </div>
                   </div>
-                  <p className="text-[15px] font-semibold mb-1" style={{ color: track.text }}>{track.name}</p>
-                  <p className="text-[13px] leading-[1.5]" style={{ color: '#4B5563' }}>{track.desc}</p>
-                </motion.button>
-              )
-            })}
+                </div>
+
+                {/* Student bubble */}
+                <div className="flex justify-end mt-3">
+                  <div style={{
+                    background: '#13131A', color: '#fff',
+                    borderRadius: '14px 14px 3px 14px',
+                    padding: '10px 14px', fontSize: 13, lineHeight: 1.4,
+                    maxWidth: '88%',
+                  }}>
+                    Pa, why does a ball roll faster downhill?
+                  </div>
+                </div>
+
+                {/* Pa response bubble */}
+                <div className="mt-3" style={{
+                  background: '#FFEFC9',
+                  borderRadius: '14px 14px 14px 3px',
+                  padding: '12px 14px',
+                  fontSize: 13, lineHeight: 1.5, color: '#3A3A45',
+                }}>
+                  Think of gravity as a hand pushing the ball{' '}
+                  <b style={{ color: '#13131A' }}>down the slope</b>. On flat ground, the
+                  push is sideways into the floor — it goes nowhere.
+                  <div className="flex gap-1.5 mt-2.5 flex-wrap">
+                    <Chip>📖 NCERT Ch 9</Chip>
+                    <Chip>gravity</Chip>
+                  </div>
+                </div>
+
+                {/* Pa's whiteboard */}
+                <div className="mt-3" style={{
+                  background: '#FAF8F4',
+                  border: '1px dashed #FFB58E',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                }}>
+                  <div style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                    color: '#E85D3A', marginBottom: 4, textTransform: 'uppercase',
+                  }}>
+                    ✏️ Pa's whiteboard
+                  </div>
+                  <div style={{
+                    fontFamily: "'Kalam', 'Lexend Deca', sans-serif",
+                    fontSize: 14, color: '#13131A', lineHeight: 1.4,
+                  }}>
+                    F = mg sin θ → bigger θ = bigger push!
+                  </div>
+                </div>
+
+                {/* Input bar */}
+                <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2" style={{
+                  background: '#FAF8F4', border: '1px solid #ECECEE',
+                }}>
+                  <Camera size={14} color="#8A8A95" />
+                  <span style={{ flex: 1, fontSize: 12.5, color: '#8A8A95' }}>Ask Pa anything…</span>
+                  <button style={{
+                    width: 26, height: 26, borderRadius: 8,
+                    background: '#E85D3A', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <ArrowRight size={13} color="#fff" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Floating "🔥 7-day streak!" chip */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.85, rotate: -6 }}
+                animate={{ opacity: 1, scale: 1, rotate: -3 }}
+                transition={{ delay: 0.8, duration: 0.4 }}
+                style={{
+                  position: 'absolute', bottom: -14, left: 6,
+                  background: '#13131A', color: '#fff',
+                  borderRadius: 999,
+                  padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 12, fontWeight: 700,
+                  boxShadow: '0 8px 22px rgba(19,19,26,0.25)',
+                }}>
+                <span style={{ fontSize: 14 }}>🔥</span>
+                <span>7-day streak!</span>
+              </motion.div>
+            </div>
           </motion.div>
-        </div>
+        </motion.div>
       </section>
 
-      {/* ═══ BOTTOM CTA ═══ */}
-      <section style={{ background: '#F0FDFA', borderTop: '0.5px solid #5EEAD4' }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-7 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <h2 className="text-[18px] font-bold" style={{ color: '#111827' }}>Ready to study smarter?</h2>
-            <p className="text-[14px]" style={{ color: '#4B5563' }}>Your AI study companion for CBSE, JEE, NEET, and CA.</p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => navigate('/login')}
-              className="text-[15px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95" style={{ background: '#EA580C', color: '#FFF7ED' }}>
-              Start Learning →
-            </button>
-            <button onClick={() => navigate('/login')}
-              className="text-[15px] font-semibold px-5 py-3 rounded-[9px] transition-all active:scale-95" style={{ background: '#0D9488', color: '#F0FDFA' }}>
-              For Schools →
-            </button>
+      {/* ═══ TRUST STRIP ═══ */}
+      <section className="max-w-6xl mx-auto px-5 sm:px-7 pb-10">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-6"
+          style={{ borderTop: '1px solid #ECECEE' }}>
+          <p style={{ fontSize: 13, color: '#3A3A45', lineHeight: 1.5 }}>
+            Backed by NCERT-aligned curriculum · Used in{' '}
+            {SUBJECTS.map((s, i) => (
+              <span key={s}>
+                <b style={{ color: '#13131A' }}>{s}</b>
+                {i < SUBJECTS.length - 1 ? ' · ' : ''}
+              </span>
+            ))}{' '}
+            Class 6–12
+          </p>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span style={{ fontSize: 12, color: '#8A8A95', fontWeight: 600 }}>As seen in</span>
+            {PRESS.map(p => (
+              <span key={p}
+                style={{
+                  fontSize: 11.5, fontWeight: 600, color: '#3A3A45',
+                  padding: '5px 12px', borderRadius: 8,
+                  border: '1px solid #ECECEE', background: '#fff',
+                }}>
+                {p}
+              </span>
+            ))}
           </div>
         </div>
       </section>
-
-      {/* ═══ FOOTER ═══ */}
-      <footer className="bg-white py-6 text-center" style={{ borderTop: '0.5px solid #E5E7EB' }}>
-        <p className="text-[12px]" style={{ color: '#9CA3AF' }}>Padee.ai · AI-powered learning for every Indian student · © 2026</p>
-      </footer>
     </div>
+  )
+}
+
+function Stat({ number, label }: { number: string; label: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>{number}</div>
+      <div style={{ fontSize: 12.5, color: '#8A8A95', marginTop: 2 }}>{label}</div>
+    </div>
+  )
+}
+
+function RatingStat() {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-0.5">
+          {[0, 1, 2, 3, 4].map(i => (
+            <Star key={i} size={13} color="#FFB547" fill="#FFB547" />
+          ))}
+        </div>
+        <span style={{ fontSize: 16, fontWeight: 700 }}>4.8</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: '#8A8A95', marginTop: 2 }}>Play Store · 2.3k reviews</div>
+    </div>
+  )
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 600, color: '#8A5A00',
+      background: '#fff', border: '1px solid #FFD98A',
+      padding: '3px 8px', borderRadius: 999,
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+    }}>
+      {children}
+    </span>
   )
 }

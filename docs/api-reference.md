@@ -42,22 +42,38 @@ Returns the authenticated user's profile.
 
 ### POST /api/user/onboarding
 
-Sets the student's class, subjects, and track after signup.
+Saves onboarding choices. **Partial-update safe** — only fields explicitly sent are persisted, so `/settings` reuses this endpoint to update one section at a time without nuking the rest.
 
 **Auth**: Bearer token
 
-**Request body**:
+**Request body** (all fields optional, but at least one needed for the call to do anything):
 ```json
 {
   "className": 10,
-  "subjects": ["Physics", "Chemistry", "Biology", "Mathematics"],
-  "track": "school"
+  "board": "CBSE",
+  "subjects": ["Mathematics", "Science", "English", "Social Studies", "Hindi"],
+  "track": "school",
+  "dailyPledgeXp": 35,
+  "studyDays": ["mon", "tue", "wed", "thu", "fri"]
 }
 ```
 
+**Validation**:
+- `board` ∈ {CBSE, ICSE, IGCSE, IB, STATE, OTHER}
+- `dailyPledgeXp` ∈ [5, 500]
+- `studyDays` filtered to valid weekday codes (mon..sun); empty → NULL
+
 **Response**: `{ "ok": true }`
 
-**Side effects**: Updates `profiles.class_level` and `profiles.active_track`. Deletes existing `student_subjects` rows and inserts new ones.
+**Side effects**: Updates `profiles` (only the fields sent). Replaces `student_subjects` rows when `subjects` is sent (otherwise leaves them untouched).
+
+### POST /api/user/replan-acknowledged
+
+Resets `student_streaks.pledged_days_missed` to 0 — called when the student dismisses the home re-plan check-in banner ("Got it"). Idempotent.
+
+**Auth**: Bearer token
+
+**Response**: `{ "ok": true }`
 
 ### GET /api/user/home-data
 
@@ -231,11 +247,48 @@ Report an incorrect AI answer for teacher review.
 
 ### GET /api/ai/usage
 
-Returns today's doubt count. Phase 1: unlimited (limit: -1 signals no cap).
+Returns today's doubt count (IST-bound day window). Phase 1: unlimited (limit: -1 signals no cap).
 
 **Auth**: Bearer token
 
 **Response**: `{ "count": 5, "limit": -1 }`
+
+### POST /api/ai/tts
+
+Server proxy to Google Cloud Text-to-Speech. Returns raw `audio/mpeg`. In-memory LRU cache (500 entries, keyed by `sha256(text::voice)`). Cached entries are served immediately with `X-TTS-Cache: hit`. 5000-char per-call cap.
+
+**Auth**: Bearer token
+
+**Request body**:
+```json
+{
+  "text": "Newton's third law states...",
+  "voice": "en-IN-Wavenet-D"  // optional, defaults to LLM_TTS_VOICE env var
+}
+```
+
+**Response (success)**: `audio/mpeg` body. Headers: `X-TTS-Cache: hit | miss`, `Cache-Control: public, max-age=3600`.
+
+**Response (`GOOGLE_TTS_API_KEY` unset)**: 501 with `{ "error": "TTS not configured", "fallbackToBrowser": true }` — frontend `useSpeech` hook falls back to `window.speechSynthesis`.
+
+### GET /api/ai/tts/stats
+
+Cache + cost telemetry. Useful for tracking Google TTS spend.
+
+**Auth**: Bearer token
+
+**Response**:
+```json
+{
+  "cacheEntries": 137,
+  "cacheCap": 500,
+  "totalCacheHits": 412,
+  "totalBytesServed": 9382711,
+  "totalCharsBilled": 84210,
+  "voice": "en-IN-Wavenet-D",
+  "configured": true
+}
+```
 
 ### POST /api/ai/evaluate
 
@@ -243,11 +296,117 @@ Returns today's doubt count. Phase 1: unlimited (limit: -1 signals no cap).
 
 ### POST /api/ai/worksheet
 
-**Status**: 501 Not Implemented (stub for worksheet generation)
+Generates a structured worksheet from a free-text teacher brief. Optional `validate=true` (default) runs each question through a Llama-8b validator and regenerates flagged ones via gpt-4o-mini.
+
+**Auth**: Bearer token
+
+**Request body**: `{ "prompt": "10 questions on Ohm's Law for Class 10, mixed difficulty", "validate": true }`
+
+**Response**: `{ "worksheet": { ...structured sections... }, "validationStats": { "total": 10, "regenerated": 1 } }`
 
 ### POST /api/ai/mimic
 
-**Status**: 501 Not Implemented (stub for CBSE paper mimic)
+CBSE Paper Mimic — upload a past paper PDF, infer structure, generate a fresh paper of the same shape.
+
+### POST /api/ai/worksheet/save | GET /api/ai/worksheet/list | GET /api/ai/worksheet/:id
+
+Teacher worksheet library — save, list, and fetch saved worksheets (teacher-scoped). All bearer-auth.
+
+---
+
+## Test mode
+
+### GET /api/test/list
+
+Returns the student's available tests (teacher-assigned upcoming, completed history) + AI recommendation. **Auth**: Bearer.
+
+**Response**:
+```json
+{
+  "classLevel": 10,
+  "selectedSubjects": ["Physics", "Chemistry", "Biology"],
+  "aiRecommendation": { "subject": "Physics", "questionCount": 10, "difficulty": "easy", "reason": "Your Physics accuracy is 43%..." },
+  "assignments": [{ "id": "...", "title": "...", "subject": "Physics", "question_count": 10, "difficulty": "medium", "deadline": "...", "completed": false }],
+  "completedTests": [{ "id": "...", "title": "...", "score": 7, "total_marks": 10, "completed_at": "..." }]
+}
+```
+
+### POST /api/test/start
+
+Starts a timed test session. Returns questions + total seconds. **Auth**: Bearer.
+
+**Request body** (one of three modes):
+- `{ mode: 'teacher', assignmentId: '...' }` — assignment-driven (questions come from the assignment row)
+- `{ mode: 'self', subject, classLevel, questionCount, difficulty }` — student-picked, generates fresh questions
+- `{ mode: 'ai_recommended', subject, classLevel, questionCount, difficulty }` — Pa-recommended
+
+**Response**: `{ mode, title, subject, classLevel, difficulty, questions, secondsPerQuestion, totalSeconds, assignmentId? }`
+
+### POST /api/test/complete
+
+Submits answers, scores, awards XP, generates Pa's Debrief. **Auth**: Bearer.
+
+**Request body**: `{ mode, subject, classLevel, difficulty, title, assignmentId?, questions, answers, timeTakenSeconds }`
+
+**Response**: `{ sessionId, accuracy, correctCount, totalQuestions, xpAwarded, bonusAwarded, aiInsights: { summary, topicStats[], weakTopics[] }, questions }`
+
+**Side effects**: writes `test_sessions` row, awards XP via `student_xp`, updates `subject_mastery`, calls `update_concept_mastery()` per question, triggers `recomputeForStudent()` async.
+
+### GET /api/test/session/:id
+
+Returns a completed session for review. **Auth**: Bearer.
+
+### POST /api/test/assign | GET /api/test/assignments | POST /api/test/assignments/:id/deactivate | POST /api/test/assign/preview
+
+Teacher-side endpoints for assigning tests to a class. All teacher-role gated.
+
+---
+
+## Recommendations
+
+### GET /api/recommendations/today
+
+Returns the student's cached daily recommendation (Boss Quest hero + supporting cards). **Auth**: Bearer.
+
+**Response**: `{ hero_type, hero_concept_slug, hero_copy, hero_detail, supporting_cards }`. Hero types: `fix_critical | fix_attention | revise | next_chapter | none`.
+
+### POST /api/recommendations/acted-on
+
+Marks today's recommendation as acted-on (won't re-surface). **Auth**: Bearer.
+
+### POST /api/recommendations/recompute
+
+Admin-only. Triggers `recomputeAll()` — recomputes recommendations for every active student, aggregates class concept health, writes teacher alerts. Use the `X-Admin-Password` header OR a teacher/admin Bearer token.
+
+---
+
+## Teacher
+
+All endpoints below are teacher-role gated.
+
+### GET /api/teacher/dashboard
+
+Top stats + concept hotspots + recent activity for the command-centre dashboard.
+
+### GET /api/teacher/alerts | POST /api/teacher/alerts/:id/dismiss | POST /api/teacher/alerts/:id/acted-on
+
+Real-time alert feed (red/amber/green) — read, dismiss, mark acted-on.
+
+### GET /api/teacher/students | GET /api/teacher/student/:id
+
+Class roster + individual student profile (mastery, weak concepts, recent activity).
+
+### GET /api/teacher/review-queue | POST /api/teacher/review/:id
+
+Flagged-response review queue for triaging student reports.
+
+---
+
+## Concept catalog (admin)
+
+### POST /api/concepts/extract | GET /api/concepts/list | PATCH /api/concepts/:slug | POST /api/concepts/:slug/publish | POST /api/concepts/bulk-publish | DELETE /api/concepts/:slug | POST /api/concepts/manual
+
+Concept catalog CRUD + AI extraction from NCERT chapters. Either `X-Admin-Password` header (admin panel) OR Bearer token with `role=admin/teacher`.
 
 ---
 
@@ -262,7 +421,15 @@ Returns the admin-configurable application settings.
 **Response**:
 ```json
 {
-  "xpRewards": { "textDoubt": 10, "photoDoubt": 10, "practiceSession": 15, "testCompletion": 25, "streakBonus": 5 },
+  "xpRewards": {
+    "textDoubt": 10,
+    "photoDoubt": 10,
+    "practiceSession": 15,
+    "practiceDifficulty": { "easy": 3, "medium": 6, "hard": 10 },
+    "practiceHintPenalty": 2,
+    "testCompletion": 25,
+    "streakBonus": 5
+  },
   "dailyGoal": 50,
   "dailyChallenge": { "questionCount": 3, "xpReward": 30, "preferWeakSubject": true },
   "badges": [{ "id": "first_doubt", "name": "First Doubt", "icon": "...", "condition": "doubts >= 1" }],

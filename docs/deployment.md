@@ -28,13 +28,15 @@ These variables control which model is used for each task. The backend reads the
 |----------|-------------------|-------------|
 | `LLM_DOUBT_SIMPLE` | `groq/llama-3.3-70b-versatile` | Text doubt solver (main model) |
 | `LLM_DOUBT_VISION` | `groq/meta-llama/llama-4-scout-17b-16e-instruct` | Photo doubt solver (vision model) |
-| `LLM_PRACTICE_GEN` | `groq/llama-3.1-8b-instant` | MCQ question generation |
+| `LLM_PRACTICE_GEN` | `groq/llama-3.3-70b-versatile` | MCQ question generation (switched from 8b for speed) |
 | `LLM_VISUAL_EXPLAIN` | `gpt-4o` | HTML/SVG visual explanation generation |
-| `LLM_EVALUATION` | `gpt-4o-mini` | Descriptive answer evaluation (not yet wired) |
-| `LLM_WORKSHEET` | `gpt-4o-mini` | Worksheet generation (not yet wired) |
-| `LLM_HOME_CURATOR` | `groq/llama-3.1-8b-instant` | Home screen content curation (not yet wired) |
-| `LLM_VALIDATION` | `groq/llama-3.1-8b-instant` | Worksheet validation agent (not yet wired) |
-| `LLM_FALLBACK` | `gpt-4o-mini` | Fallback model if primary fails (not yet wired) |
+| `LLM_TEST_INSIGHTS` | `gpt-4o-mini` | Pa's Debrief on test results (~₹0.05/test) |
+| `LLM_RECOMMENDATION` | `gpt-4o-mini` | Hero card copy in concept-level recommendation engine |
+| `LLM_EVALUATION` | `gpt-4o-mini` | Descriptive answer evaluation (501 stub) |
+| `LLM_WORKSHEET` | `gpt-4o-mini` | Worksheet generation |
+| `LLM_VALIDATION` | `groq/llama-3.1-8b-instant` | Worksheet validation agent |
+| `LLM_FALLBACK` | `gpt-4o-mini` | Used by Groq → OpenAI fallback chain |
+| `LLM_HOME_CURATOR` | `groq/llama-3.1-8b-instant` | Reserved (not yet wired) |
 
 ### Embeddings
 
@@ -47,7 +49,14 @@ These variables control which model is used for each task. The backend reads the
 | Variable | Required | Provider |
 |----------|----------|----------|
 | `GROQ_API_KEY` | Yes | Groq (for Llama models) |
-| `OPENAI_API_KEY` | Yes | OpenAI (for embeddings + visual generation) |
+| `OPENAI_API_KEY` | Yes | OpenAI (for embeddings + visual + Pa's debrief + worksheet + recommendation) |
+| `GOOGLE_TTS_API_KEY` | No | Google Cloud Text-to-Speech (Listen button on AI answers + Pa's debrief). Optional — frontend falls back to browser Web Speech API when unset. Restrict the key to the **Cloud Text-to-Speech API** in GCP. |
+
+### TTS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_TTS_VOICE` | `en-IN-Wavenet-D` | Google Cloud TTS voice. Other options: `en-IN-Wavenet-A/B/C`, `en-IN-Neural2-A/B/C/D`, `en-IN-Standard-A/B/C/D`. Full list: https://cloud.google.com/text-to-speech/docs/voices |
 
 ---
 
@@ -58,17 +67,23 @@ These variables control which model is used for each task. The backend reads the
 3. Enable email auth with autoconfirm:
    - Dashboard -> Authentication -> Providers -> Email -> Enable
    - Or use the Management API to enable autoconfirm
-4. Run all 6 migrations in order:
+4. Run all 11 migrations in order:
 
 ```bash
 # Using Supabase CLI
 supabase db push
 
 # Or manually in the SQL Editor (Dashboard -> SQL Editor):
-# Run each file in supabase/migrations/ in order: 001, 002, 003, 004, 005, 006
+# Run each file in supabase/migrations/ in order: 001 through 011
 ```
 
-**Critical**: Migration 006 MUST be applied after 003. Without it, the semantic cache RPCs are broken (see [database.md](database.md) for details).
+**Critical migrations** (platform breaks without these):
+- **006** — fixes the type cast in `search_response_cache` / `search_ncert_chunks` RPCs. Without it, the semantic cache silently returns zero rows.
+- **009** — adds `profiles.board`. Onboarding step 1 fails without it.
+- **010** — adds `profiles.daily_pledge_xp` + `profiles.study_days`. Onboarding step 3 fails without it.
+- **011** — adds `student_streaks.pledged_days_missed`. Pledge-aware streak engine 500s on every XP award without it.
+
+All migrations are idempotent (`add column if not exists` / `create table if not exists`), safe to re-run.
 
 ---
 

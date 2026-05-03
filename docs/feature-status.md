@@ -1,7 +1,7 @@
 # Feature Status
 
-_Last updated: April 21, 2026_
-_Current state: Phase 1 v3 UI, working. Teacher side ~95% complete (review queue, student profile, paper mimic, real command centre all shipped Apr 19-20). Ask AI streaming bug fixed._
+_Last updated: April 26, 2026_
+_Current state: Full student journey is end-to-end **v4 and shipped** — landing → signup → 3-step onboarding → home → ask → learn → practice → tests (list/active/results) → settings → progress. v3 fallbacks deleted. Teacher side is on real backend with v3 visuals (v4 upgrade is the next planned work). Parent dashboard is a `Navigate to /home` placeholder pending Phase 2._
 
 This document tracks which Padee.ai features are **built, partially built, or pending**. For technical deep-dives on individual features, see [`features.md`](./features.md).
 
@@ -19,7 +19,7 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 
 | Feature | Status | Notes |
 |---|---|---|
-| Supabase project + 8 migrations | ✅ | `ifxekwenhidotyqlrpty`, us-east-1 |
+| Supabase project + 11 migrations | ✅ | `ifxekwenhidotyqlrpty`, us-east-1 |
 | Real auth (signup/login) | ✅ | Email autoconfirm via Management API |
 | Role-based routing | ✅ | student/teacher/parent → different dashboards |
 | Protected routes | ✅ | `ProtectedRoute` wrapper |
@@ -30,15 +30,15 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 
 ---
 
-## 2. Onboarding
+## 2. Onboarding (v4, 3 steps)
 
 | Feature | Status | Notes |
 |---|---|---|
-| 3-step flow (Class → Subjects → Track) | ✅ | `/onboarding/class` → `subjects` → `track` |
+| Step 1 — Class (8-12) + Board picker | ✅ | CBSE / ICSE / IGCSE / IB / STATE / OTHER. CBSE pre-selected with "Most common" badge. Persists via migration 009. |
+| Step 2 — Subjects with Pa auto-select | ✅ | 5 standard CBSE subjects auto-selected (Class 8-10), 4 for 11-12 science stream. Reset button restores defaults. |
+| Step 3 — Track + Daily Pledge + Study Days | ✅ | School Learning enabled; JEE/NEET/CA show "Coming soon" disabled. XP pledge tile picker (15/35/60/100). Day picker (Mon-Fri pre-selected). Persists via migration 010. |
 | Commerce subjects for Class 11-12 | ✅ | Economics, Accounts, Business Studies |
-| Track selection (School/JEE/NEET/CA) | ✅ | Writes `active_track` on profile |
-| Writes `student_subjects` rows | ✅ | One row per enrolled subject |
-| 4-step flow with Board selection | 🚫 | Was part of v4 UI, rolled back |
+| Partial-update-safe `/api/user/onboarding` | ✅ | Only writes fields explicitly sent — reused by `/settings`. |
 
 ---
 
@@ -82,6 +82,10 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 | localStorage persistence | ✅ | Last 30 messages |
 | Photo doubt (Llama-4-Scout) | ✅ | Skips cache + RAG |
 | Cold-start: 6 action cards + try-asking | ✅ | |
+| **KaTeX math rendering** | ✅ | LLM uses `$...$` / `$$...$$`, frontend renders via `MathText` (KaTeX). Server-side validation strips malformed `$` before caching. |
+| **Listen to answer (TTS)** | ✅ | Google Cloud TTS (en-IN-Wavenet-D) via `/api/ai/tts` with browser Web Speech fallback. Pa mascot bobs while audio plays. |
+| **Quiz Me as inline widget** | ✅ | `InlineQuiz` component fetches 1 MCQ from `/api/ai/practice` with the answer as context. No round-trip through the doubt LLM. |
+| **Challenge Me with hidden solution** | ✅ | Structured `[problem]\n---SOLUTION---\n[steps]` response; frontend gates the solution behind a "Show solution" reveal button. |
 | Voice input (mic + Whisper) | ❌ | |
 | Share doubt / copy as shareable card | ❌ | |
 
@@ -101,33 +105,47 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 
 ---
 
-## 6. Practice MCQ
+## 6. Practice MCQ (`PracticeRunScreenV4`)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Inline "Quiz me" in Ask AI | ✅ | Contextual single MCQ from chat |
-| Full practice screen (`/practice`) | ✅ | Loading → quiz → results flow |
-| `POST /api/ai/practice/complete` | ✅ | Saves session, awards XP, updates `subject_mastery` |
+| Inline "Quiz me" in Ask AI | ✅ | `InlineQuiz` widget — 1 MCQ from chat context |
+| Full practice screen (`/practice`) | ✅ | Loading → questions with state strip → results |
+| Per-question difficulty + XP chip | ✅ | LLM tags each question easy/medium/hard; XP per correct = 3/6/10 (admin-configurable) |
+| Always-visible hint per question | ✅ | LLM-generated hint that points at method/formula without revealing answer |
+| Question progress strip | ✅ | Live state per tile: correct ✓ / wrong ✗ / skipped — / current / upcoming |
+| Skip button | ✅ | Counts as wrong, 0 XP, advances |
+| Per-question Report → `flagged_responses` | ✅ | Reason chips modal |
+| KaTeX in question + options + hint | ✅ | |
+| Concept slug per question → mastery update | ✅ | `update_concept_mastery()` RPC per correct answer |
+| `POST /api/ai/practice/complete` | ✅ | Sums XP by difficulty, updates `subject_mastery` + `concept_mastery`, triggers `recomputeForStudent()` |
 | Results screen (accuracy ring, XP, retry) | ✅ | |
 | Pre-loading from home screen | ✅ | Cached in localStorage for instant start |
 | Adaptive difficulty | 🚫 | Phase 2 — needs concept-tagged question bank |
 
 ---
 
-## 7. Test Mode
+## 7. Test Mode (v4)
 
 | Feature | Status | Notes |
 |---|---|---|
 | Migration 007 (`test_assignments`, extended `test_sessions`) | ✅ | |
-| **Self-picked test** (subject + length + difficulty) | ✅ | |
-| **AI-recommended test** (weakest subject) | ✅ | |
-| **Teacher-assigned test** (pre-generated questions) | ✅ | |
-| Timer + auto-submit on expiry | ✅ | |
-| Question navigation drawer + flag for review | ✅ | |
-| Results screen with AI insights | ✅ | Per-question review, weak topic tags |
+| **TestListScreenV4** with 3 test types visible by default | ✅ | Teacher-assigned, Pa Recommends, Build Your Own |
+| Self-picked test (subject + length 5/10/15 + difficulty) | ✅ | `mode: 'self'` |
+| AI-recommended test (weakest subject, auto-tuned difficulty) | ✅ | `mode: 'ai_recommended'` |
+| Teacher-assigned test (pre-generated questions) | ✅ | `mode: 'teacher'`, with Prep + Take test buttons |
+| **TestActiveScreenV4** — minimal "test mode" top bar with timer | ✅ | No nav pills; student is locked in |
+| Timer color shifts (green → amber <3min → coral <1min) + auto-submit | ✅ | |
+| Question navigation drawer + flag-for-review | ✅ | |
+| Submit + exit confirm modals | ✅ | beforeunload guard, no mid-test save |
+| KaTeX in question + options | ✅ | |
+| **TestResultsScreenV4** — full v4 redesign | ✅ | Hero ring + tone-aware grade headline + question-by-question grid + What went wrong + Concept Mastery Updated + collapsed full review |
+| **Pa's Debrief sticky sidebar** | ✅ | Multi-paragraph diagnosis (assessment + misconception + correction + analogy + next-step). gpt-4o-mini via `LLM_TEST_INSIGHTS`. Per-topic stat chips above prose. Listen button reads aloud. |
 | XP award + bonus for ≥80% | ✅ | Admin-configurable thresholds |
 | Teacher-side: assign test screen | ✅ | AI preview + publish + deactivate |
 | Teacher submission stats per assignment | ✅ | Submissions count + average score |
+| Re-learn / Explain Q CTAs on results | ✅ | Routes to Learn (with topic) and Ask Pa (with question pre-filled) |
+| Class rank / class average / last-attempt comparison | ❌ | Frontend renders if backend supplies; backend doesn't yet |
 | "Prep for test" flow (exam date → plan) | ❌ | Stub only in Ask AI cold-start |
 
 ---
@@ -142,7 +160,9 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 | Celebration queue + host | ✅ | Mounted in `StudentLayout` |
 | `refreshUser()` after XP awards | ✅ | Triggers detection automatically |
 | 8 admin-configurable badges | ✅ | Condition language: `doubts >= N`, `streak >= N`, etc. |
-| Streak automation | ✅ | Increment / reset / bonus XP for streak >= 2 |
+| **Pledge-aware streak engine** | ✅ | Rest day → no change. Pledged day with no missed pledged days → +1. Pledged day after misses → freeze (not reset). `pledged_days_missed` counter drives "miss 3 → re-plan check-in". |
+| **IST-bound day boundaries** | ✅ | `server/lib/dateIST.ts` — all "today / yesterday" comparisons use IST midnight, not UTC. Affects streak engine, home-data today's-XP, /api/ai/usage. |
+| Streak bonus XP | ✅ | Once-per-day, only when streak actually grows (frozen streaks don't earn bonus). Default 5 XP, admin-configurable. |
 
 ---
 
@@ -298,28 +318,70 @@ This document tracks which Padee.ai features are **built, partially built, or pe
 
 ---
 
-## 16. UI Redesign (v4)
+## 16. UI Redesign (v4) — student journey is end-to-end v4
 
 | Feature | Status | Notes |
 |---|---|---|
-| v4 UI Spec (Lexend Deca + vermillion + topbar) | 🚫 | **Rolled back April 17, 2026. Future implementation will be step-by-step, not all-at-once.** |
-| Right AI panel (380px persistent) | 🚫 | |
-| Bottom bar (subjects + XP + badges) | 🚫 | |
-| Concept-level home cards (4 types) | ✅ | Built in Phase 1 code, works under v3 UI |
+| v4 UI Spec (Lexend Deca + coral + dark topnav) | ✅ | **All student screens shipped. v3 fallbacks deleted Apr 26.** Flag mechanism removed. |
+| Landing page v4 | ✅ | Hero with Pa chat mockup, KaTeX equation in handwritten Kalam font, trust strip |
+| Login v4 | ✅ | Two-column with dark stats panel + Pa quote pill |
+| Signup v4 | ✅ | Role picker (Student / Parent / Teacher), DPDP-aligned consent checkbox, password strength meter |
+| Onboarding (3 steps) v4 | ✅ | Class+Board / Subjects with Pa auto-select / Goals+Pledge+Days |
+| Home v4 | ✅ | Boss Quest hero, 3-up row, weak spots, upcoming tests, right rail, footer strip, re-plan banner |
+| Ask AI v4 | ✅ | Pa identity, dark student bubbles, paper-bg AI text, 8 chips, KaTeX math, Listen button, InlineQuiz, ChallengeView, VisualExplanationBubble |
+| Learn v4 | ✅ | Subject pill tabs, dark subject hero with donut, Pa cue banner, chapter rows with status chips |
+| Tests v4 (list) | ✅ | 3 sections always visible: TEACHER-ASSIGNED, PA RECOMMENDS, BUILD YOUR OWN. Upcoming/Past tabs. |
+| Tests v4 (active timed exam) | ✅ | Minimal "test mode" top bar, question strip + flag + drawer, KaTeX, submit/exit confirms |
+| Tests v4 (results) | ✅ | Hero ring + tone-aware grade + question grid + What went wrong + Pa's Debrief sticky sidebar + Concept Mastery row |
+| Practice run v4 | ✅ | Question strip + per-question difficulty/XP/hint/skip/report, KaTeX |
+| Progress v4 | ✅ | Dark profile hero, weekly XP bars, Pa's read heuristic, mastery rows |
+| Settings v4 | ✅ | Daily pledge / Study days / Goal track / Subjects (each saves independently); Class/Board read-only |
+| Shared right rail + footer | ✅ | PaStatusCard, QuickQuestCard, AskPaSuggestions, ResumeCard, FooterStrip |
+| HomeTopNav user-chip dropdown | ✅ | Profile + Settings & plan + Logout |
+| Pa mascot speech sync | ✅ | `syncWithSpeech` prop subscribes to global SpeechContext; mood = "speaking" + mouth-bob while audio plays |
+| Concept-level home cards (4 types) | ✅ | HeroCard / WeakConceptCard / RevisionCard / NextToLearnCard. Falls back to keyword rec for new users. |
 
 ---
 
 ## 17. Phase 2 (Intentionally Deferred)
 
-| Feature | Status |
-|---|---|
-| School onboarding (invite codes, school codes) | 🚫 |
-| Teacher concept-catalog tools (mark-as-taught, teaching date, flag) | 🚫 |
-| Student diagnosis agent (root-cause across 30+ sessions) | 🚫 |
-| Adaptive difficulty (needs concept-tagged question bank) | 🚫 |
-| Exam readiness score (needs full catalog) | 🚫 |
-| Parent dashboard (currently shares progress screen) | 🚫 |
-| JEE/NEET track dashboard (currently shares home) | 🚫 |
+| Feature | Status | Notes |
+|---|---|---|
+| Parent dashboard (`/parent` v4) | 🚫 | Currently `Navigate to /home` placeholder. **Next planned student-side build.** Parent role fully usable at signup. |
+| JEE / NEET / CA track dashboards | 🚫 | Tracks disabled at signup with "Coming soon" badges. `/jee-neet` redirects to `/home`. |
+| Class 6-7 support | 🚫 | Class picker is 8-12 only. NCERT content + concept catalog also need expansion. |
+| **Teacher v4 UI rebuild** | 🚫 | Backend is complete; teacher screens are still v3 visuals. **Next planned teacher-side work.** |
+| Parent OTP verification (DPDP-grade) | 🚫 | Currently self-attestation at signup. Parent-phone OTP for verifiable consent — needed before B2B school deals. |
+| School onboarding (invite codes, school codes) | 🚫 | No `schools` table, no invite-code flow. |
+| Teacher concept-catalog tools (mark-as-taught, teaching date, flag) | 🚫 | |
+| Student diagnosis agent (root-cause across 30+ sessions) | 🚫 | |
+| Adaptive difficulty (needs concept-tagged question bank) | 🚫 | |
+| Exam readiness score (needs full catalog) | 🚫 | |
+| Hindi support via Qwen-2.5-72B | 🚫 | |
+| Pre-built SVG templates for top 30 CBSE concepts | 🚫 | All visuals currently LLM-generated. |
+| Automated nightly recompute cron | 🚫 | Currently manual admin trigger. Railway scheduled job pending. |
+
+---
+
+## 19. Recently shipped (Apr 24-26, 2026 sprint)
+
+Major work from the spring v4 cleanup sprint:
+
+| Item | Status | Notes |
+|---|---|---|
+| Practice run screen (v4 redesign) | ✅ | Per-question difficulty/XP/hint/skip; concept slug routes mastery |
+| KaTeX math rendering across student journey | ✅ | LLM prompts flipped from Unicode-only to LaTeX. Server-side `validateLatex()` strips malformed `$` before caching. |
+| Voice TTS (Google Cloud en-IN-Wavenet-D) | ✅ | `/api/ai/tts` proxy + in-memory LRU cache + browser fallback. SpeechContext singleton drives Pa mascot mouth-bob. |
+| `latexToSpeech.ts` unparser | ✅ | TTS reads "F equals m g sine theta" not "dollar F equals m g sine theta dollar" |
+| Re-plan check-in banner on home | ✅ | Surfaces when `pledged_days_missed >= 3`; Got it button hits `POST /api/user/replan-acknowledged` |
+| Settings page (`/settings`) | ✅ | Edit pledge / days / track / subjects independently; class+board read-only |
+| Pledge-aware streak engine | ✅ | Migration 011. Rest days don't break streak; missed pledged days freeze (not reset). |
+| IST-bound day boundaries | ✅ | `server/lib/dateIST.ts`. All today/yesterday comparisons use IST midnight. |
+| Tests list — three test types restored (teacher / Pa rec / self-pick) | ✅ | All visible by default, all route through `/api/test/start` real timed exam. |
+| TestActiveScreenV4 + TestResultsScreenV4 | ✅ | Real timed exam UI + redesigned results with Pa's Debrief sticky sidebar |
+| Pa's Debrief multi-paragraph diagnosis | ✅ | gpt-4o-mini, structured 3-paragraph prompt (assessment + diagnosis + next-step), per-topic stat chips |
+| Repo cleanup — v3 fallbacks deleted | ✅ | 14 files removed across 3 sweeps; `routes.tsx` halved (167 → 84 lines); `NEW_HOME_V4` flag removed entirely. |
+| Migrations 009 / 010 / 011 added | ✅ | board column, daily_pledge_xp + study_days, pledged_days_missed counter |
 
 ---
 
@@ -519,6 +581,90 @@ Defaults: most permissive / simplest option for each. Revisit based on pilot fee
 
 ---
 
+## 20. v3 frontend cleanup (post-v4 rollout)
+
+**Status:** Active pending task, queued for execution **only after every v4 screen has been validated with real users**. Do NOT do this before the pilot — v3 is the safety net.
+
+### What this task covers
+
+Once the `NEW_HOME_V4` flag has been on in production for long enough that we're confident in v4 (Home, Ask AI, and any other screens redesigned subsequently), delete the v3 frontend code entirely. Single-source the codebase on v4.
+
+### Preconditions (must ALL be true before starting)
+
+- ✅ Every student-facing screen has a v4 replacement OR an explicit decision to keep v3 indefinitely
+- ✅ `NEW_HOME_V4=true` has been the default for ≥ 2 weeks of pilot usage
+- ✅ No production telemetry shows a regression on v4 vs v3 (helpful rate, doubts per day, streak retention)
+- ✅ No open bug in the v4 screens that requires falling back to v3
+- ✅ Founder and first teacher have independently signed off on the v4 flow
+
+### Cleanup checklist
+
+#### 20A. Delete v3 screen files that have v4 replacements
+
+| File | LOC | When v4 done |
+|---|---|---|
+| `src/screens/StudentHomeScreen.jsx` | ~585 | Home v4 validated (in flight) |
+| `src/screens/DoubtSolverScreen.jsx` | ~1400 | Ask AI v4 validated (in flight) |
+| Future screens as they're redesigned | — | Per-screen decision |
+
+#### 20B. Delete v3-only components no longer referenced
+
+Run `grep -rl '<ComponentName'` to confirm zero usages before deleting:
+
+- `src/components/recommendations/RecommendationCards.jsx` (HeroCard, SupportingCardsRow, WeakConceptCard, RevisionCard, NextToLearnCard — replaced by `home-v4/BossQuestCard`, `WeakSpotsCard`, QuestCard row)
+- `src/components/AIOrb.jsx` — if Ask AI is the only consumer, replace with `PaMascot`
+- `src/components/BottomNav.jsx` — only used by v3 mobile student shell; delete when all student screens are full-bleed v4
+- `src/components/teacher/TeacherRightPanel.tsx` — still used, keep
+- `src/components/XPToast.jsx` + `src/components/LevelUpOverlay.jsx` + `src/components/celebrations/*` — cross-screen, keep
+- `src/data/mockData.js` — audit; likely deletable (v3 fallback data)
+
+#### 20C. Simplify routing
+
+- `src/routes.tsx` — remove `NEW_HOME_V4` conditional branches; make v4 the single definition
+- `src/config/flags.ts` — delete entirely (no flags left) OR repurpose for future flags
+- `.env.example` — remove `VITE_NEW_HOME_V4=false` line
+- Dev instructions in `CLAUDE.md` — update
+
+#### 20D. Simplify the student shell
+
+- If every student screen is full-bleed v4 (owning its own `HomeTopNav` + `FooterStrip`), **`src/layouts/StudentLayout.tsx` can be deleted**
+- Or: refactor `StudentLayout` to just be a thin `ProtectedRoute` wrapper, keeping it as a common protection layer but without any chrome
+
+#### 20E. Clean up CSS
+
+- Audit `src/index.css` — any v3-only tokens or global rules (Forest Teal `.brand.*` palette not referenced by v4) can be deleted or marked deprecated
+- `tailwind.config.js` — v3 uses DM Sans globally; if v4 is the only product, consider switching the global font to Lexend Deca. Check with every teacher + admin screen first since they still use DM Sans / the v3 Tailwind palette.
+
+#### 20F. Delete v3 UI doc
+
+- `docs/ui-spec-current.md` — update or retire (it describes v3 reality as the source of truth for Claude Design)
+- Create `docs/ui-spec-v4.md` as the new canonical UI spec
+- Keep `docs/features-printable.md` current
+
+### Estimated effort
+
+| Sub-task | Effort |
+|---|---|
+| Delete v3 screens + verify no breaks | 2 hours |
+| Delete v3-only components | 1 hour |
+| Simplify routes + flags | 30 min |
+| Shell decision + cleanup | 1-2 hours |
+| CSS audit + cleanup | 1 hour |
+| Update docs | 1 hour |
+| **Total** | **~6-8 hours (1 day with testing)** |
+
+### Risk mitigation
+
+- Do it on a branch; one PR per subsection above (so any one can be reverted)
+- After each subsection, full build + smoke test every screen (Home / Ask / Learn / Practice / Tests / Progress / Teacher flows / Admin)
+- Keep `main` shipping green throughout
+
+### When to start
+
+Queued to kick off **after** pilot feedback (Section 18E) AND v4 sign-off. Until then, v3 stays as-is.
+
+---
+
 ## Summary
 
 | Area | Progress |
@@ -530,7 +676,7 @@ Defaults: most permissive / simplest option for each. Revisit based on pilot fee
 | Platform / deployment | **0% — no host selected** |
 | Observability | **LLM-only** (server errors, DB errors, frontend crashes not captured yet) |
 | **Code review / testing** | **0%** — see Section 18 above for the pre-pilot gate |
-| v4 UI | **Rolled back — will be done step-by-step in future** |
+| **v4 UI** | **✅ ~100% (all 5 student screens: Home / Ask AI / Learn / Tests / Progress)** — teacher-side v4 not started |
 
 ---
 

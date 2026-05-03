@@ -11,3 +11,5 @@ supabase/.temp/
 test-results/
 playwright-report/
 playwright/.cache/
+# Local Claude Code IDE settings (per-machine, never shared)
+.claude/

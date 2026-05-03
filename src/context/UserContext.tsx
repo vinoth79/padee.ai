@@ -2,12 +2,14 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode, useC
 import { useAuth } from './AuthContext'
 
 export type Track = 'school' | 'jee' | 'neet' | 'ca'
+export type Board = 'CBSE' | 'ICSE' | 'IGCSE' | 'IB' | 'STATE' | 'OTHER'
 
 interface BadgeInfo { id: string; name: string; icon: string }
 
 interface UserState {
   studentName: string
   studentClass: number
+  board?: Board
   selectedSubjects: string[]
   activeTrack: Track
   xp: number
@@ -159,6 +161,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       ...prev,
       studentName: name,
       studentClass: profile.class_level || prev.studentClass,
+      board: (profile.board as Board) || prev.board,
       activeTrack: (profile.active_track as Track) || prev.activeTrack,
       xp: totalXP,
       ...levelInfo,

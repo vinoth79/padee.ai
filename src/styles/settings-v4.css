@@ -1,0 +1,222 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Settings v4 — student plan / pledge / subjects editor.
+   Scoped to `.home-v4.settings-v4` so tokens compose with shared v4 vars.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.home-v4.settings-v4 .pd-page {
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.home-v4.settings-v4 .settings-page-head {
+  margin-bottom: 18px;
+}
+.home-v4.settings-v4 .settings-back {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12.5px; color: var(--c-muted); font-family: inherit;
+  background: none; border: none; cursor: pointer; padding: 4px 0;
+}
+.home-v4.settings-v4 .settings-back:hover { color: var(--c-ink); }
+
+.home-v4.settings-v4 .settings-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: 1fr;
+  max-width: 760px;
+  padding-bottom: 24px;
+}
+
+/* ── Section card ──────────────────────────────────────────────────────── */
+.home-v4.settings-v4 .settings-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-hair);
+  border-radius: 18px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-flat);
+}
+.home-v4.settings-v4 .settings-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 14px; margin-bottom: 16px;
+}
+.home-v4.settings-v4 .settings-card-title {
+  font-size: 17px; font-weight: 700; color: var(--c-ink);
+  letter-spacing: -0.3px; margin: 0;
+}
+.home-v4.settings-v4 .settings-card-sub {
+  font-size: 13px; color: var(--c-muted); line-height: 1.5;
+  margin: 4px 0 0;
+}
+.home-v4.settings-v4 .settings-card-readonly {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--c-muted-2); text-transform: uppercase;
+  background: var(--c-hair-2); padding: 4px 9px; border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.home-v4.settings-v4 .settings-save-btn {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  background: var(--c-accent); color: #fff;
+  padding: 8px 16px; border-radius: 10px; border: none; cursor: pointer;
+  box-shadow: 0 3px 0 var(--c-accent-d);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  flex-shrink: 0; min-width: 84px;
+}
+.home-v4.settings-v4 .settings-save-btn:active { transform: translateY(1px); }
+.home-v4.settings-v4 .settings-save-btn:disabled {
+  opacity: 0.45; cursor: not-allowed; box-shadow: none;
+}
+
+/* ── Pledge tiles ──────────────────────────────────────────────────────── */
+.home-v4.settings-v4 .pledge-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+}
+@media (min-width: 540px) {
+  .home-v4.settings-v4 .pledge-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.home-v4.settings-v4 .pledge-tile {
+  padding: 14px 10px;
+  background: var(--c-paper);
+  border: 1.5px solid var(--c-hair);
+  border-radius: 12px;
+  text-align: center;
+  font-family: inherit; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.home-v4.settings-v4 .pledge-tile:hover {
+  border-color: var(--c-accent); background: var(--c-card);
+}
+.home-v4.settings-v4 .pledge-tile.is-active {
+  background: var(--c-accent); color: #fff; border-color: var(--c-accent);
+  box-shadow: 0 4px 0 var(--c-accent-d);
+}
+.home-v4.settings-v4 .pledge-xp {
+  font-size: 24px; font-weight: 700; line-height: 1; letter-spacing: -0.5px;
+}
+.home-v4.settings-v4 .pledge-label {
+  font-size: 12.5px; font-weight: 600; margin-top: 5px;
+}
+.home-v4.settings-v4 .pledge-tile.is-active .pledge-label { color: #fff; }
+.home-v4.settings-v4 .pledge-hint {
+  font-size: 10.5px; color: var(--c-muted); margin-top: 2px;
+}
+.home-v4.settings-v4 .pledge-tile.is-active .pledge-hint { color: rgba(255,255,255,0.85); }
+
+/* ── Days row ──────────────────────────────────────────────────────────── */
+.home-v4.settings-v4 .days-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.home-v4.settings-v4 .day-tile {
+  width: 44px; height: 44px; border-radius: 10px;
+  background: var(--c-paper);
+  border: 1.5px solid var(--c-hair);
+  font-family: inherit; font-size: 15px; font-weight: 700;
+  color: var(--c-muted); cursor: pointer;
+  transition: all 0.12s ease;
+}
+.home-v4.settings-v4 .day-tile:hover { border-color: var(--c-amber); color: var(--c-ink); }
+.home-v4.settings-v4 .day-tile.is-active {
+  background: var(--c-amber); color: #5C3A00;
+  border-color: var(--c-amber);
+}
+
+/* ── Track tiles ──────────────────────────────────────────────────────── */
+.home-v4.settings-v4 .track-grid {
+  display: grid; gap: 10px;
+}
+@media (min-width: 600px) {
+  .home-v4.settings-v4 .track-grid { grid-template-columns: 1fr 1fr; }
+}
+.home-v4.settings-v4 .track-tile {
+  position: relative;
+  text-align: left; padding: 14px 16px;
+  background: var(--c-card); border: 1.5px solid var(--c-hair);
+  border-radius: 12px; cursor: pointer; font-family: inherit;
+  transition: all 0.15s ease;
+}
+.home-v4.settings-v4 .track-tile:hover { border-color: var(--track-color); }
+.home-v4.settings-v4 .track-tile.is-active {
+  border-color: var(--track-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--track-color) 14%, transparent);
+}
+.home-v4.settings-v4 .track-name {
+  font-size: 14.5px; font-weight: 700; color: var(--c-ink);
+}
+.home-v4.settings-v4 .track-sub {
+  font-size: 12px; color: var(--c-muted); margin-top: 2px;
+}
+.home-v4.settings-v4 .track-radio {
+  position: absolute; top: 14px; right: 14px;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--c-hair);
+  display: flex; align-items: center; justify-content: center;
+}
+.home-v4.settings-v4 .track-tile.is-active .track-radio { border-color: var(--track-color); }
+.home-v4.settings-v4 .track-radio-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--track-color);
+}
+.home-v4.settings-v4 .track-tile.is-disabled {
+  opacity: 0.55; cursor: not-allowed;
+}
+.home-v4.settings-v4 .track-tile.is-disabled:hover { border-color: var(--c-hair); box-shadow: none; }
+.home-v4.settings-v4 .track-coming-soon {
+  position: absolute; top: 12px; right: 12px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  background: #FFEFC9; color: #8A5A00;
+  border: 1px solid #F6D98A;
+  padding: 2px 8px; border-radius: 999px;
+}
+
+/* ── Subject chips ────────────────────────────────────────────────────── */
+.home-v4.settings-v4 .subjects-chips {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.home-v4.settings-v4 .subject-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 99px;
+  background: var(--c-paper); border: 1.5px solid var(--c-hair);
+  font-family: inherit; font-size: 13px; color: var(--c-ink);
+  cursor: pointer; transition: all 0.15s ease;
+}
+.home-v4.settings-v4 .subject-chip:hover { border-color: var(--c-accent); }
+.home-v4.settings-v4 .subject-chip.is-active {
+  background: var(--c-accent); color: #fff; border-color: var(--c-accent);
+}
+.home-v4.settings-v4 .subject-chip-tick {
+  font-size: 12px; opacity: 0.7;
+}
+.home-v4.settings-v4 .subject-chip.is-active .subject-chip-tick { opacity: 1; }
+
+/* ── About you (read-only) ────────────────────────────────────────────── */
+.home-v4.settings-v4 .about-grid {
+  display: grid; gap: 10px;
+}
+@media (min-width: 480px) {
+  .home-v4.settings-v4 .about-grid { grid-template-columns: 1fr 1fr; }
+}
+.home-v4.settings-v4 .about-row {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px;
+  background: var(--c-paper);
+  border-radius: 10px;
+}
+.home-v4.settings-v4 .about-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--c-muted); text-transform: uppercase;
+}
+.home-v4.settings-v4 .about-value {
+  font-size: 14px; font-weight: 600; color: var(--c-ink);
+}
+
+/* ── Pa nudge at bottom ──────────────────────────────────────────────── */
+.home-v4.settings-v4 .settings-pa-nudge {
+  display: flex; align-items: center; gap: 12px;
+  background: #FFEFC9; border: 1px solid #F6D98A;
+  border-radius: 14px; padding: 12px 16px;
+}
+.home-v4.settings-v4 .settings-pa-nudge p {
+  margin: 0; font-size: 13px; color: #5C3A00; line-height: 1.5;
+}
+
+/* ── Saved-indicator pulse on the save button when state goes 'saved' ── */
+.home-v4.settings-v4 .settings-save-btn:not(:disabled) {
+  /* default state */
+}

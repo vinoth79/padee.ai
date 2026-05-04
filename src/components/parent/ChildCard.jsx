@@ -98,7 +98,7 @@ export default function ChildCard({ child, onClick }) {
           )}
         </div>
         <div className="child-last-active">
-          Active {formatAgo(lastActiveAt)}
+          {lastActiveAt ? `Active ${formatAgo(lastActiveAt)}` : 'No activity yet'}
         </div>
       </div>
     </button>

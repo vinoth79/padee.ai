@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import StudentLayout from './layouts/StudentLayout'
 import { ScreenBridge } from './components/ScreenBridge'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { RoleRoute, HomeForRole } from './components/ui/RoleRoute'
 
 // Auth + onboarding + admin (TypeScript)
 import LoginScreen from './screens/LoginScreen'
@@ -11,6 +12,11 @@ import AdminScreen from './screens/AdminScreen'
 import OnboardingClass from './screens/OnboardingClass'
 import OnboardingSubjects from './screens/OnboardingSubjects'
 import OnboardingTrack from './screens/OnboardingTrack'
+
+// v5 Sprint 1 — school onboarding + dashboard + invite redemption
+import SchoolOnboardingScreen from './screens/SchoolOnboardingScreen'
+import SchoolDashboardScreen from './screens/SchoolDashboardScreen'
+import InviteCodeRedeemScreen from './screens/InviteCodeRedeemScreen'
 
 // Student v4 screens (all full-bleed — own their HomeTopNav + FooterStrip)
 import SplashScreen from './screens/SplashScreen'
@@ -46,12 +52,25 @@ export const router = createBrowserRouter([
   { path: '/onboarding/subjects', element: <ProtectedRoute><OnboardingSubjects /></ProtectedRoute> },
   { path: '/onboarding/track',    element: <ProtectedRoute><OnboardingTrack /></ProtectedRoute> },
 
+  // ── v5 Sprint 1 — school onboarding + invite redemption ──
+  // /onboarding/school: school_admin only (others redirected to /home).
+  { path: '/onboarding/school',       element: <RoleRoute allowed={['school_admin']}><SchoolOnboardingScreen /></RoleRoute> },
+  // /onboarding/invite-code: student / teacher (people without school_id).
+  // role-gate is light (any logged-in user) since the screen has its own
+  // skip path; we don't want to block someone who got here by accident.
+  { path: '/onboarding/invite-code',  element: <ProtectedRoute><InviteCodeRedeemScreen /></ProtectedRoute> },
+  // /school: school_admin only (the dashboard).
+  { path: '/school',                  element: <RoleRoute allowed={['school_admin']}><SchoolDashboardScreen /></RoleRoute> },
+
   // Legacy onboarding fallback (older sessions point here)
   { path: '/onboarding', element: <ProtectedRoute><ScreenBridge Component={OnboardingScreen} redirectTo="/home" isOnboarding /></ProtectedRoute> },
   { path: '/splash',     element: <ScreenBridge Component={SplashScreen} redirectTo="/onboarding/class" autoRedirect /> },
 
   // ── Student v4 — full-bleed (each screen owns its HomeTopNav + FooterStrip) ──
-  { path: '/home',          element: <ProtectedRoute><ScreenBridge Component={StudentHomeScreenV4} /></ProtectedRoute> },
+  // /home is wrapped in <HomeForRole> so non-students (school_admin,
+  // super_admin, parent, teacher) hitting /home get redirected to their
+  // own dashboard before the student UI ever renders.
+  { path: '/home',          element: <ProtectedRoute><HomeForRole><ScreenBridge Component={StudentHomeScreenV4} /></HomeForRole></ProtectedRoute> },
   { path: '/ask',           element: <ProtectedRoute><ScreenBridge Component={DoubtSolverScreenV4} /></ProtectedRoute> },
   { path: '/learn',         element: <ProtectedRoute><ScreenBridge Component={LearnScreenV4} /></ProtectedRoute> },
   { path: '/tests',         element: <ProtectedRoute><ScreenBridge Component={TestListScreenV4} /></ProtectedRoute> },

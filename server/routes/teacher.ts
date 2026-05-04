@@ -261,16 +261,20 @@ teacher.post('/flagged/:id/reopen', async (c) => {
 })
 
 // ═══ STUDENT LIST (for teachers to browse their class) ═══
-// Multi-tenant rules (migration 012):
+// Multi-tenant rules (migration 012) + multi-class (Sprint 1):
 //   - Teachers + school_admins: scoped to their own school's students.
-//     If their profile.school_id is NULL (legacy/B2C teacher), fall back to
+//     If profile.school_id is NULL (legacy/B2C teacher), fall back to
 //     class_level-only filter for back-compat (no cross-school leak because
 //     a NULL-school teacher only matches NULL-school students).
 //   - 'admin' (legacy ops role): bypasses school filter, sees all schools.
+//   - Class scoping: queries teacher_classes (Sprint 1 multi-class). A
+//     teacher who teaches Class 9+10 sees students from BOTH within their
+//     school. Falls back to profile.class_level when teacher_classes is
+//     empty (back-compat for teachers who never opened settings).
 //
-// The class_level filter is preserved on top of school_id so a Maths teacher
-// in DPS who teaches Class 10 only sees Class 10 students at DPS, not the
-// whole school.
+// The class filter (now: class_level IN teacher_classes) is preserved on
+// top of school_id — the filter pair stops both cross-class AND cross-
+// school leaks.
 teacher.get('/students', async (c) => {
   const auth = await requireTeacher(c.req.header('Authorization'))
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
@@ -278,19 +282,39 @@ teacher.get('/students', async (c) => {
   const q = c.req.query('q')?.toLowerCase() || ''
   const requestedClass = parseInt(c.req.query('class') || '0')
 
-  // Class-scoping: a teacher can only browse students in their own class
-  // (class_level on their profile). Admins can override via ?class=N.
-  // Without this, a Class 10 teacher could pass ?class=8 and read every
-  // Class 8 student's name + email.
   const isAdmin = auth.profile?.role === 'admin'
   const teacherClass = auth.profile?.class_level
   const teacherSchoolId = auth.profile?.school_id
-  if (!isAdmin && requestedClass && requestedClass !== teacherClass) {
-    return c.json({ error: 'You can only view your own class' }, 403)
+
+  // v5 Sprint 1: a teacher can teach multiple classes (teacher_classes M:N).
+  // If they've never set this up, fall back to profiles.class_level so
+  // existing flows keep working.
+  let teachableClasses: number[] = []
+  if (!isAdmin) {
+    const { data: tcRows } = await supabase
+      .from('teacher_classes')
+      .select('class_level')
+      .eq('teacher_id', auth.userId)
+    teachableClasses = (tcRows || []).map((r: any) => r.class_level)
+    if (teachableClasses.length === 0 && teacherClass) {
+      teachableClasses = [teacherClass]
+    }
   }
-  const effectiveClass = isAdmin
-    ? (requestedClass || null)        // admin: no class filter unless asked
-    : (teacherClass || requestedClass) // teacher: always pinned to own class
+
+  // ?class=N override: admins always allowed; non-admin teachers only when
+  // N is in their teachable set.
+  if (!isAdmin && requestedClass && !teachableClasses.includes(requestedClass)) {
+    return c.json({ error: 'You can only view classes you teach' }, 403)
+  }
+  const effectiveClasses: number[] | null = isAdmin
+    ? (requestedClass ? [requestedClass] : null)         // admin: no class filter unless asked
+    : (requestedClass ? [requestedClass] : teachableClasses) // teacher: pinned to teachable set
+
+  // Teacher with no teachable classes → return empty rather than every student
+  // in the school.
+  if (!isAdmin && (!effectiveClasses || effectiveClasses.length === 0)) {
+    return c.json({ students: [] })
+  }
 
   // student_xp is a ledger (many rows per student). We'd have to sum per row,
   // which doesn't belong in a list query — level/XP is shown on the profile
@@ -305,7 +329,14 @@ teacher.get('/students', async (c) => {
     .order('created_at', { ascending: false })
     .limit(200)
 
-  if (effectiveClass) query = query.eq('class_level', effectiveClass)
+  // Class filter: single-class via .eq, multi-class via .in.
+  if (effectiveClasses && effectiveClasses.length === 1) {
+    query = query.eq('class_level', effectiveClasses[0])
+  } else if (effectiveClasses && effectiveClasses.length > 1) {
+    query = query.in('class_level', effectiveClasses)
+  }
+  // (effectiveClasses === null && admin) → no class filter
+
   // School-scoping (defence-in-depth on top of class_level):
   //   - Non-admin with school_id: must match exactly. Prevents a teacher at
   //     School A from reading School B's students even if both teach Class 10.

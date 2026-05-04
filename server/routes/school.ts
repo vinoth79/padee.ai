@@ -151,27 +151,54 @@ school.post('/regenerate-code', async (c) => {
 // + lists. Reads are read-only — no mutations here, so this is safe to poll
 // every 60s from the frontend.
 school.get('/dashboard', async (c) => {
+  try {
+    return await dashboardImpl(c)
+  } catch (err: any) {
+    console.error('[school/dashboard] UNCAUGHT:', err?.message, '\n', err?.stack)
+    return c.json({ error: err?.message || 'Internal server error' }, 500)
+  }
+})
+
+async function dashboardImpl(c: any) {
   const auth = await requireSchoolAdmin(c.req.header('Authorization'))
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
-  const todayUTC = istTodayStartUTC().toISOString()
+  console.log('[school/dashboard] schoolId=', auth.schoolId)
+
+  const todayUTC = istTodayStartUTC()   // already an ISO string
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [
-    schoolRow,
-    studentsCount,
-    teachersCount,
-    doubtsTodayCount,
-    doubtsLast7dCount,
-    recentSignups,
-    weakConcepts,
-  ] = await Promise.all([
-    // School details (codes, caps, name)
-    supabase.from('schools')
-      .select('id, name, invite_code_student, invite_code_teacher, max_students, max_doubts_per_day, created_at')
-      .eq('id', auth.schoolId).single(),
+  // School row first (gates everything else — if the school is gone, we 404).
+  // Single source of truth for the response shape; all other queries are
+  // wrapped in Promise.allSettled so a single sub-query failure (e.g. the
+  // concept_mastery join not having any rows yet for a brand-new school)
+  // doesn't 500 the whole dashboard.
+  const { data: schoolData, error: schoolErr } = await supabase
+    .from('schools')
+    .select('id, name, invite_code_student, invite_code_teacher, max_students, max_doubts_per_day, created_at')
+    .eq('id', auth.schoolId).single()
+  if (schoolErr || !schoolData) {
+    console.error('[school/dashboard] school fetch failed:', schoolErr)
+    return c.json({ error: 'School not found' }, 404)
+  }
 
-    // Student count (head-count, used for cap warning)
+  // Get student IDs in this school first — used to scope doubt-session counts
+  // without relying on a PostgREST join filter (which has been the flaky bit).
+  const { data: schoolStudentRows } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('school_id', auth.schoolId)
+  const schoolStudentIds = (schoolStudentRows || []).map((r: any) => r.id)
+
+  // Helper: extract value from settled result, log + default on rejection.
+  function settledValue<T>(res: PromiseSettledResult<T>, label: string, fallback: T): T {
+    if (res.status === 'fulfilled') return res.value
+    console.error(`[school/dashboard] sub-query "${label}" rejected:`, res.reason)
+    return fallback
+  }
+
+  const results = await Promise.allSettled([
+    // Student count
     supabase.from('profiles')
       .select('id', { count: 'exact', head: true })
       .eq('school_id', auth.schoolId).eq('role', 'student'),
@@ -181,49 +208,51 @@ school.get('/dashboard', async (c) => {
       .select('id', { count: 'exact', head: true })
       .eq('school_id', auth.schoolId).eq('role', 'teacher'),
 
-    // Doubts today (joined to profiles to scope by school_id since
-    // doubt_sessions doesn't carry school_id directly)
-    supabase.from('doubt_sessions')
-      .select('id, profiles!inner(school_id)', { count: 'exact', head: true })
-      .eq('profiles.school_id', auth.schoolId)
-      .gte('created_at', todayUTC),
+    // Doubts today — using student-ID list (no join required, more robust).
+    // Empty schools (no students) return 0.
+    schoolStudentIds.length === 0
+      ? Promise.resolve({ count: 0, error: null })
+      : supabase.from('doubt_sessions')
+          .select('id', { count: 'exact', head: true })
+          .in('student_id', schoolStudentIds)
+          .gte('created_at', todayUTC),
 
     // Doubts last 7d
-    supabase.from('doubt_sessions')
-      .select('id, profiles!inner(school_id)', { count: 'exact', head: true })
-      .eq('profiles.school_id', auth.schoolId)
-      .gte('created_at', sevenDaysAgo),
+    schoolStudentIds.length === 0
+      ? Promise.resolve({ count: 0, error: null })
+      : supabase.from('doubt_sessions')
+          .select('id', { count: 'exact', head: true })
+          .in('student_id', schoolStudentIds)
+          .gte('created_at', sevenDaysAgo),
 
-    // Last 10 signups in this school
+    // Last 10 signups
     supabase.from('profiles')
       .select('id, name, role, class_level, created_at')
       .eq('school_id', auth.schoolId)
       .order('created_at', { ascending: false })
       .limit(10),
 
-    // Top 5 weakest concepts in the school's classes (joins through profiles
-    // to scope by school_id; Phase-1 fallback when class_concept_health
-    // doesn't have school-scoped rows yet — use raw concept_mastery instead)
-    supabase.from('concept_mastery')
-      .select(`
-        concept_slug,
-        accuracy_score,
-        profiles!inner (school_id),
-        concept_catalog!inner (concept_name, chapter_name)
-      `)
-      .eq('profiles.school_id', auth.schoolId)
-      .order('accuracy_score', { ascending: true })
-      .limit(50),
+    // Top weak concepts — same pattern: filter by student-ID set, then JOIN
+    // concept_catalog. Sidesteps the previous double-inner-join parsing.
+    schoolStudentIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : supabase.from('concept_mastery')
+          .select(`
+            concept_slug,
+            accuracy_score,
+            concept_catalog (concept_name, chapter_name)
+          `)
+          .in('student_id', schoolStudentIds)
+          .order('accuracy_score', { ascending: true })
+          .limit(50),
   ])
 
-  if (schoolRow.error || !schoolRow.data) {
-    return c.json({ error: 'School not found' }, 404)
-  }
+  const [studentsCount, teachersCount, doubtsTodayCount, doubtsLast7dCount, recentSignups, weakConcepts] = results
 
-  // Top weak concepts: aggregate the school's mastery rows by concept_slug,
-  // average accuracy, take bottom 5.
+  // Aggregate top weak concepts (group by slug, mean accuracy, ≥2 students).
+  const wcRows = (settledValue(weakConcepts as any, 'weakConcepts', { data: [] }).data || []) as any[]
   const conceptMap = new Map<string, { name: string; chapter: string; total: number; sum: number }>()
-  for (const row of (weakConcepts.data || []) as any[]) {
+  for (const row of wcRows) {
     const slug = row.concept_slug
     const name = row.concept_catalog?.concept_name || slug
     const chapter = row.concept_catalog?.chapter_name || ''
@@ -237,7 +266,7 @@ school.get('/dashboard', async (c) => {
       slug,
       name: v.name,
       chapter: v.chapter,
-      avgMastery: v.total ? Math.round(v.sum / v.total) : 0,
+      avgMastery: v.total ? Math.round((v.sum / v.total) * 100) : 0,
       studentsAffected: v.total,
     }))
     .filter(x => x.studentsAffected >= 2)        // require ≥2 students for stat-validity
@@ -246,23 +275,23 @@ school.get('/dashboard', async (c) => {
 
   return c.json({
     school: {
-      id: schoolRow.data.id,
-      name: schoolRow.data.name,
-      inviteCodeStudent: schoolRow.data.invite_code_student,
-      inviteCodeTeacher: schoolRow.data.invite_code_teacher,
-      maxStudents: schoolRow.data.max_students,
-      maxDoubtsPerDay: schoolRow.data.max_doubts_per_day,
-      createdAt: schoolRow.data.created_at,
+      id: schoolData.id,
+      name: schoolData.name,
+      inviteCodeStudent: schoolData.invite_code_student,
+      inviteCodeTeacher: schoolData.invite_code_teacher,
+      maxStudents: schoolData.max_students,
+      maxDoubtsPerDay: schoolData.max_doubts_per_day,
+      createdAt: schoolData.created_at,
     },
     counts: {
-      students: studentsCount.count || 0,
-      teachers: teachersCount.count || 0,
-      doubtsToday: doubtsTodayCount.count || 0,
-      doubtsLast7d: doubtsLast7dCount.count || 0,
+      students: settledValue(studentsCount as any, 'studentsCount', { count: 0 }).count || 0,
+      teachers: settledValue(teachersCount as any, 'teachersCount', { count: 0 }).count || 0,
+      doubtsToday: settledValue(doubtsTodayCount as any, 'doubtsTodayCount', { count: 0 }).count || 0,
+      doubtsLast7d: settledValue(doubtsLast7dCount as any, 'doubtsLast7dCount', { count: 0 }).count || 0,
     },
-    recentSignups: recentSignups.data || [],
+    recentSignups: settledValue(recentSignups as any, 'recentSignups', { data: [] }).data || [],
     topWeakConcepts: topWeak,
   })
-})
+}
 
 export default school

@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 import { useAuth } from '../context/AuthContext'
-import { saveOnboarding } from '../services/api'
+import { saveOnboarding, userApi } from '../services/api'
 import HomeTopNav from '../components/home-v4/HomeTopNav'
 import PaMascot from '../components/home-v4/PaMascot'
 import Ico from '../components/home-v4/Ico'
@@ -60,8 +60,10 @@ export default function SettingsScreen({ onNavigate }) {
   const [days, setDays] = useState(['mon','tue','wed','thu','fri'])
   const [track, setTrack] = useState('school')
   const [subjects, setSubjects] = useState([])
+  // v5 Sprint 1 — multi-class teacher assignment
+  const [teacherClasses, setTeacherClasses] = useState([])
 
-  const [saving, setSaving] = useState(null)   // 'pledge' | 'days' | 'track' | 'subjects' | null
+  const [saving, setSaving] = useState(null)   // 'pledge' | 'days' | 'track' | 'subjects' | 'classes' | null
   const [savedAt, setSavedAt] = useState(null) // section name briefly highlighted after save
 
   useEffect(() => {
@@ -74,7 +76,11 @@ export default function SettingsScreen({ onNavigate }) {
     }
     if (p.active_track) setTrack(p.active_track)
     if (Array.isArray(homeData.selectedSubjects)) setSubjects(homeData.selectedSubjects)
+    // teacher_classes is hydrated by /api/user/home-data only for teachers
+    if (Array.isArray(p.teacher_classes)) setTeacherClasses(p.teacher_classes)
   }, [homeData])
+
+  const isTeacher = (homeData?.profile?.role || user.role) === 'teacher'
 
   const klass = user.studentClass || 9
   const board = user.board || 'CBSE'
@@ -102,6 +108,31 @@ export default function SettingsScreen({ onNavigate }) {
 
   function toggleSubject(s) {
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
+  }
+
+  function toggleClass(n) {
+    setTeacherClasses(prev => {
+      const next = prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n]
+      return next.sort((a, b) => a - b)
+    })
+  }
+
+  // Separate save path because this hits a different endpoint than
+  // /api/user/onboarding (PATCH /api/user/teacher-classes).
+  async function saveTeacherClasses() {
+    if (!token) return
+    setSaving('classes')
+    try {
+      await userApi.setTeacherClasses(token, teacherClasses)
+      await user.refreshUser?.()
+      setSavedAt('classes')
+      setTimeout(() => setSavedAt(null), 2200)
+    } catch (err) {
+      console.error('[Settings] classes save failed:', err)
+      alert(`Could not save: ${err?.message || 'try again'}.`)
+    } finally {
+      setSaving(null)
+    }
   }
 
   const pledgeOption = PLEDGES.find(p => p.xp === pledge) || PLEDGES[1]
@@ -231,6 +262,36 @@ export default function SettingsScreen({ onNavigate }) {
               <b>{subjects.length}</b> subject{subjects.length === 1 ? '' : 's'} selected.
             </p>
           </Section>
+
+          {/* ── Classes I teach (teachers only — v5 Sprint 1) ── */}
+          {isTeacher && (
+            <Section
+              title="Classes I teach"
+              subtitle="Pick all the classes you teach. You'll see students from every selected class in your dashboard."
+              saving={saving === 'classes'}
+              saved={savedAt === 'classes'}
+              onSave={saveTeacherClasses}
+              disabled={teacherClasses.length === 0}>
+              <div className="days-row">
+                {[6, 7, 8, 9, 10, 11, 12].map(n => (
+                  <button key={n} onClick={() => toggleClass(n)}
+                    className={`day-tile ${teacherClasses.includes(n) ? 'is-active' : ''}`}
+                    style={{ minWidth: 44 }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="t-xs" style={{ marginTop: 12 }}>
+                <b>{teacherClasses.length}</b> class{teacherClasses.length === 1 ? '' : 'es'} selected
+                {teacherClasses.length > 0 ? ` · primary: Class ${teacherClasses[0]}` : ''}.
+              </p>
+              {teacherClasses.length === 0 && (
+                <p className="t-xs" style={{ color: '#B2381B', marginTop: 6 }}>
+                  Pick at least one class — otherwise you'll see zero students.
+                </p>
+              )}
+            </Section>
+          )}
 
           {/* ── About you (read-only) ── */}
           <div className="settings-card">

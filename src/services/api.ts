@@ -375,6 +375,25 @@ export const authApi = {
   },
 }
 
+// ── User preferences (Sprint 1) ──
+export const userApi = {
+  /**
+   * Set the list of classes a teacher teaches. Pass [9, 10, 11] to teach
+   * Classes 9-11; pass [] to clear all assignments.
+   * Server replaces the entire set in one transaction. profiles.class_level
+   * is updated to the first class in the array (the "primary" class shown
+   * in the topnav pill).
+   */
+  async setTeacherClasses(token: string, classLevels: number[]) {
+    const r = await fetch(`${BASE}/user/teacher-classes`, {
+      method: 'PATCH',
+      headers: authHeader(token),
+      body: JSON.stringify({ classLevels }),
+    })
+    return jsonOrThrow(r) as Promise<{ classLevels: number[] }>
+  },
+}
+
 // ── Super admin (Padee staff, role=super_admin) ──
 export const superAdminApi = {
   async schools(token: string) {

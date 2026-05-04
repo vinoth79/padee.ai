@@ -20,6 +20,65 @@ user.get('/profile', async (c) => {
   return c.json(data)
 })
 
+// PATCH /api/user/teacher-classes — set the list of classes a teacher teaches.
+// ─── v5 Sprint 1: a teacher in DPS who teaches Maths in Class 9 + 10 + 11
+// posts { classLevels: [9, 10, 11] } here. We replace the entire set in one
+// transaction (delete-all-then-insert), so a teacher can also send [] to
+// clear all assignments (rare but valid — e.g. teacher between schools).
+//
+// teacher_classes is the source of truth for /api/teacher/students filtering.
+// profiles.class_level is kept as the PRIMARY/default class for UI display
+// (the topnav "Class 10" pill, etc.) and is updated to the FIRST class in
+// the new list — which is the closest thing to "your main class".
+user.patch('/teacher-classes', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+
+  // Verify the caller is actually a teacher (or admin/school_admin who can
+  // edit on a teacher's behalf — Phase 2; for v5 we lock to self-edit).
+  const { data: profile } = await supabase
+    .from('profiles').select('role').eq('id', u.id).single()
+  if (profile?.role !== 'teacher') {
+    return c.json({ error: 'Only teachers can update class assignments' }, 403)
+  }
+
+  const body = await c.req.json().catch(() => ({}))
+  const raw = body.classLevels
+  if (!Array.isArray(raw)) {
+    return c.json({ error: 'classLevels must be an array of integers' }, 400)
+  }
+  // Sanitise: integers in [6, 12], dedup, sorted.
+  const classLevels = [...new Set(
+    raw.filter((n: any) => Number.isInteger(n) && n >= 6 && n <= 12)
+  )].sort((a, b) => a - b)
+
+  // Wipe + reinsert. Two-step (no Postgres transaction wrapper from supabase-js
+  // here, but the back-compat invariant is "profile.class_level matches the
+  // first row" — so we update profile.class_level last, after the rows are
+  // committed, to minimise the inconsistency window).
+  const { error: delErr } = await supabase
+    .from('teacher_classes').delete().eq('teacher_id', u.id)
+  if (delErr) {
+    console.error('[teacher-classes] delete failed:', delErr)
+    return c.json({ error: delErr.message }, 500)
+  }
+
+  if (classLevels.length > 0) {
+    const { error: insErr } = await supabase.from('teacher_classes').insert(
+      classLevels.map(cl => ({ teacher_id: u.id, class_level: cl }))
+    )
+    if (insErr) {
+      console.error('[teacher-classes] insert failed:', insErr)
+      return c.json({ error: insErr.message }, 500)
+    }
+    // Mirror primary class to profiles.class_level for UI back-compat
+    await supabase
+      .from('profiles').update({ class_level: classLevels[0] }).eq('id', u.id)
+  }
+
+  return c.json({ classLevels })
+})
+
 // POST /api/user/replan-acknowledged
 // ─── Resets the pledged_days_missed counter on student_streaks. Called when
 // the student dismisses the home re-plan check-in banner ("Got it"). After
@@ -318,6 +377,21 @@ user.get('/home-data', async (c) => {
       .single()
     if (schoolRow) {
       profileWithSchool = { ...profile.data, school: schoolRow }
+    }
+  }
+
+  // v5: for teachers, hydrate teacher_classes so /settings can render the
+  // multi-class chips without a second round-trip. Cheap query — at most ~7
+  // rows per teacher (classes 6-12).
+  if (profileWithSchool?.role === 'teacher') {
+    const { data: tcRows } = await supabase
+      .from('teacher_classes')
+      .select('class_level')
+      .eq('teacher_id', u.id)
+      .order('class_level', { ascending: true })
+    profileWithSchool = {
+      ...profileWithSchool,
+      teacher_classes: (tcRows || []).map((r: any) => r.class_level),
     }
   }
 

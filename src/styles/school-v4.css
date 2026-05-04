@@ -1,0 +1,426 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   School v4 — scoped styles for /onboarding/school, /school dashboard,
+   /onboarding/invite-code, and the school-related components.
+   ═══════════════════════════════════════════════════════════════════════════
+   All selectors scoped to `.school-v4` — rules do NOT leak to the rest of
+   the app. Tokens follow the home-v4 palette (Padee_UI_Spec_v3 §1).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.school-v4 {
+  /* Inherit the same brand palette as home-v4 (single source of truth) */
+  --c-accent:   #E85D3A;
+  --c-accent-d: #B2381B;
+  --c-accent-l: #FFE7DD;
+  --c-amber:    #FFB547;
+  --c-amber-l:  #FFEFC9;
+  --c-amber-d:  #6B4B00;
+  --c-purple:   #7C5CFF;
+  --c-purple-l: #ECE5FF;
+  --c-green:    #36D399;
+  --c-green-l:  #DDF6E9;
+  --c-pink:     #FF4D8B;
+  --c-pink-l:   #FFE0EC;
+  --c-blue:     #4C7CFF;
+  --c-blue-l:   #E0ECFF;
+
+  --c-ink:      #13131A;
+  --c-ink-2:    #2A2A36;
+  --c-muted:    #8A8A95;
+  --c-muted-2:  #B8B8C0;
+  --c-hair:     #ECECEE;
+  --c-hair-2:   #F3EFE4;
+  --c-paper:    #FAF8F4;
+  --c-paper-2:  #F1EDE2;
+  --c-card:     #FFFFFF;
+
+  --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-2xl: 32px;
+
+  --shadow-flat: 0 1px 0 rgba(19,19,26,0.04);
+  --shadow-card: 0 1px 0 rgba(19,19,26,0.04), 0 8px 22px rgba(19,19,26,0.05);
+  --shadow-pop:  0 4px 0 rgba(19,19,26,0.05), 0 24px 48px rgba(19,19,26,0.10);
+
+  font-family: 'Lexend Deca', -apple-system, system-ui, sans-serif;
+  color: var(--c-ink);
+  background: var(--c-paper);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.school-v4 *, .school-v4 *::before, .school-v4 *::after { box-sizing: border-box; }
+
+.school-v4 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+/* ─── Type ─────────────────────────────────────────────────────────── */
+.school-v4 .t-display { font-size: 44px; font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
+.school-v4 .t-h1      { font-size: 30px; font-weight: 700; letter-spacing: -0.6px; line-height: 1.15; }
+.school-v4 .t-h2      { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.2; }
+.school-v4 .t-h3      { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; line-height: 1.3; }
+.school-v4 .t-body    { font-size: 14px; line-height: 1.5; }
+.school-v4 .t-sm      { font-size: 13px; line-height: 1.5; color: var(--c-muted); }
+.school-v4 .t-xs      { font-size: 12px; line-height: 1.4; color: var(--c-muted); }
+.school-v4 .t-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--c-muted); }
+
+/* ─── Topbar (used by /school + onboarding screens) ─────────────────── */
+.school-v4 .school-topbar {
+  background: rgba(250,248,244,0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--c-hair);
+  position: sticky; top: 0; z-index: 40;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px;
+}
+.school-v4 .school-topbar .brand { display: flex; align-items: center; gap: 10px; }
+.school-v4 .school-topbar .brand .logo { font-size: 19px; font-weight: 700; letter-spacing: -0.4px; }
+.school-v4 .school-topbar .brand .logo .ai { color: var(--c-accent); }
+
+/* School-name pill (in HomeTopNav for B2B users) */
+.pd-topnav .school-pill,
+.school-v4 .school-pill {
+  background: var(--c-purple-l, #ECE5FF);
+  color: var(--c-purple, #7C5CFF);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Page shell ────────────────────────────────────────────────────── */
+.school-v4 .school-shell { padding: 32px 28px 56px; max-width: 1200px; margin: 0 auto; }
+
+.school-v4 .school-greeting { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+.school-v4 .school-greeting h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
+.school-v4 .school-greeting .sub { color: var(--c-muted); font-size: 14px; margin-top: 4px; }
+
+/* ─── Stat tiles (4-up grid → 2x2 on mobile) ────────────────────────── */
+.school-v4 .stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.school-v4 .stat-tile {
+  background: var(--c-card);
+  border-radius: var(--r-xl);
+  padding: 20px;
+  min-height: 130px;
+  box-shadow: var(--shadow-card);
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.school-v4 .stat-tile .label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--c-muted); margin-bottom: 8px;
+}
+.school-v4 .stat-tile .stat {
+  font-size: 30px; font-weight: 700; letter-spacing: -0.6px; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.school-v4 .stat-tile .stat .denom {
+  font-size: 16px; font-weight: 500; color: var(--c-muted); margin-left: 6px;
+}
+.school-v4 .stat-tile .footer { font-size: 12px; color: var(--c-muted); margin-top: 10px; }
+.school-v4 .stat-tile.warn { border: 1.5px solid var(--c-amber); }
+.school-v4 .stat-tile.warn .stat { color: var(--c-amber-d); }
+
+/* Sparkline (inline SVG) */
+.school-v4 .spark { width: 100%; height: 24px; margin-top: 8px; }
+
+/* ─── Two-column row: codes + weak concepts ─────────────────────────── */
+.school-v4 .school-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+/* ─── Invite code card ──────────────────────────────────────────────── */
+.school-v4 .codes-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.school-v4 .invite-card {
+  background: var(--c-card);
+  border-radius: var(--r-xl);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.18s ease;
+}
+.school-v4 .invite-card:hover { box-shadow: var(--shadow-pop); }
+.school-v4 .invite-card .label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--c-muted); margin-bottom: 12px;
+}
+.school-v4 .invite-card .code {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 28px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--c-ink);
+  background: var(--c-paper-2);
+  padding: 14px 18px;
+  border-radius: var(--r-md);
+  text-align: center;
+  margin: 8px 0 12px;
+  user-select: all;
+}
+.school-v4 .invite-card .code.flash-copy { animation: flashCopy 1.6s ease-out; }
+.school-v4 .invite-card .code.flash-regen { animation: flashRegen 1s ease-out; }
+.school-v4 .invite-card .usage { font-size: 12px; color: var(--c-muted); margin-bottom: 12px; }
+.school-v4 .invite-card .usage.warn { color: var(--c-amber-d); font-weight: 600; }
+.school-v4 .invite-card .actions { display: flex; gap: 8px; }
+
+@keyframes flashCopy {
+  0%, 30% { background: var(--c-green-l); }
+  100%    { background: var(--c-paper-2); }
+}
+@keyframes flashRegen {
+  0%   { background: var(--c-amber-l); }
+  100% { background: var(--c-paper-2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .school-v4 .invite-card .code.flash-copy,
+  .school-v4 .invite-card .code.flash-regen { animation: none; }
+}
+
+/* ─── Generic v4 buttons ────────────────────────────────────────────── */
+.school-v4 .btn-primary {
+  background: var(--c-accent);
+  color: #fff;
+  border-radius: var(--r-md);
+  padding: 12px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 3px 0 var(--c-accent-d);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.school-v4 .btn-primary:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--c-accent-d); }
+.school-v4 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+.school-v4 .btn-ghost {
+  background: var(--c-card);
+  color: var(--c-ink);
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-md);
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.school-v4 .btn-ghost:hover { background: var(--c-paper-2); }
+.school-v4 .btn-ghost.copied { color: var(--c-green); border-color: var(--c-green-l); background: var(--c-green-l); }
+
+.school-v4 .btn-danger {
+  background: var(--c-pink);
+  color: #fff;
+  border-radius: var(--r-md);
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 3px 0 #C63A6E;
+  cursor: pointer;
+}
+
+/* ─── Recent signups list ───────────────────────────────────────────── */
+.school-v4 .recent-signups {
+  background: var(--c-card);
+  border-radius: var(--r-xl);
+  padding: 8px;
+  box-shadow: var(--shadow-card);
+}
+.school-v4 .recent-signups .head {
+  padding: 12px 14px 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--c-muted);
+}
+.school-v4 .signup-row {
+  padding: 10px 14px;
+  display: flex; align-items: center; gap: 10px;
+  border-radius: var(--r-md);
+}
+.school-v4 .signup-row + .signup-row { border-top: 1px solid var(--c-hair); }
+.school-v4 .signup-row .role-icon {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.school-v4 .signup-row .role-icon.student { background: var(--c-accent-l); }
+.school-v4 .signup-row .role-icon.teacher { background: var(--c-purple-l); }
+.school-v4 .signup-row .name { font-size: 14px; font-weight: 600; }
+.school-v4 .signup-row .meta { font-size: 12px; color: var(--c-muted); }
+.school-v4 .signup-row .ago { font-size: 12px; color: var(--c-muted); margin-left: auto; flex-shrink: 0; }
+
+.school-v4 .empty-state {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--c-muted);
+  font-size: 13px;
+}
+
+/* ─── Top weak concepts panel ───────────────────────────────────────── */
+.school-v4 .weak-panel {
+  background: var(--c-card);
+  border-radius: var(--r-xl);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-card);
+}
+.school-v4 .weak-panel .head {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--c-muted);
+  margin-bottom: 12px;
+}
+.school-v4 .weak-row { padding: 8px 0; border-bottom: 1px solid var(--c-hair); }
+.school-v4 .weak-row:last-child { border-bottom: none; }
+.school-v4 .weak-row .rank {
+  display: inline-block;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--c-paper-2);
+  text-align: center; line-height: 22px;
+  font-size: 11px; font-weight: 700;
+  margin-right: 10px;
+}
+.school-v4 .weak-row .name { font-size: 14px; font-weight: 600; color: var(--c-ink); }
+.school-v4 .weak-row .meta { font-size: 12px; color: var(--c-muted); margin-top: 2px; }
+.school-v4 .weak-row .mastery { font-size: 12px; font-weight: 700; color: var(--c-amber-d); }
+
+/* ─── Focus-layout screen (onboarding/school + onboarding/invite-code) ── */
+.school-v4 .focus-shell {
+  max-width: 560px;
+  margin: 40px auto 32px;
+  padding: 0 24px;
+}
+.school-v4 .focus-pa { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.school-v4 .focus-pa .copy h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.school-v4 .focus-pa .copy .sub { color: var(--c-muted); font-size: 14px; margin-top: 4px; }
+
+.school-v4 .focus-card {
+  background: var(--c-card);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+}
+
+.school-v4 .focus-step {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--c-accent);
+  margin-bottom: 8px;
+}
+
+.school-v4 .focus-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--c-hair);
+  background: var(--c-card);
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--c-ink);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.school-v4 .focus-input:focus {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-l);
+}
+
+.school-v4 .focus-error {
+  font-size: 13px;
+  color: var(--c-accent-d);
+  background: var(--c-accent-l);
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  margin-top: 14px;
+}
+
+.school-v4 .focus-skip {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--c-muted);
+  background: transparent;
+  border: 1px solid var(--c-hair);
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  margin-top: 14px;
+  cursor: pointer;
+}
+.school-v4 .focus-skip:hover { background: var(--c-paper-2); }
+
+/* ─── 6-cell / 8-cell invite input ──────────────────────────────────── */
+.school-v4 .code-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin: 18px 0;
+  flex-wrap: wrap;
+}
+.school-v4 .code-cell {
+  width: 48px; height: 56px;
+  border: 1.5px solid var(--c-hair);
+  border-radius: var(--r-md);
+  background: var(--c-card);
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  text-align: center;
+  color: var(--c-ink);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.school-v4 .code-cell:focus {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-l);
+}
+.school-v4 .code-cell.filled { background: var(--c-paper-2); }
+.school-v4 .code-cell.error { border-color: var(--c-pink); animation: cellShake 0.4s ease; }
+.school-v4 .code-hyphen { color: var(--c-muted-2); font-size: 22px; font-weight: 700; }
+
+@keyframes cellShake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-3px); }
+  75%      { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .school-v4 .code-cell.error { animation: none; }
+}
+
+/* ─── Modal (regenerate confirm) ────────────────────────────────────── */
+.school-v4 .modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(19,19,26,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 60;
+  padding: 20px;
+}
+.school-v4 .modal-card {
+  background: var(--c-card);
+  border-radius: var(--r-xl);
+  max-width: 440px;
+  width: 100%;
+  padding: 24px;
+  box-shadow: var(--shadow-pop);
+}
+.school-v4 .modal-card h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.school-v4 .modal-card .body { font-size: 14px; line-height: 1.5; color: var(--c-ink-2); margin-bottom: 18px; }
+.school-v4 .modal-card .actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ─── Mobile breakpoints ────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .school-v4 .school-row { grid-template-columns: 1fr; }
+  .school-v4 .stat-tiles { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .school-v4 .school-shell { padding: 20px 16px 40px; }
+  .school-v4 .codes-row { grid-template-columns: 1fr; }
+  .school-v4 .invite-card .code { font-size: 22px; padding: 12px 14px; }
+  .school-v4 .code-cell { width: 40px; height: 50px; font-size: 18px; }
+  .school-v4 .school-greeting h1 { font-size: 22px; }
+}

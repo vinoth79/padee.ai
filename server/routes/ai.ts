@@ -165,7 +165,7 @@ ai.post('/doubt', async (c) => {
         .from('doubt_sessions')
         .select('id, profiles!inner(school_id)', { count: 'exact', head: true })
         .eq('profiles.school_id', callerProfile.school_id)
-        .gte('created_at', istTodayStartUTC().toISOString())
+        .gte('created_at', istTodayStartUTC())
       if ((count || 0) >= schoolRow.max_doubts_per_day) {
         return c.json({
           error: `${schoolRow.name || 'Your school'} has used today's doubt allowance. Pa will be back tomorrow!`,

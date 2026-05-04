@@ -19,6 +19,10 @@ export default function HomeTopNav({ user, streak = 0, onNavigate, active = 'hom
   const grade = user?.class_level ? `Class ${user.class_level}` : 'Class —'
   const level = user?.level ?? 1
   const initial = name.slice(0, 1).toUpperCase()
+  // v5 Sprint 1 — B2B users see their school name as a small pill next to
+  // the logo. profile.school is hydrated by /api/user/home-data when
+  // school_id is set; B2C users (school_id NULL) get nothing.
+  const schoolName = user?.school?.name
 
   const { signOut } = useAuth()
   const navigate = useNavigate()
@@ -58,6 +62,27 @@ export default function HomeTopNav({ user, streak = 0, onNavigate, active = 'hom
       <div className="brand">
         <PaMascot size={28} mood="idle" />
         <span className="logo-text">Padee<span className="logo-ai">.ai</span></span>
+        {schoolName && (
+          <span className="school-pill"
+            title={schoolName}
+            style={{
+              marginLeft: 10,
+              background: 'rgba(124, 92, 255, 0.15)',
+              color: '#A99BFF',
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              padding: '3px 8px',
+              borderRadius: 999,
+              maxWidth: 180,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+            {schoolName}
+          </span>
+        )}
       </div>
 
       <div className="nav-pills">

@@ -1,20 +1,28 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// SignupScreen — v4 redesign (Apr 25 mockup).
+// SignupScreen — v4 redesign (Apr 25 mockup), v5 Sprint 1 expansion.
 // ═══════════════════════════════════════════════════════════════════════════
-// Layout: two-column on desktop. Left = role picker (Student/Parent/Teacher) +
-// invite-code tip. Right = create-account form. Top-right swap to /login.
+// Layout: two-column on desktop. Left = role picker (Student/Parent/Teacher/
+// School admin — v5 Sprint 1 added the 4th tile) + invite-code tip. Right =
+// create-account form (with optional invite-code field for student/teacher).
+// Top-right swap to /login.
 //
 // Behavior: signs up via supabase.auth.signUp with role in user_metadata.
 // The auth-trigger creates the profile row server-side. Post-signup routing:
-//   teacher → /teacher  ·  parent → /parent  ·  student → /onboarding/class
+//   school_admin → /onboarding/school (provision school + see codes)
+//   teacher      → /teacher (or /onboarding/invite-code if invite-code field
+//                  was left blank — gives them a chance to join a school)
+//   parent       → /parent
+//   student      → /onboarding/class (or auto-redeem code first, then
+//                  /onboarding/class continues)
 // ═══════════════════════════════════════════════════════════════════════════
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, BookOpen, Heart, Users } from 'lucide-react'
+import { ArrowRight, BookOpen, Heart, Users, School } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
+import { authApi } from '../services/api'
 import PaMascot from '../components/home-v4/PaMascot'
 
-type Role = 'student' | 'parent' | 'teacher'
+type Role = 'student' | 'parent' | 'teacher' | 'school_admin'
 
 const ROLES: Array<{
   id: Role; title: string; subtitle: string; icon: any;
@@ -29,6 +37,9 @@ const ROLES: Array<{
   { id: 'teacher', title: 'Teacher', subtitle: 'Run my class',
     icon: Users, iconBg: '#ECE5FF', iconFg: '#7C5CFF',
     selectedBorder: '#7C5CFF', selectedBg: '#ECE5FF' },
+  { id: 'school_admin', title: 'Create school', subtitle: 'Onboard my whole school',
+    icon: School, iconBg: '#FFEFC9', iconFg: '#6B4B00',
+    selectedBorder: '#FFB547', selectedBg: '#FFEFC9' },
 ]
 
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
@@ -50,12 +61,17 @@ export default function SignupScreen() {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState('')   // v5: optional school code (student / teacher)
   const [agree, setAgree] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const strength = useMemo(() => passwordStrength(password), [password])
   const canSubmit = firstName.trim() && email && password.length >= 8 && agree && !loading
+
+  // Show invite-code field for student + teacher (B2B onboarding path).
+  // Hidden for parent (no school flow) and school_admin (they'll create one).
+  const showInviteCodeField = role === 'student' || role === 'teacher'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,15 +80,40 @@ export default function SignupScreen() {
     setLoading(true)
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim()
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { role, full_name: fullName } },
       })
       if (error) throw error
-      // Auto-confirm is enabled (per CLAUDE.md), so the session is live.
-      // Profile row is created by the auth trigger.
-      if (role === 'teacher') nav('/teacher', { replace: true })
+
+      // v5: if a code was provided (student/teacher path), redeem it now.
+      // Auto-confirm is enabled per CLAUDE.md, so the session is live and
+      // we can call /api/auth/redeem-invite immediately.
+      const cleanCode = inviteCode.replace(/\D+/g, '')
+      if (showInviteCodeField && cleanCode.length === 6 && data.session?.access_token) {
+        try {
+          const redeemed = await authApi.redeemInvite(data.session.access_token, cleanCode)
+          // Server may have promoted student → teacher if a teacher code was used
+          if (redeemed.role === 'teacher') {
+            nav('/teacher', { replace: true })
+            return
+          }
+        } catch (redeemErr: any) {
+          // Soft-fail: account is created, just code didn't match. Surface
+          // the error but proceed with onboarding so the user isn't stuck.
+          console.warn('[signup] invite-code redemption failed:', redeemErr?.message)
+          setError(`Account created, but ${redeemErr?.message || 'code didn\'t match'}. Try the code again from Settings.`)
+          // Fall through to default routing below
+        }
+      }
+
+      // Profile row is created by the auth trigger. Route by role.
+      if (role === 'school_admin') nav('/onboarding/school', { replace: true })
+      else if (role === 'teacher') {
+        // Teacher with no code → give them a chance to join a school via /onboarding/invite-code
+        nav(cleanCode.length === 6 ? '/teacher' : '/onboarding/invite-code', { replace: true })
+      }
       else if (role === 'parent') nav('/parent', { replace: true })
       else nav('/onboarding/class', { replace: true })
     } catch (err: any) {
@@ -285,6 +326,35 @@ export default function SignupScreen() {
                   }} />
                 ))}
               </div>
+
+              {/* v5: invite-code field — student + teacher only.
+                  Optional. Skipping makes them a B2C user who can join a
+                  school later via /onboarding/invite-code or settings. */}
+              {showInviteCodeField && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{
+                    fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em',
+                    color: '#8A8A95', textTransform: 'uppercase', marginBottom: 8,
+                  }}>
+                    Are you part of a school?
+                  </div>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Enter 6-digit code (optional)"
+                    value={inviteCode}
+                    onChange={e => setInviteCode(e.target.value)}
+                    maxLength={9}     /* 6 digits + 1 hyphen + slack */
+                    autoComplete="one-time-code"
+                  />
+                  <span style={{
+                    display: 'block', fontSize: 12, color: '#8A8A95',
+                    marginTop: 6, lineHeight: 1.5,
+                  }}>
+                    Skip if you're learning on your own.
+                  </span>
+                </div>
+              )}
 
               {/* Terms checkbox */}
               <label className="flex items-start gap-2.5 mt-5 cursor-pointer">

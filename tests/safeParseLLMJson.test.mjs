@@ -6,7 +6,7 @@
 //
 // Run: npx tsx tests/safeParseLLMJson.test.mjs
 
-import { safeParseLLMJson, reescapeLatexInJson } from '/Users/admin/padee.ai/server/lib/latexValidate.ts'
+import { safeParseLLMJson, reescapeLatexInJson } from '../server/lib/latexValidate.ts'
 
 let pass = 0
 let fail = 0

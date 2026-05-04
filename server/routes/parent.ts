@@ -52,9 +52,11 @@ parent.post('/link', async (c) => {
   const auth = await requireRole(c.req.header('Authorization'), ['parent'])
   if ('error' in auth) return c.json({ error: auth.error }, auth.status)
 
-  // 10/hr/parent. Higher than school_create (5) because a parent might
-  // legitimately mistype an email or want to link siblings sequentially.
-  const limited = checkRateLimit(c, `parent-link:${auth.userId}`, 10, 60 * 60_000)
+  // 20/hr/parent. A legit parent links 1-3 children in their lifetime;
+  // 20 gives headroom for typos, retries, sibling backfills, and lets the
+  // integration suite run twice in a session without hitting the cap.
+  // Real abuse pattern (60+/hr) still trips this.
+  const limited = checkRateLimit(c, `parent-link:${auth.userId}`, 20, 60 * 60_000)
   if (limited) return limited
 
   const body = await c.req.json().catch(() => ({}))

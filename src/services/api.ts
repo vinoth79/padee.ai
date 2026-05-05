@@ -394,6 +394,65 @@ export const userApi = {
   },
 }
 
+// ── Parents (Sprint 2) ──
+// All endpoints throw on non-2xx via jsonOrThrow so screens can render the
+// server's user-facing error copy (e.g. "No student account found...").
+export type ParentChild = {
+  studentId: string
+  name: string | null
+  classLevel: number | null
+  board: string | null
+  totalXP: number
+  streak: number
+  longestStreak: number
+  weakestSubject: { code: string; masteryPct: number } | null
+  lastActiveAt: string | null
+  masterySummary: { subjects: number; avgPct: number | null }
+}
+
+export type ParentPendingIncoming = {
+  parentId: string
+  parentName: string | null
+  createdAt: string
+}
+
+export const parentApi = {
+  /** Parent → "link my child by email". Returns 8-char code to show student. */
+  async link(token: string, studentEmail: string) {
+    const r = await fetch(`${BASE}/parent/link`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ studentEmail }),
+    })
+    return jsonOrThrow(r) as Promise<
+      | { linkCode: string; studentName: string }
+      | { alreadyLinked: true; studentName: string }
+    >
+  },
+
+  /** Student → "confirm this parent's code". */
+  async verify(token: string, linkCode: string) {
+    const r = await fetch(`${BASE}/parent/verify`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ linkCode }),
+    })
+    return jsonOrThrow(r) as Promise<{ parentName: string | null }>
+  },
+
+  /** Parent → "show my verified children". */
+  async children(token: string) {
+    const r = await fetch(`${BASE}/parent/children`, { headers: authHeader(token) })
+    return jsonOrThrow(r) as Promise<{ children: ParentChild[] }>
+  },
+
+  /** Student → "is anyone trying to link me as a parent?". Drives PendingLinkBanner on /home. */
+  async pendingIncoming(token: string) {
+    const r = await fetch(`${BASE}/parent/pending-incoming`, { headers: authHeader(token) })
+    return jsonOrThrow(r) as Promise<{ pending: ParentPendingIncoming[] }>
+  },
+}
+
 // ── Super admin (Padee staff, role=super_admin) ──
 export const superAdminApi = {
   async schools(token: string) {

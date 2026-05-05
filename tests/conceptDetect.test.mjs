@@ -7,7 +7,7 @@
 //
 // Run: npx tsx tests/conceptDetect.test.mjs
 
-import { conceptMatchScore } from '/Users/admin/padee.ai/server/lib/conceptDetection.ts'
+import { conceptMatchScore } from '../server/lib/conceptDetection.ts'
 
 let pass = 0, fail = 0
 const failures = []

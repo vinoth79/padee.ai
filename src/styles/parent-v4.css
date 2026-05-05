@@ -1,0 +1,529 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Parent v4 — scoped styles for /parent (dashboard) and /parent/link.
+   ═══════════════════════════════════════════════════════════════════════════
+   All rules scoped to `.parent-v4` so they don't leak to student screens.
+   Tokens mirror home-v4 / school-v4 (single-source palette).
+   PendingLinkBanner styles also live here (rendered inside .home-v4 on the
+   student home — those classes don't depend on .parent-v4 scope).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.parent-v4 {
+  --c-accent:   #E85D3A;
+  --c-accent-d: #B2381B;
+  --c-accent-l: #FFE7DD;
+  --c-amber:    #FFB547;
+  --c-amber-l:  #FFEFC9;
+  --c-amber-d:  #6B4B00;
+  --c-purple:   #7C5CFF;
+  --c-purple-l: #ECE5FF;
+  --c-green:    #36D399;
+  --c-green-l:  #DDF6E9;
+  --c-pink:     #FF4D8B;
+  --c-pink-l:   #FFE0EC;
+  --c-blue:     #4C7CFF;
+  --c-blue-l:   #E0ECFF;
+
+  --c-ink:      #13131A;
+  --c-ink-2:    #2A2A36;
+  --c-muted:    #8A8A95;
+  --c-muted-2:  #B8B8C0;
+  --c-hair:     #ECECEE;
+  --c-hair-2:   #F3EFE4;
+  --c-paper:    #FAF8F4;
+  --c-paper-2:  #F1EDE2;
+  --c-card:     #FFFFFF;
+
+  --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-2xl: 32px;
+
+  --shadow-flat: 0 1px 0 rgba(19,19,26,0.04);
+  --shadow-card: 0 1px 0 rgba(19,19,26,0.04), 0 8px 22px rgba(19,19,26,0.05);
+  --shadow-pop:  0 4px 0 rgba(19,19,26,0.05), 0 24px 48px rgba(19,19,26,0.10);
+
+  font-family: 'Lexend Deca', -apple-system, system-ui, sans-serif;
+  color: var(--c-ink);
+  background: var(--c-paper);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.parent-v4 *, .parent-v4 *::before, .parent-v4 *::after { box-sizing: border-box; }
+.parent-v4 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+.parent-v4 .t-sm  { font-size: 13px; line-height: 1.5; color: var(--c-muted); }
+.parent-v4 .t-xs  { font-size: 12px; line-height: 1.4; color: var(--c-muted); }
+
+/* ─── Topbar ──────────────────────────────────────────────────────────── */
+.parent-v4 .parent-topbar {
+  background: rgba(250,248,244,0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--c-hair);
+  position: sticky; top: 0; z-index: 40;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px;
+}
+.parent-v4 .parent-topbar .brand { display: flex; align-items: center; gap: 10px; }
+.parent-v4 .parent-topbar .brand .logo { font-size: 19px; font-weight: 700; letter-spacing: -0.4px; }
+.parent-v4 .parent-topbar .brand .logo .ai { color: var(--c-accent); }
+
+.parent-v4 .parent-pill {
+  background: var(--c-purple-l);
+  color: var(--c-purple);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+/* ─── Buttons (match school-v4 idioms) ───────────────────────────────── */
+.parent-v4 .btn-primary {
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
+  padding: 12px 20px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--c-accent-d);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+  font-family: inherit;
+}
+.parent-v4 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--c-accent-d); }
+.parent-v4 .btn-primary:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--c-accent-d); }
+.parent-v4 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: 0 3px 0 var(--c-accent-d); }
+
+.parent-v4 .btn-ghost {
+  background: transparent;
+  color: var(--c-ink-2);
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-md);
+  padding: 10px 16px;
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.parent-v4 .btn-ghost:hover { background: var(--c-hair-2); }
+
+/* ─── Page shell ─────────────────────────────────────────────────────── */
+.parent-v4 .parent-shell { padding: 32px 28px 56px; max-width: 1200px; margin: 0 auto; }
+
+.parent-v4 .parent-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none;
+  color: var(--c-muted); font-size: 13px; cursor: pointer;
+  padding: 0; margin-bottom: 18px;
+  font-family: inherit;
+}
+.parent-v4 .parent-back:hover { color: var(--c-ink); }
+
+.parent-v4 .parent-greeting {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin-bottom: 28px; gap: 16px; flex-wrap: wrap;
+}
+.parent-v4 .parent-greeting h1 {
+  font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2;
+  margin: 0;
+}
+.parent-v4 .parent-greeting .sub { color: var(--c-muted); font-size: 14px; margin-top: 4px; }
+.parent-v4 .parent-link-cta { white-space: nowrap; }
+
+/* ─── Children grid (mobile-first per PRD §379) ──────────────────────── */
+.parent-v4 .parent-children-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 720px) {
+  .parent-v4 .parent-children-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1080px) {
+  .parent-v4 .parent-children-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ─── ChildCard ──────────────────────────────────────────────────────── */
+.parent-v4 .child-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-xl);
+  padding: 22px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--c-ink);
+  display: flex; flex-direction: column; gap: 18px;
+  box-shadow: var(--shadow-flat);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+.parent-v4 .child-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+  border-color: var(--c-purple-l);
+}
+.parent-v4 .child-card:active { transform: translateY(0); }
+.parent-v4 .child-card:focus-visible {
+  outline: 2px solid var(--c-purple);
+  outline-offset: 2px;
+}
+
+.parent-v4 .child-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.parent-v4 .child-name-block { display: flex; flex-direction: column; gap: 6px; }
+.parent-v4 .child-name {
+  font-size: 18px; font-weight: 700; letter-spacing: -0.2px; margin: 0;
+  line-height: 1.2;
+}
+.parent-v4 .child-class-pill {
+  background: var(--c-amber-l);
+  color: var(--c-amber-d);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 3px 9px; border-radius: 999px;
+  text-transform: uppercase;
+  align-self: flex-start;
+}
+.parent-v4 .child-chevron {
+  color: var(--c-muted-2); font-size: 18px;
+  transition: transform 100ms ease, color 100ms ease;
+}
+.parent-v4 .child-card:hover .child-chevron { color: var(--c-purple); transform: translateX(2px); }
+
+.parent-v4 .child-stats-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding-top: 14px; padding-bottom: 14px;
+  border-top: 1px solid var(--c-hair);
+  border-bottom: 1px solid var(--c-hair);
+}
+.parent-v4 .child-stat-num {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.4px;
+  color: var(--c-ink);
+}
+.parent-v4 .child-stat-emoji { font-size: 16px; }
+.parent-v4 .child-stat-lbl {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  color: var(--c-muted); text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.parent-v4 .child-foot {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.parent-v4 .child-weak { font-size: 13px; color: var(--c-ink-2); }
+.parent-v4 .child-weak-lbl { color: var(--c-muted); }
+.parent-v4 .child-weak-pct { color: var(--c-muted); font-variant-numeric: tabular-nums; }
+.parent-v4 .child-last-active { font-size: 12px; color: var(--c-muted); }
+
+/* Skeleton state */
+.parent-v4 .child-card-skeleton {
+  background: var(--c-card);
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-xl);
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.parent-v4 .skel-line {
+  height: 14px; background: var(--c-hair-2); border-radius: 6px;
+  animation: parent-skel 1.4s ease-in-out infinite;
+}
+.parent-v4 .skel-line.w-60 { width: 60%; }
+.parent-v4 .skel-line.w-80 { width: 80%; }
+.parent-v4 .skel-row { display: flex; gap: 16px; }
+.parent-v4 .skel-block {
+  flex: 1; height: 50px; background: var(--c-hair-2); border-radius: 8px;
+  animation: parent-skel 1.4s ease-in-out infinite;
+}
+@keyframes parent-skel {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─── Empty state ────────────────────────────────────────────────────── */
+.parent-v4 .parent-empty-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-2xl);
+  padding: 40px 32px;
+  text-align: center;
+  max-width: 640px; margin: 24px auto 0;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  box-shadow: var(--shadow-card);
+}
+.parent-v4 .parent-empty-title {
+  font-size: 22px; font-weight: 700; margin: 4px 0 0;
+}
+.parent-v4 .parent-empty-sub {
+  color: var(--c-ink-2); font-size: 14px; line-height: 1.55;
+  max-width: 460px; margin: 0;
+}
+.parent-v4 .parent-empty-steps {
+  text-align: left; color: var(--c-ink-2); font-size: 14px;
+  margin: 8px 0 14px; padding-left: 22px; line-height: 1.7;
+}
+
+/* ─── Error state ────────────────────────────────────────────────────── */
+.parent-v4 .parent-error-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-pink-l);
+  border-radius: var(--r-xl);
+  padding: 22px;
+  display: flex; align-items: center; gap: 16px;
+}
+.parent-v4 .parent-error-text { flex: 1; }
+.parent-v4 .parent-error-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   /parent/link screen
+   ═══════════════════════════════════════════════════════════════════════ */
+.parent-v4 .parent-link-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-2xl);
+  padding: 36px 32px;
+  max-width: 600px; margin: 12px auto 0;
+  box-shadow: var(--shadow-card);
+}
+.parent-v4 .parent-link-card.success { border-color: var(--c-green-l); }
+
+.parent-v4 .parent-link-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  color: var(--c-muted); text-transform: uppercase; margin-bottom: 8px;
+}
+.parent-v4 .parent-link-title {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.4px;
+  margin: 0 0 8px; line-height: 1.25;
+}
+.parent-v4 .parent-link-sub {
+  color: var(--c-ink-2); font-size: 14px; line-height: 1.55;
+  margin: 0 0 24px;
+}
+
+.parent-v4 .parent-link-form { display: flex; flex-direction: column; gap: 8px; }
+.parent-v4 .parent-link-label {
+  font-size: 12px; font-weight: 600; color: var(--c-ink-2);
+  letter-spacing: 0.04em;
+}
+.parent-v4 .parent-link-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--c-hair);
+  border-radius: var(--r-md);
+  font-size: 16px; font-family: inherit;
+  background: var(--c-paper);
+  color: var(--c-ink);
+  transition: border-color 80ms ease, background 80ms ease;
+}
+.parent-v4 .parent-link-input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  background: var(--c-card);
+}
+.parent-v4 .parent-link-error {
+  color: var(--c-pink); font-size: 13px; margin-top: 4px;
+}
+.parent-v4 .parent-link-submit { margin-top: 18px; align-self: flex-start; }
+
+/* The 8-char code display block */
+.parent-v4 .link-code-display {
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(180deg, var(--c-amber-l) 0%, var(--c-card) 100%);
+  border: 2px dashed var(--c-amber);
+  border-radius: var(--r-xl);
+  padding: 20px 22px;
+  margin: 4px 0 22px;
+}
+.parent-v4 .link-code-text {
+  flex: 1;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 30px; font-weight: 700; letter-spacing: 0.12em;
+  color: var(--c-ink);
+}
+.parent-v4 .link-code-copy {
+  background: var(--c-ink);
+  color: #fff;
+  border: none; border-radius: var(--r-sm);
+  padding: 9px 16px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  transition: background 80ms ease;
+}
+.parent-v4 .link-code-copy:hover { background: var(--c-ink-2); }
+.parent-v4 .link-code-copy.copied { background: var(--c-green); color: var(--c-ink); }
+
+.parent-v4 .parent-link-steps {
+  font-size: 14px; line-height: 1.7; color: var(--c-ink-2);
+  padding-left: 22px; margin: 16px 0 28px;
+}
+.parent-v4 .parent-link-steps li { margin-bottom: 4px; }
+
+.parent-v4 .parent-link-actions {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PendingLinkBanner — rendered on student /home (NOT inside .parent-v4)
+   so selectors are deliberately unscoped. They stand on their own — no
+   external CSS deps.
+   ═══════════════════════════════════════════════════════════════════════ */
+.parent-link-banner {
+  background: linear-gradient(135deg, #ECE5FF 0%, #FFFFFF 100%);
+  border: 1px solid #D5C7FF;
+  border-radius: 18px;
+  padding: 18px 22px;
+  margin: 0 0 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 1px 0 rgba(19,19,26,0.04), 0 6px 18px rgba(124,92,255,0.08);
+}
+.parent-link-banner.success {
+  background: linear-gradient(135deg, #DDF6E9 0%, #FFFFFF 100%);
+  border-color: #BCEBD3;
+  box-shadow: 0 1px 0 rgba(19,19,26,0.04), 0 6px 18px rgba(54,211,153,0.10);
+}
+
+.parent-link-banner-head { display: flex; align-items: center; gap: 12px; }
+.parent-link-banner-text {
+  font-size: 14px; line-height: 1.5; color: #2A2A36;
+}
+.parent-link-banner-form { display: flex; gap: 10px; flex-wrap: wrap; }
+.parent-link-banner-input {
+  flex: 1; min-width: 180px;
+  padding: 11px 14px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 16px; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid #D5C7FF;
+  border-radius: 10px;
+  background: #FFFFFF;
+  color: #13131A;
+}
+.parent-link-banner-input:focus { outline: none; border-color: #7C5CFF; }
+.parent-link-banner-btn {
+  background: #7C5CFF;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 22px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 2px 0 #5A3FE8;
+}
+.parent-link-banner-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 0 #5A3FE8; }
+.parent-link-banner-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #5A3FE8; }
+.parent-link-banner-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: 0 2px 0 #5A3FE8; }
+.parent-link-banner-error { font-size: 12px; color: #FF4D8B; }
+.parent-link-banner-multi { color: #8A8A95; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ChildProgressDetail modal — rendered as a portal at the root, so
+   selectors are unscoped (the modal is technically inside .parent-v4 in
+   our case, but classes do not depend on that scope).
+   ═══════════════════════════════════════════════════════════════════════ */
+.child-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(19, 19, 26, 0.55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 60px 16px 40px;
+  z-index: 1000;
+  overflow-y: auto;
+  animation: child-modal-fade 140ms ease-out;
+}
+@keyframes child-modal-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.child-modal {
+  background: #FFFFFF;
+  border-radius: 22px;
+  padding: 32px 28px;
+  max-width: 580px; width: 100%;
+  box-shadow: 0 30px 80px rgba(19,19,26,0.32);
+  position: relative;
+  animation: child-modal-pop 180ms ease-out;
+  font-family: 'Lexend Deca', -apple-system, system-ui, sans-serif;
+  color: #13131A;
+}
+@keyframes child-modal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.child-modal-close {
+  position: absolute; top: 14px; right: 14px;
+  width: 32px; height: 32px;
+  background: transparent; border: none;
+  color: #8A8A95; font-size: 22px; line-height: 1;
+  cursor: pointer; border-radius: 50%;
+  transition: background 80ms ease;
+}
+.child-modal-close:hover { background: #F3EFE4; color: #13131A; }
+
+.child-modal-head { margin-bottom: 22px; padding-right: 32px; }
+.child-modal-name {
+  font-size: 26px; font-weight: 700; letter-spacing: -0.4px;
+  margin: 0 0 6px; line-height: 1.2;
+}
+.child-modal-meta { color: #8A8A95; font-size: 13px; }
+
+.child-modal-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 18px 0; margin-bottom: 6px;
+  border-top: 1px solid #ECECEE;
+  border-bottom: 1px solid #ECECEE;
+}
+@media (max-width: 460px) {
+  .child-modal-stats { grid-template-columns: 1fr; gap: 8px; }
+}
+.child-modal-stat {
+  text-align: left;
+}
+.child-modal-stat-num {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.4px;
+}
+.child-modal-stat-lbl {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  color: #8A8A95; text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.child-modal-section { margin-top: 20px; }
+.child-modal-section-head {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  color: #8A8A95; text-transform: uppercase; margin-bottom: 8px;
+}
+.child-modal-section p { margin: 0 0 6px; line-height: 1.55; font-size: 14px; color: #2A2A36; }
+
+.child-modal-mastery .mastery-bar {
+  width: 100%; height: 10px;
+  background: #ECECEE; border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.child-modal-mastery .mastery-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FFB547 0%, #36D399 100%);
+  border-radius: 999px;
+  transition: width 320ms ease-out;
+}
+.child-modal-mastery .mastery-meta { font-size: 13px; color: #2A2A36; }
+.child-modal-mastery .tabular { font-variant-numeric: tabular-nums; }
+
+.child-modal-weak {
+  background: #FFE7DD;
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.child-modal-weak .child-modal-section-head { color: #B2381B; }
+
+.child-modal-privacy {
+  background: #FAF8F4;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-top: 24px;
+}
+.child-modal-privacy-list {
+  margin: 0; padding-left: 22px;
+  font-size: 13px; line-height: 1.7;
+  color: #2A2A36;
+}
+.child-modal-privacy .t-xs {
+  font-size: 12px; color: #8A8A95; line-height: 1.5;
+}

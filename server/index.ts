@@ -15,6 +15,7 @@ import teacher from './routes/teacher.js'
 import school from './routes/school.js'
 import authRoutes from './routes/auth.js'
 import superAdmin from './routes/superAdmin.js'
+import parentRoutes from './routes/parent.js'
 import { loadExistingLog } from './lib/llmLog.js'
 
 const app = new Hono()
@@ -55,6 +56,9 @@ app.route('/api/teacher', teacher)
 app.route('/api/school', school)
 app.route('/api/auth', authRoutes)
 app.route('/api/super-admin', superAdmin)
+
+// v5 parents (Sprint 2)
+app.route('/api/parent', parentRoutes)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

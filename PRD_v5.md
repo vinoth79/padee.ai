@@ -1,12 +1,18 @@
 # Padee.ai — PRD v5
 
-**Status**: Draft, ready for build · **Author**: Vinoth + Claude · **Date**: 2026-05-03
+**Status**: In progress (Sprints 0–2 shipped; 3–5 pending) · **Author**: Vinoth + Claude · **Originally drafted**: 2026-05-03 · **Last updated**: 2026-05-05
 
 PRD v4.x got the single-school student journey end-to-end. PRD v5 turns that
 into a platform that schools, parents, and Hindi-medium students can use,
 plus a centralised super-admin view to monitor every school's health.
 
-This is a **scope doc**, not a design doc. UX details land in a follow-up.
+This is a **scope doc**, not a design doc. UX details land in a follow-up
+(`UI_SPEC_v5.md`, `DESIGNER_BRIEF_v5.md`).
+
+> ⚠️ **A v5.1 whole-product visual refresh is in flight in parallel.** v5.1 is a
+> *visual* change (every screen redesigned), not a *product* change — the
+> features below are unchanged. See `DESIGNER_BRIEF_v5.md` §0 for the active
+> design effort.
 
 ---
 
@@ -36,6 +42,24 @@ contain LLM spend.
 | 2 | **Self-serve invite codes** | School admin signs up, gets a 6-digit code, shares with teachers + students. No CSV upload, no email invites, no SSO. |
 | 3 | **Coding = LLM-only (easy path)** | No code execution sandbox in v5. Pa explains code, doesn't run it. Revisit if students complain. |
 | 4 | **Hindi = tutoring-language only** | UI stays English. Per-user `tutor_language` toggle. LLM responds in Hindi/Devanagari, TTS swaps voice. NCERT chunks stay English (LLM translates at response time). |
+
+---
+
+## Build status
+
+| Sprint | Title | Status | Commit / PR | Notes |
+|---|---|---|---|---|
+| 0 | Multi-tenant foundation | ✅ **Shipped** | `b500452` (on `main`) | Migration 012, helpers, isolation contract test green |
+| 1 | School onboarding | ✅ **Shipped** | `1a63e79` (on `main`) | 4-tile signup, /onboarding/school, /school dashboard, multi-class teachers |
+| 2 | Parents | ✅ **Shipped** | PR [#1](https://github.com/vinoth79/padee.ai/pull/1) (`51a3b3c` + `8b3ec5c` + `c417c07`) | 4 endpoints (link / verify / children / pending-incoming), v4 dashboard, integration test green |
+| 3 | Hindi tutoring | ⏳ **Planned** | — | 3 days budget; parallel-able with 4 |
+| 4 | Coding subject (CS) | ⏳ **Planned** | — | 2 days + content ingest; parallel-able with 3 |
+| 5 | Super admin dashboard | ⏳ **Planned** | — | 1.5 weeks budget; biggest remaining sprint |
+| (5.5) | admin → super_admin auth merge | ⏳ **Deferred** | — | Drop `ADMIN_PASSWORD` after Sprint 5 ships super_admin auth UI; see "Build discoveries" §F8 |
+
+**Test coverage today (post-Sprint-2)**: 50 unit assertions + 111 integration assertions across 7 suites (grading, onboarding, CORS, teacher, recommendations, multitenant, parent). All green on two consecutive runs.
+
+**Remaining v5 effort**: ~3.5 weeks calendar (Sprints 3 + 4 in parallel, then 5).
 
 ---
 
@@ -384,15 +408,15 @@ Add Devanagari font preload (subset to weights actually used):
 
 ## Per-feature spec
 
-### F1. B2C (no change, just confirm)
+### F1. B2C (no change, just confirm) — ✅ **Shipped (Sprint 0/1)**
 
 - `/signup` Student tile → existing flow, `school_id = NULL`.
 - All existing v4 screens work as today.
 - No paywall, no gating, no plan tier.
 
-**Acceptance**: a brand new B2C student can sign up + onboard + ask a doubt + take a test, exactly like the v4 pilot. Zero regressions.
+**Acceptance**: a brand new B2C student can sign up + onboard + ask a doubt + take a test, exactly like the v4 pilot. Zero regressions. ✅ Verified by full integration suite (`npm run test:integration` — all v4 tests still pass post-Sprint-2).
 
-### F2. B2B school onboarding
+### F2. B2B school onboarding — ✅ **Shipped (Sprint 1, commit `1a63e79`)**
 
 - **`/signup` "Create school" tile** → captures email/password/name → creates user with `role = 'school_admin'` in `raw_user_meta_data`. Auto-trigger creates profile.
 - Post-signup redirect to **`/onboarding/school`**: form for school name → POST `/api/school/create` → backend generates two codes via `generate_school_invite_code()` and returns them.
@@ -414,7 +438,7 @@ Add Devanagari font preload (subset to weights actually used):
 - A randomly-signed-up B2C user can NOT see DPS data via any teacher endpoint
 - Admin regenerates the student code → old code returns 404 at redeem
 
-### F3. Multiple teachers + multi-class
+### F3. Multiple teachers + multi-class — ✅ **Shipped (Sprint 1)**
 
 - `teacher_classes` table backfilled. New endpoint `PATCH /api/user/teacher-classes` `{ classLevels: [9,10,11] }` to update.
 - `/api/teacher/students` queries `teacher_classes` (not just `profiles.class_level`) to determine which classes the teacher can see.
@@ -422,7 +446,7 @@ Add Devanagari font preload (subset to weights actually used):
 
 **Acceptance**: a teacher selects Class 9 + 10 → `/api/teacher/students` returns students from both classes in their school, none from outside.
 
-### F4. Coding support (easy path)
+### F4. Coding support (easy path) — ⏳ **Planned (Sprint 4)**
 
 - **No execution sandbox.** Pa explains code; the student runs it themselves. UI copy on `/ask`: "Pa explains code; doesn't run it yet."
 - Add `Computer Science` to `SUBJECT_KEYWORDS` in `server/routes/ai.ts`:
@@ -451,7 +475,7 @@ Add Devanagari font preload (subset to weights actually used):
 - Asks "what does this print?" with a code snippet → Pa reasons through it without claiming to execute
 - Practice MCQ for CS works (output-prediction format)
 
-### F5. Parents
+### F5. Parents — ✅ **Shipped (Sprint 2, PR [#1](https://github.com/vinoth79/padee.ai/pull/1))**
 
 - **Existing `/parent` placeholder removed.** New `/parent` is the dashboard.
 - **Linking flow**:
@@ -470,13 +494,24 @@ Add Devanagari font preload (subset to weights actually used):
 - **One parent : N students** supported (UI shows children as cards). **Two parents : 1 student** supported (separate links).
 
 **Acceptance**:
-- Parent A links to Student X via email + code-show flow
-- Parent A also links to Student Y (sibling)
-- Parent B (other parent) also links to Student X
-- All three see the right children with no leakage
-- An unverified link does not show the child to the parent
+- Parent A links to Student X via email + code-show flow ✅
+- Parent A also links to Student Y (sibling) ✅
+- Parent B (other parent) also links to Student X ✅
+- All three see the right children with no leakage ✅
+- An unverified link does not show the child to the parent ✅
 
-### F6. Hindi tutoring
+**Discoveries during Sprint 2 build (added to ship spec, not in original PRD):**
+
+- **4th endpoint added**: `GET /api/parent/pending-incoming` — student-side helper that powers `<PendingLinkBanner>` on `/home`. Original PRD specified 3 endpoints (link / verify / children); the banner needed a way to know a pending link exists without baking it into `/api/user/home-data`.
+- **Lost-code regen path**: when a parent calls `/link` again for an already-pending row, we overwrite the previous code with a fresh one (rather than 409). Real-world UX: a parent who closed the tab without copying the code shouldn't be stuck.
+- **Already-verified short-circuit**: `/link` with an already-verified pair returns `{ alreadyLinked: true, studentName }` with no fresh code minted. Prevents code-leak by accident.
+- **Self-link blocked twice**: DB CHECK constraint (`parent_id <> student_id`) plus an in-route guard for cleaner error copy.
+- **Privacy floor rendered, not just enforced**: `<ChildProgressDetail>` modal includes an explicit "What you can see / What we keep private" panel — design decision to make the v5 read-only contract user-facing, not just server-side.
+- **Link code = 8-char base32** (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, 32-char alphabet — no `0/1/I/O` confusion). Original PRD said "8-char alphanumeric" which is ambiguous (36 chars or 32?); 32 is correct.
+- **Rate limits**: `/link` 20/hr/parent (bumped from initial 10/hr after integration tests showed the limit was tight enough that two consecutive runs against the same TEST_UID hit the fuse); `/verify` 30/hr/student (brute-force fuse against the 32^8 = 1T-key space, which is already astronomical).
+- **`<PendingLinkBanner>` placement locked**: top of student `/home`, above ReplanCheckIn — pending parent-link is time-sensitive (parent is actively waiting), outranks streak / re-plan nudges.
+
+### F6. Hindi tutoring — ⏳ **Planned (Sprint 3)**
 
 - **`profiles.tutor_language`** added in migration.
 - **Settings row**: dropdown labelled "Pa speaks to me in" → English / हिन्दी. Saves via `PATCH /api/user/tutor-language`.
@@ -500,7 +535,7 @@ Add Devanagari font preload (subset to weights actually used):
 - KaTeX still renders the math
 - Same student toggles back to English → next response is in English; cache key separation means no stale Hindi response
 
-### F7. Super admin dashboard
+### F7. Super admin dashboard — ⏳ **Planned (Sprint 5; endpoints stubbed in Sprint 0)**
 
 - **`/super-admin` route** behind `role = 'super_admin'` check.
 - **Tiles** (top of page):
@@ -528,57 +563,115 @@ Add Devanagari font preload (subset to weights actually used):
 ## Sequencing
 
 ```
-Sprint 0 — Foundation                                       (1 week)
-├── Migration 012 deployed (Supabase SQL Editor)
-├── server/lib/supabase.ts — schools-aware helpers
-├── server/routes/auth.ts (new) — /redeem-invite endpoint
-├── server/routes/school.ts (new) — /create, /regenerate-code, /dashboard
-├── server/routes/superAdmin.ts (new) — schema only, endpoints stubbed
+✅ Sprint 0 — Foundation                                    (1 week, SHIPPED)
+├── Migration 012 deployed (schools, teacher_classes, parent_student_links)
+├── server/lib/schoolAuth.ts — requireAuth/Role/SchoolAdmin/SuperAdmin helpers
+├── server/lib/rateLimit.ts — checkRateLimit (in-memory, per-key)
+├── server/routes/auth.ts — /redeem-invite endpoint
+├── server/routes/school.ts — /create, /regenerate-code, /dashboard
+├── server/routes/superAdmin.ts — schema-aware stubs (full UI in Sprint 5)
 ├── teacher.ts /students + /student/:id add school_id filter
-├── ai.ts /doubt adds per-school doubt cap check
-└── tests: cross-school isolation contract test (must-have)
+└── tests/multitenant.integration.sh — 12 assertions, all green
 
-Sprint 1 — School onboarding                                (1.5 weeks)
-├── /signup "Create school" tile
-├── /onboarding/school screen
-├── /school dashboard
-├── /onboarding/invite-code (insertable into existing onboarding flow)
-├── Settings: "Classes I teach" multi-select
-├── Frontend: school name in HomeTopNav (B2B users)
-└── tests: 5-school + multi-teacher integration test
+✅ Sprint 1 — School onboarding                             (1.5 weeks, SHIPPED)
+├── /signup "Create school" tile (4-tile role picker)
+├── /onboarding/school screen (focus layout; school name → 2 codes)
+├── /school dashboard (4 stat tiles + invite-code cards + recent signups)
+├── /onboarding/invite-code (6-digit cell input; skippable)
+├── Settings: "Classes I teach" multi-select for teachers
+├── HomeTopNav school-name pill for B2B users
+├── HomeForRole / RoleRoute helpers in src/components/ui/
+├── schoolApi, authApi, userApi.setTeacherClasses in src/services/api.ts
+└── tests: in tests/multitenant.integration.sh (5-school isolation contract)
 
-Sprint 2 — Parents                                          (1 week)
-├── /api/parent/* endpoints
-├── /parent dashboard rebuild
-├── /parent/link flow
-├── /home banner for student-confirms-parent flow
-└── tests: 1:N + 2:1 parent linking integration test
+✅ Sprint 2 — Parents                                       (1 week, SHIPPED)
+├── server/routes/parent.ts — 4 endpoints (link/verify/children/pending-incoming)
+├── ParentDashboardScreen with mobile-first 1/2/3-up child grid + 60s poll
+├── ParentLinkScreen with 8-char code reveal + copy-to-clipboard
+├── ChildCard / ChildProgressDetail / PendingLinkBanner components
+├── PendingLinkBanner mounted on StudentHomeScreenV4 above ReplanCheckIn
+├── parent-v4.css (529 lines, scoped styles)
+└── tests/parent.integration.sh — 30 assertions covering 1:N + 2:1 + verify lifecycle
 
-Sprint 3 — Hindi (parallel-able with Sprint 4)              (3 days)
+⏳ Sprint 3 — Hindi (parallel-able with Sprint 4)           (3 days)
 ├── PATCH /api/user/tutor-language
 ├── Prompt directive in 4 ai.ts endpoints
 ├── TTS voice routing
-├── Cache key separation
-├── Devanagari font fallback
-├── Settings dropdown
+├── Cache key separation (append ::lang::hi)
+├── Devanagari font fallback (Noto Sans Devanagari)
+├── Settings dropdown (LanguageToggle component)
 └── tests: Hindi response + cache key separation curl
 
-Sprint 4 — Coding support (parallel-able with Sprint 3)     (2 days + ingest)
-├── SUBJECT_KEYWORDS extension
-├── CS prompt addition
-├── Frontend code highlighting
+⏳ Sprint 4 — Coding support (parallel-able with Sprint 3)  (2 days + ingest)
+├── SUBJECT_KEYWORDS extension (computer_science: python keywords)
+├── CS-aware prompt addition in /api/ai/doubt
+├── Frontend: lazy-load prism-react-renderer in MathText
 ├── Onboarding: CS in subject picker for Class 11–12
-└── content: upload + extract Class 11 + 12 NCERT CS
+└── Content: upload + extract Class 11 + 12 NCERT CS PDFs
 
-Sprint 5 — Super admin                                      (1.5 weeks)
-├── /api/super-admin/* endpoints
-├── /super-admin route + screens
+⏳ Sprint 5 — Super admin                                   (1.5 weeks)
+├── /api/super-admin/{schools,school/:id,metrics} endpoints
+├── /super-admin route + 2 screens
+├── SchoolsTable, PlatformMetricsTiles, TopErrorsPanel, TopReportedTopicsPanel
 ├── LLM cost extractor from llm-calls.jsonl
 ├── Error log extractor (bash + node script)
 └── tests: super_admin sees all schools; non-super_admin gets 403
+
+⏳ Post-Sprint-5 — admin → super_admin auth merge           (~half day, deferred)
+├── server/lib/adminAuth.ts deprecated; ADMIN_PASSWORD env var dropped
+├── /api/admin/* routes switch from X-Admin-Password to requireRole(['super_admin'])
+├── AdminScreen.tsx switches from password prompt to Supabase Auth
+├── tests/teacher.integration.sh Test 1 ("ADMIN_PASSWORD refuse-to-start") rewritten or dropped
+└── DEPLOYMENT.md updated: "promote your first super_admin via SQL" instructions
+
+(Visual side: v5.1 whole-product refresh runs in parallel — see DESIGNER_BRIEF_v5.md.
+Engineering implements features per the schedule above; design Claude produces
+hi-fi mocks in the v5.1 visual direction; engineering adopts mocks phase-by-phase.)
 ```
 
-**Total ~6 weeks sequential. ~5 weeks calendar with Sprint 3+4 in parallel.**
+**Original total**: ~6 weeks sequential, ~5 weeks calendar with 3+4 in parallel.
+
+**Updated total** (post-Sprint-2): **~3.5 weeks calendar remaining** (Sprints 3+4 parallel, then 5).
+
+---
+
+## Build discoveries (Sprints 0–2)
+
+Things that emerged during the build that weren't in the original PRD draft.
+Captured here for the audit trail.
+
+### Sprint 0 (foundation)
+
+- **`requireAuth` / `requireRole` / `requireSchoolAdmin` / `requireSuperAdmin` helper hierarchy** in `server/lib/schoolAuth.ts`. Original spec only mentioned per-endpoint role checks; the layered helpers cleaned up boilerplate across 11 routes and made cross-school isolation easy to grep.
+- **`sameSchool(a, b)` helper** for the case where a teacher must read a student in *their* school but not other schools — used by `/api/teacher/student/:id`.
+- **`generateUniqueInviteCode()`** is the JS twin of the SQL `generate_school_invite_code()` plpgsql function — duplicated intentionally so the insert path stays in app code where the rest of the row creation lives. Both loop up to 50 attempts.
+- **`generateLinkCode()`** uses base32 alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — 32 chars, no `0/1/I/O` confusion) via `crypto.randomBytes`. Correct keyspace for collision math is 32^8 = 1.1×10¹², not 36^8.
+- **Migration probe pattern** in tests: each integration test that depends on migration 012 first probes for `parent_student_links` / `schools` table existence; exits 0 with a yellow warning if missing, so test runs stay green during the pre-migration window.
+- **Rate-limit infrastructure** (`server/lib/rateLimit.ts`) — process-local in-memory counter keyed by `(category, userId)`. Resets on server restart. Sufficient for v5; would need Redis-backed shared store at multi-instance scale.
+
+### Sprint 1 (school onboarding)
+
+- **`HomeForRole` route helper** (separate from `RoleRoute`): `/home` is wrapped so non-students (school_admin, parent, etc.) typing `/home` in the URL bar get redirected to their own dashboard *before* the student UI renders. Without this, role-mismatched users would see a half-loaded student home for ~500ms.
+- **`/api/school/create` rate limit** of 5/hr/user — abuse fuse, since a legit school_admin creates exactly one school in their lifetime.
+- **`/api/school/dashboard` 60s poll** while visible (pauses when tab hidden) — reduces wasted polling against Supabase.
+- **B2B `<HomeTopNav>` school pill** — small purple chip showing school name when `profile.school_id` is set; differentiates B2B users at a glance.
+
+### Sprint 2 (parents)
+
+See **F5 §"Discoveries during Sprint 2 build"** above (lost-code regen, already-verified short-circuit, double self-link guard, privacy floor rendered, 4th endpoint, rate-limit tuning, base32 link code).
+
+### Cross-cutting
+
+- **Test path portability fix** (commit `d00dbef`) — 4 test files (`tests/safeParseLLMJson.test.mjs`, `conceptDetect.test.mjs`, `conceptExtract.test.mjs`, `teacher.integration.sh`) had hardcoded `/Users/admin/padee.ai/...` import paths committed from another contributor's machine. Swapped to relative `../server/lib/X.ts` imports + `${REPO_ROOT}` substitution in the integration shell script. **Recommend**: pre-commit hook or CI lint to catch any future hardcoded absolute path under `/Users/`.
+- **esbuild platform mismatch** — `node_modules` had `@esbuild/darwin-x64` but the dev machine is `arm64`. Fixed by `npm install` (which adds the right platform optional dep). Worth documenting in `DEPLOYMENT.md` for future contributors who pull from a different arch.
+- **`.env` symlink in worktrees** — `.env` is gitignored, so worktrees under `.claude/worktrees/*` don't inherit it from the parent repo. Symlink (`ln -s /Users/vinoth/padee.ai/.env .env`) is the canonical workaround — single source of truth for secrets, edits flow into every worktree. Captured in user memory.
+- **PR workflow established** — first PR (#1) opened post-Sprint-2 via `gh pr create`. Future sprints follow same one-branch-per-sprint pattern.
+
+### Decisions deferred
+
+- **`admin` vs `super_admin` role merge** (see "Sequencing" post-Sprint-5 row). Currently `admin` uses `X-Admin-Password` header (env var) and `super_admin` uses Supabase Auth + role check. Right end state: identity-bound super_admin only; password path deprecated. Order matters — Sprint 5 builds the super_admin auth UI; the merge follows.
+- **Self-promotion to super_admin via `@padee.ai` email** — currently manual SQL only (good security, mediocre onboarding for the 5th employee). Worth a trigger or a one-time admin endpoint after Sprint 5.
+- **Server-side rate-limit persistence** — in-memory counter resets on backend restart, which means integration tests run twice in 5 minutes against the same UID can trip limits unless we restart between. Acceptable for now; revisit if/when we go multi-instance.
 
 ---
 
@@ -622,6 +715,8 @@ Explicitly **not** building:
 
 These need real-world feedback before we spec them:
 
+### Carried from original v5 PRD
+
 - **Pricing model** — observe cost-per-active-user for 4–8 weeks first.
 - **Code execution** — only if students complain Pa "guesses".
 - **Hindi NCERT native ingestion** — only if response quality complaints.
@@ -633,22 +728,38 @@ These need real-world feedback before we spec them:
 - **Sentry + PostHog** — error monitoring + product analytics. Both deferred from v4.
 - **Automated nightly recompute cron** (Railway scheduled job, currently manual).
 
+### Added during Sprints 0–2 build
+
+- **`admin` → `super_admin` auth merge** — drop `ADMIN_PASSWORD`, gate all `/api/admin/*` on `requireRole(['super_admin'])`. Half-day after Sprint 5. See "Sequencing" final row.
+- **Auto-promotion of Padee staff to super_admin** — `@padee.ai` email trigger or one-shot promotion endpoint. Currently manual SQL. ~2 hours.
+- **Pre-commit / CI lint for hardcoded absolute paths** — catches any future `/Users/<someone>/...` import in `tests/` or `src/` before it ships. ~2 hours.
+- **Multi-instance rate limiting** — current `server/lib/rateLimit.ts` is in-memory and per-process. Move to Redis or Supabase row-counter when we deploy a second backend instance.
+- **Parent v5.1 ergonomics** — 'last active' currently approximated from last doubt timestamp; could fold in practice + test for a more truthful signal.
+- **`<ChildProgressDetail>` extensibility** — privacy panel is hardcoded; future expansion (more child data) needs a structured way to surface what's newly visible. Possibly a per-attribute consent UI for the student.
+- **PR review automation** — wire up GitHub Actions to run `npm run typecheck && npm run test:unit && npm run test:integration` on PR open. Currently CI-less.
+
+### v5.1 visual refresh (parallel track)
+
+Tracked in `DESIGNER_BRIEF_v5.md`, not here. Engineering implements features
+per this PRD; design Claude produces hi-fi mocks; engineering adopts in a
+sequenced rollout that doesn't block feature sprints.
+
 ---
 
 ## Acceptance — definition of done for v5
 
 The PRD is "shipped" when all of these are true:
 
-1. A school admin can sign up, get codes, and have 2 teachers + 10 students join via codes — all scoped strictly to that school.
-2. A B2C student signs up with no code, completes onboarding, asks a doubt, takes a test — zero regressions vs v4.
-3. A teacher in School A cannot see a single byte of School B's data via any endpoint.
-4. A parent can link to one or two children, see their progress, and a sibling parent (different account) can also link to the same child.
-5. A student toggles tutor language to Hindi → next doubt answer is in Devanagari, math intact, TTS in Hindi voice.
-6. A Class 11 CS student asks "explain Python list comprehension" → gets a syntax-highlighted code answer.
-7. Super admin (Vinoth) sees every school's headline stats on `/super-admin`.
-8. All v4 tests still pass. New v5 tests (cross-school isolation, parent linking, Hindi cache key separation, school cap enforcement) pass.
-9. `DEPLOYMENT.md` updated with: how to seed a super_admin, how to apply migration 012, what env vars (if any) are added.
-10. No production data loss during migration apply (dry-run on staging first).
+1. ✅ **Sprint 1** — A school admin can sign up, get codes, and have 2 teachers + 10 students join via codes — all scoped strictly to that school. (Verified by `tests/multitenant.integration.sh`.)
+2. ✅ **Sprint 1** — A B2C student signs up with no code, completes onboarding, asks a doubt, takes a test — zero regressions vs v4. (Verified by full integration suite run post-Sprint-2.)
+3. ✅ **Sprint 0/1** — A teacher in School A cannot see a single byte of School B's data via any endpoint. (Verified by cross-school isolation contract test in `multitenant.integration.sh`.)
+4. ✅ **Sprint 2** — A parent can link to one or two children, see their progress, and a sibling parent (different account) can also link to the same child. (Verified by `tests/parent.integration.sh` — 30 assertions including 1:N + 2:1 + verify lifecycle.)
+5. ⏳ **Sprint 3** — A student toggles tutor language to Hindi → next doubt answer is in Devanagari, math intact, TTS in Hindi voice.
+6. ⏳ **Sprint 4** — A Class 11 CS student asks "explain Python list comprehension" → gets a syntax-highlighted code answer.
+7. ⏳ **Sprint 5** — Super admin (Vinoth) sees every school's headline stats on `/super-admin`.
+8. ✅ All v4 tests still pass. New v5 tests (cross-school isolation, parent linking — and pending Hindi cache key separation, school cap enforcement) pass. (Currently 50 unit + 111 integration assertions, 0 failures.)
+9. ⏳ `DEPLOYMENT.md` updated with: how to seed a super_admin, how to apply migration 012, what env vars (if any) are added. (Sprint 5; partial — migration 012 is documented.)
+10. ⏳ No production data loss during migration apply (dry-run on staging first). (Pending — currently dev-only.)
 
 ---
 

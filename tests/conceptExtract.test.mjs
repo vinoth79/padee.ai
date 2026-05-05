@@ -8,7 +8,7 @@
 //
 // Run: npx tsx tests/conceptExtract.test.mjs
 
-import { buildConceptRows, toSlug } from '/Users/admin/padee.ai/server/lib/conceptHelpers.ts'
+import { buildConceptRows, toSlug } from '../server/lib/conceptHelpers.ts'
 
 let pass = 0, fail = 0
 const failures = []

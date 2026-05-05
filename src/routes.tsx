@@ -18,6 +18,10 @@ import SchoolOnboardingScreen from './screens/SchoolOnboardingScreen'
 import SchoolDashboardScreen from './screens/SchoolDashboardScreen'
 import InviteCodeRedeemScreen from './screens/InviteCodeRedeemScreen'
 
+// v5 Sprint 2 — parent dashboard + linking flow
+import ParentDashboardScreen from './screens/ParentDashboardScreen'
+import ParentLinkScreen from './screens/ParentLinkScreen'
+
 // Student v4 screens (all full-bleed — own their HomeTopNav + FooterStrip)
 import SplashScreen from './screens/SplashScreen'
 import OnboardingScreen from './screens/OnboardingScreen'
@@ -62,6 +66,11 @@ export const router = createBrowserRouter([
   // /school: school_admin only (the dashboard).
   { path: '/school',                  element: <RoleRoute allowed={['school_admin']}><SchoolDashboardScreen /></RoleRoute> },
 
+  // ── v5 Sprint 2 — parent dashboard + linking flow ──
+  // Parent only — non-parents bounce to their own home (RoleRoute redirects).
+  { path: '/parent',      element: <RoleRoute allowed={['parent']}><ParentDashboardScreen /></RoleRoute> },
+  { path: '/parent/link', element: <RoleRoute allowed={['parent']}><ParentLinkScreen /></RoleRoute> },
+
   // Legacy onboarding fallback (older sessions point here)
   { path: '/onboarding', element: <ProtectedRoute><ScreenBridge Component={OnboardingScreen} redirectTo="/home" isOnboarding /></ProtectedRoute> },
   { path: '/splash',     element: <ScreenBridge Component={SplashScreen} redirectTo="/onboarding/class" autoRedirect /> },
@@ -81,15 +90,14 @@ export const router = createBrowserRouter([
   { path: '/settings',      element: <ProtectedRoute><ScreenBridge Component={SettingsScreen} /></ProtectedRoute> },
 
   // ── Student shell (protected) — placeholder redirects for legacy routes ──
-  // /parent will get a real v4 screen in the next iteration.
   // /jee-neet is Phase 2 (those tracks are disabled in onboarding for now).
-  // Until then both redirect to /home so stale links / parent logins don't 404.
+  // /dashboard is a legacy alias from earlier v3 wiring.
+  // (/parent moved to a real RoleRoute above in Sprint 2.)
   {
     element: <ProtectedRoute><StudentLayout /></ProtectedRoute>,
     children: [
       { path: '/dashboard',   element: <Navigate to="/home" replace /> },
       { path: '/jee-neet',    element: <Navigate to="/home" replace /> },
-      { path: '/parent',      element: <Navigate to="/home" replace /> },
     ],
   },
 

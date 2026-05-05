@@ -1,14 +1,50 @@
-# Padee.ai — UI Spec v5
+# Padee.ai — UI Spec v5 (with v5.1 whole-product refresh in flux)
 
 **Companion to `PRD_v5.md`.** PRD is *what to build*. This is *how it looks*.
 
-Pairs with `Padee_UI_Spec_v3.pdf` (existing, 19+1 screens for v4). v5 adds
-**8 new screens + 5 modified screens + 14 new components**. All scoped under
-the v4 design system — no new visual language introduced.
+> ⚠️ **REFRESH NOTICE (v5.1)**
+>
+> Padee is undergoing a **whole-product visual refresh**. Sections §1–§10 below
+> capture the **current state** as it ships today (engineering-faithful — read
+> off the live app). They are the **baseline being refreshed**, not the target.
+>
+> **The active design effort starts at `DESIGNER_BRIEF_v5.md` §0.** That doc
+> has six visual-direction questions Vinoth must answer before any mocks
+> proceed. Read that first. Then come back here for inventory + current state.
+>
+> **What this doc is now useful for**:
+> - **§1 Design system** — the tokens being refreshed. Designer's new tokens
+>   replace these but the structure (colour roles, radii, shadows, type scale)
+>   is the contract.
+> - **§2 Per-screen wireframes** — what each v5 screen does today; designer's
+>   refresh should preserve the IA but not the visuals.
+> - **§3 Per-component visual spec** — current component vocabulary; designer
+>   replaces.
+> - **§9 Open visual decisions** — small per-screen calls that survive into
+>   the refresh.
+> - **§11 Whole-product screen inventory** — full list of every screen in
+>   the product (added for the refresh).
 
 ---
 
-## 1. Design system (inherited from v4)
+## 0. v5.1 Refresh status
+
+| | |
+|---|---|
+| **Direction locked?** | ❌ No — see `DESIGNER_BRIEF_v5.md` §0 (6 questions for Vinoth) |
+| **Phase A (system foundation)** | Pending direction lock |
+| **Phase B (student journey)** | Pending Phase A |
+| **Phase C (parent + school + teacher)** | Pending Phase B |
+| **Phase D (super admin)** | Pending Phase C |
+| **Phase E (admin tooling)** | Optional — scope decision in brief |
+
+The original v5 spec assumed v4 visuals stayed put and only 8 new screens
+needed designer attention. v5.1 inverts that: **every shipped screen is
+in scope.** The total v5 + v5.1 surface is ~32 screens (see §11).
+
+---
+
+## 1. Design system (inherited from v4 — being refreshed in v5.1)
 
 Tokens lifted from `src/styles/home-v4.css`. Used verbatim across v5.
 
@@ -820,8 +856,129 @@ These should be locked before Sprint 1 ships:
 | 4 | Code highlighting theme choice + sample (CS doubt screen mock) |
 | 5 | Super admin layouts — 2 screens + 4 panels |
 
-**Total designer effort estimate**: ~5–7 person-days across the 6 sprints, paced to land 1 sprint ahead of frontend implementation.
+**Total designer effort estimate (v5 features only)**: ~5–7 person-days
+across the 6 sprints, paced to land 1 sprint ahead of frontend implementation.
+
+**v5.1 refresh estimate**: 4–5 weeks (see `DESIGNER_BRIEF_v5.md` "Compensation
++ timeline" section). The §10 v5-features schedule is now *subsumed* into the
+v5.1 refresh phasing — there's no separate "v5 hi-fi" track any more.
 
 ---
 
-*End of UI Spec v5.*
+## 11. Whole-product screen inventory (for v5.1 refresh)
+
+Every screen currently mounted in `src/routes.tsx`, plus screens planned
+for Sprint 5 (super admin). Use this as the master checklist for the
+refresh — every entry needs a hi-fi mock at desktop + mobile breakpoints.
+
+### Public / unauthenticated
+
+| Path | File | Visual status today | Refresh priority |
+|---|---|---|---|
+| `/` | `src/screens/LandingPage.tsx` | v4 visuals, polished — high traffic from organic + social | **High** — first impression of the brand |
+| `/login` | `src/screens/LoginScreen.tsx` | v4 two-column with dark stats panel | **High** |
+| `/signup` | `src/screens/SignupScreen.tsx` | v5 Sprint 1 — 4-tile role picker (Student / Parent / Teacher / Create school) | **High** |
+
+### Onboarding (post-signup)
+
+| Path | File | Visual status | Priority |
+|---|---|---|---|
+| `/onboarding/class` | `OnboardingClass.tsx` | v4 — class 8-12 + board (CBSE/ICSE/IGCSE/IB/STATE/OTHER) | High |
+| `/onboarding/subjects` | `OnboardingSubjects.tsx` | v4 — Pa-recommended subjects, reset button | Medium |
+| `/onboarding/track` | `OnboardingTrack.tsx` | v4 — goal track + daily pledge XP + study days | High |
+| `/onboarding/invite-code` | `InviteCodeRedeemScreen.jsx` | v5 Sprint 1 — engineering-cut, no designer pass | **High** |
+| `/onboarding/school` | `SchoolOnboardingScreen.jsx` | v5 Sprint 1 — engineering-cut | **High** |
+
+### Student journey (highest traffic)
+
+| Path | File | Visual status | Priority |
+|---|---|---|---|
+| `/home` | `StudentHomeScreenV4.jsx` | v4 — most-loaded screen in the product. Hosts Boss Quest, daily challenge, Pa status, weak spots, recent doubts, footer XP ring. v5.1 also adds PendingLinkBanner. | **Highest** |
+| `/ask` | `DoubtSolverScreenV4.jsx` | v4 — streaming doubt + 8 action chips + visual explainer iframe + listen button + math rendering | **High** |
+| `/learn` | `LearnScreenV4.jsx` | v4 — chapters, mastery, today's focus | High |
+| `/practice` | `PracticeRunScreenV4.jsx` | v4 — MCQ flow with hints, difficulty chips, skip, report | **High** |
+| `/tests` | `TestListScreenV4.jsx` | v4 — 3 modes: teacher-assigned, Pa-recommends, build-your-own | High |
+| `/tests/active` | `TestActiveScreenV4.jsx` | v4 — timed exam mode, locked nav, flag/jump drawer | **High** |
+| `/tests/results` | `TestResultsScreenV4.jsx` | v4 — score ring, debrief sidebar, per-question grid, re-learn CTAs | **High** |
+| `/progress` | `ProgressScreenV4.jsx` | v4 — XP timeline, mastery heatmap, badges | Medium |
+| `/settings` | `SettingsScreen.jsx` | v4 — pledge, study days, subjects, track, language toggle (Sprint 3) | Medium |
+
+### Parent journey (Sprint 2 — engineering-cut, no designer pass)
+
+| Path / component | File | Visual status | Priority |
+|---|---|---|---|
+| `/parent` | `ParentDashboardScreen.jsx` | v5 Sprint 2 — children grid, polls every 60s | **Highest** |
+| `/parent/link` | `ParentLinkScreen.jsx` | v5 Sprint 2 — email → code reveal | **High** |
+| `<ChildCard>` | `components/parent/ChildCard.jsx` | v5 Sprint 2 — name, class pill, XP, streak, weakest subject, last-active | **High** |
+| `<ChildProgressDetail>` modal | `components/parent/ChildProgressDetail.jsx` | v5 Sprint 2 — privacy floor panel | **High** |
+| `<PendingLinkBanner>` | `components/parent/PendingLinkBanner.jsx` | v5 Sprint 2 — student-side `/home` banner | **High** |
+
+### School admin journey (Sprint 1 — engineering-cut)
+
+| Path / component | File | Visual status | Priority |
+|---|---|---|---|
+| `/school` | `SchoolDashboardScreen.jsx` | v5 Sprint 1 — 4 stat tiles + invite-code cards + recent signups + top weak concepts | **Highest** |
+| `<InviteCodeCard>` | `components/school/InviteCodeCard.jsx` | v5 Sprint 1 — copy + regenerate flow | **High** |
+| `<InviteCodeInput>` | `components/ui/InviteCodeInput.jsx` | v5 Sprint 1 — 6-digit cell input | **High** |
+| `<SchoolStatsTiles>` | `components/school/SchoolStatsTiles.jsx` | v5 Sprint 1 — 4-tile metric grid | High |
+| `<RecentSignupsList>` | `components/school/RecentSignupsList.jsx` | v5 Sprint 1 — name + role + relative time | Medium |
+| `<TopWeakConceptsPanel>` | `components/school/TopWeakConceptsPanel.jsx` | v5 Sprint 1 — top 5 weak concepts list | Medium |
+
+### Teacher journey (v4 visuals on real backend)
+
+| Path | File | Visual status | Priority |
+|---|---|---|---|
+| `/teacher` | `TeacherDashboardScreenV4.jsx` | v4 | **High** |
+| `/teacher/worksheet` | `WorksheetGeneratorScreenV4.jsx` | v4 | High |
+| `/teacher/mimic` | `PaperMimicScreenV4.jsx` | v4 | Medium |
+| `/teacher/test` | `TeacherAssignTestScreenV4.jsx` | v4 | High |
+| `/teacher/students` | `StudentPerformanceScreenV4.jsx` | v4 | High |
+| `/teacher/student/:id` | `TeacherStudentProfileScreenV4.jsx` | v4 | **High** |
+| `/teacher/live` | `LiveClassScreenV4.jsx` | v4 | Medium |
+
+### Super admin (Sprint 5 — not yet built)
+
+| Path / component | File | Visual status | Priority |
+|---|---|---|---|
+| `/super-admin` | (not yet built — Sprint 5) | n/a | **Highest** (Sprint 5 ships fresh on new system) |
+| `/super-admin/school/:id` | (not yet built) | n/a | High |
+| `<SchoolsTable>` | (not yet built) | n/a | High |
+| `<PlatformMetricsTiles>` | (not yet built) | n/a | High |
+| `<TopErrorsPanel>` | (not yet built) | n/a | Medium |
+| `<TopReportedTopicsPanel>` | (not yet built) | n/a | Medium |
+
+### Admin tooling (Padee internal — refresh scope is your call, see brief Phase E)
+
+| Path | File | Visual status | Priority |
+|---|---|---|---|
+| `/admin` | `AdminScreen.tsx` | v3-era, deliberately rough — internal NCERT upload + LLM audit + concept catalog + config tabs | Optional — see Phase E in brief |
+
+### Legacy / deprecated (do NOT mock)
+
+These exist in `src/screens/` but are unused in `src/routes.tsx`:
+
+- `OnboardingScreen.jsx`, `SplashScreen.jsx` — superseded by 3-step v4 onboarding
+- `LiveClassScreen.jsx`, `PaperMimicScreen.jsx`, `StudentPerformanceScreen.jsx`,
+  `TeacherAssignTestScreen.jsx`, `TeacherDashboardScreen.jsx`,
+  `TeacherReviewQueueScreen.jsx`, `TeacherStudentProfileScreen.jsx`,
+  `WorksheetGeneratorScreen.jsx` — v3 versions, replaced by V4 siblings.
+
+If you find one of these mounted somewhere unexpected, raise it — they should be
+deleted in a future cleanup.
+
+### Counts
+
+- **Public + auth**: 3
+- **Onboarding**: 5
+- **Student journey**: 9
+- **Parent**: 2 screens + 3 components
+- **School admin**: 1 screen + 5 components
+- **Teacher**: 7
+- **Super admin (planned)**: 2 screens + 4 components
+- **Admin tooling**: 1 (optional)
+
+**Total mockable surface for the refresh: 30 shipped screens + 2 planned + 12 components ≈ 44 deliverables.**
+
+---
+
+*End of UI Spec v5 / start of v5.1 refresh.*

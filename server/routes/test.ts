@@ -24,8 +24,9 @@ async function generateTestQuestions(params: {
   count: number
   difficulty: 'easy' | 'medium' | 'hard'
   userId: string
+  tutorLang?: 'en' | 'hi'   // F6a: when 'hi', MCQ text + options + explanations are in Hindi
 }): Promise<any[]> {
-  const { subject, classLevel, count, difficulty, userId } = params
+  const { subject, classLevel, count, difficulty, userId, tutorLang = 'en' } = params
 
   const systemPrompt = `You are a CBSE Class ${classLevel} ${subject} teacher creating a ${difficulty} difficulty test.
 Generate ${count} multiple-choice questions covering the key concepts from the NCERT syllabus.
@@ -55,7 +56,8 @@ CRITICAL QUALITY RULES:
 6. Use CBSE terminology exactly as in the NCERT textbook.
 7. Question under 50 words. Options under 15 words each. Explanation under 40 words.
 8. Randomise correctIndex across questions (do not always put the answer at index 0).
-9. No LaTeX syntax. Use Unicode for symbols (θ, Ω, °, ×, ÷, π, etc.).`
+9. No LaTeX syntax. Use Unicode for symbols (θ, Ω, °, ×, ÷, π, etc.).${tutorLang === 'hi' ? `
+10. LANGUAGE: All "question", "options", "explanation", and "topic" values MUST be in Hindi (Devanagari script). The JSON keys themselves and the difficulty/correctIndex values stay in English/numeric. Math notation and Unicode symbols stay as-is.` : ''}`
 
   const userPrompt = `Create ${count} ${difficulty}-difficulty MCQs for a CBSE Class ${classLevel} ${subject} test. Cover different topics/chapters.`
 
@@ -260,8 +262,14 @@ test.post('/start', async (c) => {
       classLevel = body.classLevel || 10
       const questionCount = Math.max(1, Math.min(body.questionCount || 10, 20))
       difficulty = body.difficulty || 'medium'
+      // F6a — pass tutor_language so MCQs render in the student's language.
+      // Teacher-assigned tests skip this path; their questions are already
+      // baked into test_assignments by the teacher.
+      const { data: testProfile } = await supabase
+        .from('profiles').select('tutor_language').eq('id', u.id).single()
+      const tutorLang: 'en' | 'hi' = testProfile?.tutor_language === 'hi' ? 'hi' : 'en'
       canonical = await generateTestQuestions({
-        subject, classLevel, count: questionCount, difficulty, userId: u.id,
+        subject, classLevel, count: questionCount, difficulty, userId: u.id, tutorLang,
       })
       title = `${subject} Test (${difficulty})`
       safeMode = mode === 'ai_recommended' ? 'ai_recommended' : 'self'

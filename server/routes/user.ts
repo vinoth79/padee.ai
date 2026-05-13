@@ -79,6 +79,35 @@ user.patch('/teacher-classes', async (c) => {
   return c.json({ classLevels })
 })
 
+// PATCH /api/user/tutor-language
+// ─── Set the language Pa responds in. Stored on profiles.tutor_language;
+// read by /api/ai/{doubt,practice,visual,tts} and /api/test/start to inject
+// a prompt directive + route TTS voice + namespace the response cache.
+//
+// Only 'en' and 'hi' are accepted in v5 (DB CHECK constraint enforces this
+// too). Other Indian languages ship after Hindi proves out.
+user.patch('/tutor-language', async (c) => {
+  const u = await getUserFromToken(c.req.header('Authorization'))
+  if (!u) return c.json({ error: 'Unauthorized' }, 401)
+
+  const body = await c.req.json().catch(() => ({}))
+  const lang = (body.language || '').toString().trim().toLowerCase()
+  if (lang !== 'en' && lang !== 'hi') {
+    return c.json({ error: 'language must be "en" or "hi"' }, 400)
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ tutor_language: lang })
+    .eq('id', u.id)
+  if (error) {
+    console.error('[tutor-language] update failed:', error)
+    return c.json({ error: error.message }, 500)
+  }
+
+  return c.json({ tutorLanguage: lang })
+})
+
 // POST /api/user/replan-acknowledged
 // ─── Resets the pledged_days_missed counter on student_streaks. Called when
 // the student dismisses the home re-plan check-in banner ("Got it"). After

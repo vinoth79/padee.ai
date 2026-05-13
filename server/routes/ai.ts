@@ -156,6 +156,7 @@ ai.post('/doubt', async (c) => {
   // budget into the ground. B2C users (school_id NULL) are uncapped.
   const { data: callerProfile } = await supabase
     .from('profiles').select('school_id, tutor_language').eq('id', u.id).single()
+  const tutorLang: 'en' | 'hi' = callerProfile?.tutor_language === 'hi' ? 'hi' : 'en'
   if (callerProfile?.school_id) {
     const { data: schoolRow } = await supabase
       .from('schools').select('max_doubts_per_day, name')
@@ -188,7 +189,7 @@ ai.post('/doubt', async (c) => {
 
   // Photo doubts: skip cache + RAG (image understanding is per-image), route to vision model
   if (hasImage) {
-    return handleVisionDoubt(c, u.id, messages, imageDataUrl, question, subject, className)
+    return handleVisionDoubt(c, u.id, messages, imageDataUrl, question, subject, className, tutorLang)
   }
 
   // Step 1: Embed the question for RAG retrieval
@@ -208,11 +209,14 @@ ai.post('/doubt', async (c) => {
     queryEmbedding = embeddingRes.data[0].embedding
 
     // Step 2: Check semantic cache (92%+ similarity = cache hit)
+    // Sprint 3 / F6a: filter by tutor_language so a Hindi user never gets
+    // served an English cache row that happens to embed close enough.
     const { data: cached } = await supabase.rpc('search_response_cache', {
       query_embedding: JSON.stringify(queryEmbedding),
       match_subject: subject || 'Physics',
       match_class: className || 10,
       match_threshold: 0.92,
+      match_language: tutorLang,
     })
 
     if (cached && cached.length > 0) {
@@ -274,12 +278,18 @@ ai.post('/doubt', async (c) => {
     // (e.g., a direct "Euclid division" match on a Class 10 chapter chunk
     // that contains mixed intro + content scores ~0.42). Threshold 0.5 rejects
     // all real matches. 0.35 keeps quality matches without adding noise.
+    //
+    // Sprint 3 / F6b: pick Hindi corpus when the student is studying Hindi as
+    // a subject AND tutor_language='hi'. Other subjects in Hindi-mode still
+    // retrieve from English chunks (LLM translates per F6a).
+    const ragLang = ragLanguageForQuery(subject, tutorLang)
     const { data: chunks } = await supabase.rpc('search_ncert_chunks', {
       query_embedding: JSON.stringify(queryEmbedding),
       match_subject: subject || 'Physics',
       match_class: className || 10,
       match_count: 4,
       match_threshold: 0.35,
+      match_language: ragLang,
     })
 
     if (chunks && chunks.length > 0) {
@@ -310,7 +320,7 @@ ai.post('/doubt', async (c) => {
   const isFollowUp = Array.isArray(messages) && messages.length > 1
 
   // Step 5: Build the prompt with memory injection
-  const systemPrompt = buildSystemPrompt(subject, className, ncertContext, memory, isFollowUp)
+  const systemPrompt = buildSystemPrompt(subject, className, ncertContext, memory, isFollowUp, tutorLang)
 
   // Step 5: Stream LLM response via Groq (Llama-70B)
   const fullMessages = [
@@ -458,6 +468,7 @@ ai.post('/doubt', async (c) => {
             class_level: className || 10,
             ai_response: responseToStore,
             model_used: process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile',
+            language: tutorLang,
           })
         } catch {}
       }
@@ -504,10 +515,11 @@ async function handleVisionDoubt(
   imageDataUrl: string,
   question: string,
   subject: string,
-  className: number
+  className: number,
+  tutorLang: 'en' | 'hi' = 'en'
 ) {
   const memory = await buildStudentMemory(userId)
-  const systemPrompt = buildVisionSystemPrompt(subject, className, memory)
+  const systemPrompt = buildVisionSystemPrompt(subject, className, memory, tutorLang)
   const visionModel = process.env.LLM_DOUBT_VISION?.replace('groq/', '')
     || 'meta-llama/llama-4-scout-17b-16e-instruct'
 
@@ -658,7 +670,7 @@ async function handleVisionDoubt(
   })
 }
 
-function buildVisionSystemPrompt(subject: string, className: number, memory: string): string {
+function buildVisionSystemPrompt(subject: string, className: number, memory: string, tutorLang: 'en' | 'hi' = 'en'): string {
   let prompt = `You are Padee, an AI tutor for CBSE Class ${className} ${subject || 'students'}.
 The student photographed something from their textbook or worksheet.
 
@@ -702,6 +714,9 @@ Keep the whole response under 350 words. Use simple English for Class ${classNam
   if (memory) {
     prompt += `\n\n--- STUDENT CONTEXT ---\n${memory}\n--- END STUDENT CONTEXT ---\nUse this to personalise if directly relevant. Do NOT force it.`
   }
+
+  // F6a — append language directive
+  prompt += buildLanguageDirective(tutorLang)
 
   return prompt
 }
@@ -795,12 +810,39 @@ function detectMemoryUsage(
   return false
 }
 
+// ─── Sprint 3 (F6a) — language directive helper ─────────────────────────
+// Appended to every system prompt that builds an LLM call so Pa responds in
+// the student's chosen tutor_language. Math notation MUST stay in LaTeX
+// regardless of language; code MUST keep English keywords (Python, etc.).
+// For Hindi-as-a-subject queries (subject=hindi + tutorLang=hi), the RAG
+// retrieval already picks Hindi-NCERT chunks per F6b — no extra directive
+// needed beyond the standard Hindi-response one.
+function buildLanguageDirective(tutorLang: 'en' | 'hi'): string {
+  if (tutorLang !== 'hi') return ''
+  return `
+
+IMPORTANT — RESPONSE LANGUAGE:
+Respond in Hindi (Devanagari script).
+Math notation MUST stay in LaTeX regardless of language (e.g. $F = ma$, not "एफ बराबर एम ए").
+Code MUST stay in English with English keywords; you can comment in Hindi.`
+}
+
+// ─── Sprint 3 (F6b) — pick RAG language for a given query ────────────────
+// Only Hindi-as-a-subject queries retrieve from native Hindi NCERT chunks.
+// Other subjects in Hindi-mode (Sci / Maths / CS / SS) still retrieve from
+// English chunks and the LLM translates at response time per F6a.
+function ragLanguageForQuery(subject: string, tutorLang: 'en' | 'hi'): 'en' | 'hi' {
+  const isHindiSubject = (subject || '').toLowerCase() === 'hindi'
+  return (tutorLang === 'hi' && isHindiSubject) ? 'hi' : 'en'
+}
+
 function buildSystemPrompt(
   subject: string,
   className: number,
   ncertContext: string,
   memory: string,
   isFollowUp: boolean = false,
+  tutorLang: 'en' | 'hi' = 'en',
 ): string {
   let prompt = `You are Padee, an AI tutor for CBSE Class ${className} ${subject || 'students'}.
 You help Indian students understand their NCERT textbook content.
@@ -851,6 +893,9 @@ Answer using ONLY the content above. CRITICAL presentation rules:
   } else {
     prompt += `\n\nAnswer based on standard CBSE Class ${className} ${subject} curriculum. Do NOT add disclaimers about the textbook -- just answer directly and confidently.`
   }
+
+  // F6a — append language directive last so it overrides any English bias above
+  prompt += buildLanguageDirective(tutorLang)
 
   return prompt
 }
@@ -933,6 +978,13 @@ ai.post('/visual', async (c) => {
   const subj = subject || 'Physics'
   const cls = className || 10
 
+  // F6a — read tutor_language so visuals can localise text labels and the
+  // cache stays lang-separated (a Hindi-labelled SVG and an English one are
+  // different artefacts).
+  const { data: viewerProfile } = await supabase
+    .from('profiles').select('tutor_language').eq('id', u.id).single()
+  const tutorLang: 'en' | 'hi' = viewerProfile?.tutor_language === 'hi' ? 'hi' : 'en'
+
   // Cache key: prefix with "viz::" so visual entries cluster separately from
   // doubt entries. Include the question so the same answer text with different
   // questions can cache separately (e.g. "properties of field lines" vs "draw field lines").
@@ -952,6 +1004,7 @@ ai.post('/visual', async (c) => {
         match_subject: subj,
         match_class: cls,
         match_threshold: 0.90,  // slightly lower threshold for visuals (text can vary)
+        match_language: tutorLang,
       })
 
       // Only return as cache hit if the matched entry is actually a visual (prefix check)
@@ -1062,7 +1115,9 @@ Ohm's Law circuit:
 - Ammeter (circle with A) and voltmeter (circle with V) labelled with current values
 - Slider 1-20Ω that updates R label and recalculates I=V/R, updating ammeter reading via script
 
-Respond with HTML only. No explanation, no preamble, no markdown.`
+Respond with HTML only. No explanation, no preamble, no markdown.${tutorLang === 'hi' ? `
+
+LANGUAGE: All visible text labels in this visualisation (titles, captions, axis labels, button text) MUST be in Hindi (Devanagari script). The HTML/SVG/CSS markup itself stays in English; only the human-readable text gets translated. Math notation stays in LaTeX as usual.` : ''}`
 
   const userPrompt = context
     ? `The student asked: "${question || 'about this concept'}"
@@ -1141,6 +1196,7 @@ Match the scope: answer about Ohm's Law -> circuit. Answer about photosynthesis 
           class_level: cls,
           ai_response: html,
           model_used: 'visual',
+          language: tutorLang,
         })
       } catch (err) {
         console.error('[AI] Visual cache write failed:', err)
@@ -1181,6 +1237,13 @@ ai.post('/practice', async (c) => {
   if (!topic && !context && !concept) {
     return c.json({ error: 'Provide either topic, context, or concept' }, 400)
   }
+
+  // F6a — read tutor_language so MCQ text gets generated in the right
+  // language and RAG retrieves from the right corpus (Hindi NCERT for
+  // Hindi-as-a-subject practice; English NCERT otherwise).
+  const { data: practiceProfile } = await supabase
+    .from('profiles').select('tutor_language').eq('id', u.id).single()
+  const tutorLang: 'en' | 'hi' = practiceProfile?.tutor_language === 'hi' ? 'hi' : 'en'
 
   // If a concept slug was passed, look up its name + chapter for sharper prompting
   let conceptMeta: { name: string; chapter: string | null } | null = null
@@ -1224,6 +1287,7 @@ ai.post('/practice', async (c) => {
       match_class: className || 10,
       match_count: 4,
       match_threshold: 0.35,
+      match_language: ragLanguageForQuery(subject || 'Physics', tutorLang),
     })
     if (chunks && chunks.length > 0) {
       ncertChunkCount = chunks.length
@@ -1289,7 +1353,9 @@ CRITICAL MCQ QUALITY RULES:
       ✓ "What is $K$ in $K = \\frac{1}{2} m v^2$?"
       ✓ "If $m = 2$ kg and $a = 3$ m/s$^2$, find $F$. Options can be $F = 6$ N."
       ✗ "What is K in K = \\frac{1}{2} m v^2?"  (\\frac outside $ — BROKEN)
-    Use \\frac{a}{b}, \\sqrt{x}, x^{2}, \\theta, \\pi, \\sin, \\cos, etc. Always inside $...$. Balance every $ (every opening needs a closing). Plain English between math segments — don't wrap whole sentences in $.${ncertBlock}`
+    Use \\frac{a}{b}, \\sqrt{x}, x^{2}, \\theta, \\pi, \\sin, \\cos, etc. Always inside $...$. Balance every $ (every opening needs a closing). Plain English between math segments — don't wrap whole sentences in $.${ncertBlock}${tutorLang === 'hi' ? `
+
+LANGUAGE: The question text, hint, hint_subtitle, options, and explanation MUST be in Hindi (Devanagari script). The JSON keys ("question", "options", "correctIndex", etc.) stay in English. Math notation stays in LaTeX. The "difficulty" enum stays in English ("easy"/"medium"/"hard").` : ''}`
 
   const conceptLine = conceptMeta
     ? `\n\nFocus specifically on the concept: ${conceptMeta.name}${conceptMeta.chapter ? ` (from chapter: ${conceptMeta.chapter})` : ''}.`
@@ -1605,7 +1671,22 @@ ai.post('/tts', async (c) => {
   const clean = text.trim().slice(0, 5000)
   if (!clean) return c.json({ error: 'text empty after trim' }, 400)
 
-  const voice = voiceOverride || process.env.LLM_TTS_VOICE || 'en-IN-Wavenet-D'
+  // F6a — auto-route voice by user's tutor_language unless the caller
+  // explicitly overrode (rare; the frontend doesn't pass voice in the
+  // normal Listen-button path). Hindi → hi-IN-Wavenet-D (Indian female,
+  // natural prosody on Devanagari). English → en-IN-Wavenet-D.
+  // env LLM_TTS_VOICE / LLM_TTS_VOICE_HI override the per-language defaults.
+  let voice: string
+  if (voiceOverride) {
+    voice = voiceOverride
+  } else {
+    const { data: ttsProfile } = await supabase
+      .from('profiles').select('tutor_language').eq('id', u.id).single()
+    const ttsLang: 'en' | 'hi' = ttsProfile?.tutor_language === 'hi' ? 'hi' : 'en'
+    voice = ttsLang === 'hi'
+      ? (process.env.LLM_TTS_VOICE_HI || 'hi-IN-Wavenet-D')
+      : (process.env.LLM_TTS_VOICE || 'en-IN-Wavenet-D')
+  }
   const langCode = voice.startsWith('en-IN') ? 'en-IN'
                  : voice.startsWith('hi-IN') ? 'hi-IN'
                  : 'en-IN'

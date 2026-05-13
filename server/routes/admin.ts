@@ -65,6 +65,11 @@ admin.post('/upload', async (c) => {
   const classLevel = Number(formData.get('classLevel'))
   const chapterNumber = formData.get('chapterNumber') ? Number(formData.get('chapterNumber')) : null
   const chapterName = formData.get('chapterName') as string || null
+  // F6b — language of the source PDF. 'en' (default) covers Sci / Maths / CS
+  // / SS / English-medium NCERT. 'hi' covers CBSE Hindi-as-a-subject books
+  // (Vasant, Sparsh, Kshitij, Aroh, etc.) which need the unit-aware chunker.
+  const languageRaw = (formData.get('language') as string || 'en').toLowerCase()
+  const language: 'en' | 'hi' = languageRaw === 'hi' ? 'hi' : 'en'
 
   if (!file || !subject || !classLevel) {
     return c.json({ error: 'Missing required fields: pdf, subject, classLevel' }, 400)
@@ -88,10 +93,10 @@ admin.post('/upload', async (c) => {
   if (uploadErr) return c.json({ error: uploadErr.message }, 500)
 
   // Process in background (don't block the response)
-  processUpload(upload.id, file, subject, classLevel, chapterNumber, chapterName)
+  processUpload(upload.id, file, subject, classLevel, chapterNumber, chapterName, language)
     .catch(err => console.error('Upload processing failed:', err))
 
-  return c.json({ upload, message: 'Processing started' })
+  return c.json({ upload, message: 'Processing started', language })
 })
 
 // ── Delete content for a subject/class/chapter ──
@@ -136,6 +141,23 @@ admin.post('/content/:id/reindex', async (c) => {
   if (!upload) return c.json({ error: 'Upload not found' }, 404)
   if (!file) return c.json({ error: 'PDF file required for re-index' }, 400)
 
+  // F6b — language carries through reindex. Form override > existing chunks'
+  // language > 'en' default.
+  let language: 'en' | 'hi' = 'en'
+  const formLang = (formData.get('language') as string || '').toLowerCase()
+  if (formLang === 'hi' || formLang === 'en') {
+    language = formLang as 'en' | 'hi'
+  } else {
+    const { data: probe } = await supabase
+      .from('ncert_chunks')
+      .select('language')
+      .eq('source_pdf', upload.filename)
+      .eq('subject', upload.subject)
+      .eq('class_level', upload.class_level)
+      .limit(1)
+    if (probe && probe.length > 0 && probe[0].language === 'hi') language = 'hi'
+  }
+
   // Delete existing chunks for this upload
   await supabase
     .from('ncert_chunks')
@@ -153,10 +175,10 @@ admin.post('/content/:id/reindex', async (c) => {
     file_size: file.size,
   }).eq('id', uploadId)
 
-  processUpload(uploadId, file, upload.subject, upload.class_level, upload.chapter_number, upload.chapter_name)
+  processUpload(uploadId, file, upload.subject, upload.class_level, upload.chapter_number, upload.chapter_name, language)
     .catch(err => console.error('Reindex processing failed:', err))
 
-  return c.json({ ok: true, message: 'Re-indexing started' })
+  return c.json({ ok: true, message: 'Re-indexing started', language })
 })
 
 // ── App config (admin-editable thresholds) ──
@@ -305,11 +327,12 @@ async function processUpload(
   subject: string,
   classLevel: number,
   chapterNumber: number | null,
-  chapterName: string | null
+  chapterName: string | null,
+  language: 'en' | 'hi' = 'en',
 ) {
   try {
     // Step 1: Extract text from PDF
-    console.log(`[Admin] Extracting text from ${file.name}...`)
+    console.log(`[Admin] Extracting text from ${file.name} (language=${language})...`)
     const buffer = Buffer.from(await file.arrayBuffer())
     const pdfParseModule = await import('pdf-parse')
     const pdfParse = pdfParseModule.default || pdfParseModule
@@ -321,9 +344,12 @@ async function processUpload(
       return
     }
 
-    // Step 2: Chunk the text
-    console.log(`[Admin] Chunking text (${fullText.length} chars)...`)
-    const chunks = chunkText(fullText, 800, 100) // 800 chars per chunk, 100 char overlap
+    // Step 2: Chunk the text — Hindi uses the unit-aware chunker (poems +
+    // prose + grammar units), English uses the 800-char window. See
+    // server/lib/ncertChunker.ts for the heuristics.
+    console.log(`[Admin] Chunking text (${fullText.length} chars, language=${language})...`)
+    const { chunkText: chunkTextLib } = await import('../lib/ncertChunker.js')
+    const chunks = chunkTextLib(fullText, language)
 
     console.log(`[Admin] Created ${chunks.length} chunks`)
     await supabase.from('ncert_uploads').update({ chunk_count: chunks.length }).eq('id', uploadId)
@@ -352,6 +378,7 @@ async function processUpload(
         embedding: JSON.stringify(embeddingRes.data[j].embedding),
         source_pdf: file.name,
         chunk_index: i + j,
+        language,  // F6b — drives the language-aware RAG retrieval filter
       }))
 
       const { error } = await supabase.from('ncert_chunks').insert(rows)
@@ -397,40 +424,8 @@ async function updateUploadStatus(id: string, status: string, errorMessage?: str
   }).eq('id', id)
 }
 
-// Split text into overlapping chunks
-function chunkText(text: string, chunkSize: number, overlap: number): { text: string; page: number | null }[] {
-  const chunks: { text: string; page: number | null }[] = []
-  // Clean up the text
-  const clean = text.replace(/\n{3,}/g, '\n\n').trim()
-  const paragraphs = clean.split(/\n\n+/)
-
-  let current = ''
-  let pageNum: number | null = null
-
-  for (const para of paragraphs) {
-    // Try to detect page numbers
-    const pageMatch = para.match(/^\s*(\d{1,3})\s*$/)
-    if (pageMatch && para.trim().length <= 3) {
-      pageNum = parseInt(pageMatch[1])
-      continue
-    }
-
-    if (current.length + para.length > chunkSize && current.length > 0) {
-      chunks.push({ text: current.trim(), page: pageNum })
-      // Keep overlap from end of current chunk
-      const words = current.split(' ')
-      const overlapWords = words.slice(-Math.ceil(overlap / 5))
-      current = overlapWords.join(' ') + ' ' + para
-    } else {
-      current += (current ? '\n\n' : '') + para
-    }
-  }
-
-  if (current.trim()) {
-    chunks.push({ text: current.trim(), page: pageNum })
-  }
-
-  return chunks.filter(c => c.text.length > 50) // Skip tiny chunks
-}
+// The chunker moved to server/lib/ncertChunker.ts in Sprint 3 / F6b — it's
+// now language-aware (English 800-char window vs Hindi unit-aware). See
+// processUpload() above for the dispatch.
 
 export default admin

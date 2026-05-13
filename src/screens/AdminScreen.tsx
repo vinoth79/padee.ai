@@ -66,6 +66,9 @@ export default function AdminScreen() {
   const [classLevel, setClassLevel] = useState(10)
   const [chapterNumber, setChapterNumber] = useState('')
   const [chapterName, setChapterName] = useState('')
+  // F6b — source language of the PDF: 'en' uses the 800-char window chunker,
+  // 'hi' uses the unit-aware chunker (poems / prose / grammar boundaries).
+  const [uploadLanguage, setUploadLanguage] = useState<'en' | 'hi'>('en')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
@@ -215,6 +218,7 @@ export default function AdminScreen() {
     form.append('pdf', file)
     form.append('subject', subject)
     form.append('classLevel', classLevel.toString())
+    form.append('language', uploadLanguage)
     if (chapterNumber) form.append('chapterNumber', chapterNumber)
     if (chapterName) form.append('chapterName', chapterName)
 
@@ -847,6 +851,32 @@ export default function AdminScreen() {
                 <input type="text" value={chapterName} onChange={e => setChapterName(e.target.value)}
                   placeholder="e.g. Electricity" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
               </div>
+            </div>
+
+            {/* F6b — language of the source PDF. en uses the 800-char chunker;
+                hi uses the unit-aware chunker that respects poem / prose /
+                grammar boundaries (Vasant, Sparsh, Kshitij, Aroh, etc.). */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Source language</label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <label className={`border rounded-lg px-3 py-2 text-sm cursor-pointer ${uploadLanguage === 'en' ? 'bg-teal-50 border-teal-400 text-teal-800' : 'bg-white'}`}>
+                  <input type="radio" name="upload-language" value="en"
+                    checked={uploadLanguage === 'en'}
+                    onChange={() => setUploadLanguage('en')}
+                    className="mr-2" />
+                  English (default chunker)
+                </label>
+                <label className={`border rounded-lg px-3 py-2 text-sm cursor-pointer ${uploadLanguage === 'hi' ? 'bg-teal-50 border-teal-400 text-teal-800' : 'bg-white'}`}>
+                  <input type="radio" name="upload-language" value="hi"
+                    checked={uploadLanguage === 'hi'}
+                    onChange={() => setUploadLanguage('hi')}
+                    className="mr-2" />
+                  हिन्दी (unit-aware chunker)
+                </label>
+              </div>
+              {uploadLanguage === 'hi' && (
+                <p className="text-xs text-gray-500 mt-1">Use for Hindi-as-a-subject books (Vasant, Sparsh, Kshitij, Aroh, etc.). Chunks respect poem and prose unit boundaries.</p>
+              )}
             </div>
 
             <div>

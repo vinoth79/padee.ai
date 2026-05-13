@@ -392,6 +392,20 @@ export const userApi = {
     })
     return jsonOrThrow(r) as Promise<{ classLevels: number[] }>
   },
+
+  /**
+   * Set the language Pa responds in. Sprint 3 (F6a).
+   * Server stores on profiles.tutor_language and the read paths (doubt,
+   * practice, visual, tts, test/start) automatically pick it up next call.
+   */
+  async setTutorLanguage(token: string, language: 'en' | 'hi') {
+    const r = await fetch(`${BASE}/user/tutor-language`, {
+      method: 'PATCH',
+      headers: authHeader(token),
+      body: JSON.stringify({ language }),
+    })
+    return jsonOrThrow(r) as Promise<{ tutorLanguage: 'en' | 'hi' }>
+  },
 }
 
 // ── Parents (Sprint 2) ──

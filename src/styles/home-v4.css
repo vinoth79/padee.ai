@@ -43,7 +43,12 @@
   --shadow-card: 0 1px 0 rgba(19,19,26,0.04), 0 8px 22px rgba(19,19,26,0.05);
   --shadow-pop:  0 4px 0 rgba(19,19,26,0.05), 0 24px 48px rgba(19,19,26,0.10);
 
-  font-family: 'Lexend Deca', -apple-system, system-ui, sans-serif;
+  /* Sprint 3 / F6a — Noto Sans Devanagari fallback for Hindi text.
+     Lexend Deca doesn't ship Devanagari glyphs, so without this fallback
+     Hindi responses render in whatever system font happens to have
+     Devanagari (often inconsistent across Android / iOS / desktop).
+     The font is loaded via <link> in index.html (preconnect + stylesheet). */
+  font-family: 'Lexend Deca', 'Noto Sans Devanagari', -apple-system, system-ui, sans-serif;
   color: var(--c-ink);
   background: var(--c-paper);
   -webkit-font-smoothing: antialiased;

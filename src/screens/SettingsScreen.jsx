@@ -20,6 +20,7 @@ import { saveOnboarding, userApi } from '../services/api'
 import HomeTopNav from '../components/home-v4/HomeTopNav'
 import PaMascot from '../components/home-v4/PaMascot'
 import Ico from '../components/home-v4/Ico'
+import LanguageToggle from '../components/ui/LanguageToggle'
 import '../styles/home-v4.css'
 import '../styles/settings-v4.css'
 
@@ -262,6 +263,32 @@ export default function SettingsScreen({ onNavigate }) {
               <b>{subjects.length}</b> subject{subjects.length === 1 ? '' : 's'} selected.
             </p>
           </Section>
+
+          {/* ── Tutor language (everyone — v5 Sprint 3 / F6a) ── */}
+          {/*
+              No Save button: LanguageToggle persists on change (optimistic
+              + rollback on server error). So we use the bare `.settings-card`
+              shell rather than the <Section> helper, which would force a Save
+              button that doesn't make sense here.
+          */}
+          <div className="settings-card">
+            <div className="settings-card-head">
+              <div>
+                <h2 className="settings-card-title">Pa's language</h2>
+                <p className="settings-card-sub">
+                  The language Pa explains things in. Math notation stays the
+                  same; code keeps English keywords either way.
+                </p>
+              </div>
+            </div>
+            <LanguageToggle />
+            <p className="t-xs" style={{ marginTop: 12 }}>
+              Pa reads <b>NCERT textbooks in your chosen language</b> when
+              you're studying Hindi as a subject. For Maths, Science, and other
+              subjects, Pa always reads the English NCERT — and translates the
+              answer into Hindi if you've picked Hindi.
+            </p>
+          </div>
 
           {/* ── Classes I teach (teachers only — v5 Sprint 1) ── */}
           {isTeacher && (

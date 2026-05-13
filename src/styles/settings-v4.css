@@ -220,3 +220,37 @@
 .home-v4.settings-v4 .settings-save-btn:not(:disabled) {
   /* default state */
 }
+
+/* ── LanguageToggle (Sprint 3 / F6a — Pa speaks to me in dropdown) ──── */
+.home-v4.settings-v4 .lang-toggle {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.home-v4.settings-v4 .lang-toggle-label {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--c-ink-2, #2A2A36);
+}
+.home-v4.settings-v4 .lang-toggle-select {
+  width: 100%; max-width: 320px;
+  padding: 12px 14px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-hair);
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+.home-v4.settings-v4 .lang-toggle-select:focus {
+  outline: none; border-color: var(--c-accent);
+  background: var(--c-card);
+}
+.home-v4.settings-v4 .lang-toggle-select:disabled {
+  opacity: 0.6; cursor: not-allowed;
+}
+.home-v4.settings-v4 .lang-toggle-status {
+  font-size: 12px; color: var(--c-muted);
+}
+.home-v4.settings-v4 .lang-toggle-error {
+  font-size: 12px; color: var(--c-pink, #FF4D8B);
+}
+

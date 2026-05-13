@@ -41,7 +41,7 @@ contain LLM spend.
 | 1 | **Free for everyone** | Build traction first; pricing later. Per-school + per-user rate limits are the spend fuse. |
 | 2 | **Self-serve invite codes** | School admin signs up, gets a 6-digit code, shares with teachers + students. No CSV upload, no email invites, no SSO. |
 | 3 | **Coding = LLM-only (easy path)** | No code execution sandbox in v5. Pa explains code, doesn't run it. Revisit if students complain. |
-| 4 | **Hindi = tutoring-language only** | UI stays English. Per-user `tutor_language` toggle. LLM responds in Hindi/Devanagari, TTS swaps voice. NCERT chunks stay English (LLM translates at response time). |
+| 4 | **Hindi = tutoring-language + Hindi-as-a-subject native NCERT** | UI stays English. Per-user `tutor_language` toggle. LLM responds in Hindi/Devanagari, TTS swaps voice. **For Maths / Science / CS / English / Social Studies**: NCERT chunks stay English; LLM translates retrieved chunks at response time. **For Hindi-as-a-subject (हिंदी)**: native Hindi NCERT textbooks (Vasant, Sparsh, Kshitij, Aroh, etc.) are ingested into `ncert_chunks` with `language='hi'`; RAG filters by language so Pa cites the actual Hindi textbook. |
 
 ---
 
@@ -52,7 +52,7 @@ contain LLM spend.
 | 0 | Multi-tenant foundation | ✅ **Shipped** | `b500452` (on `main`) | Migration 012, helpers, isolation contract test green |
 | 1 | School onboarding | ✅ **Shipped** | `1a63e79` (on `main`) | 4-tile signup, /onboarding/school, /school dashboard, multi-class teachers |
 | 2 | Parents | ✅ **Shipped** | PR [#1](https://github.com/vinoth79/padee.ai/pull/1) (`51a3b3c` + `8b3ec5c` + `c417c07`) | 4 endpoints (link / verify / children / pending-incoming), v4 dashboard, integration test green |
-| 3 | Hindi tutoring | ⏳ **Planned** | — | 3 days budget; parallel-able with 4 |
+| 3 | Hindi tutoring + Hindi-as-a-subject NCERT | ⏳ **Planned** | — | ~6 days budget (was 3); scope expanded to include native Hindi NCERT ingest (Vasant/Sparsh/Kshitij/Aroh + grammar). Still parallel-able with 4. |
 | 4 | Coding subject (CS) | ⏳ **Planned** | — | 2 days + content ingest; parallel-able with 3 |
 | 5 | Super admin dashboard | ⏳ **Planned** | — | 1.5 weeks budget; biggest remaining sprint |
 | (5.5) | admin → super_admin auth merge | ⏳ **Deferred** | — | Drop `ADMIN_PASSWORD` after Sprint 5 ships super_admin auth UI; see "Build discoveries" §F8 |
@@ -87,6 +87,8 @@ All in **`supabase/migrations/012_multitenant_v5.sql`**. Summary:
 | `profiles.role` CHECK | expanded | + `'parent'` (now declared), `'school_admin'`, `'super_admin'`. |
 | `teacher_classes` | new join table | Teacher ↔ N classes. Backfilled from existing `profiles.class_level`. |
 | `parent_student_links` | new join table | Parent ↔ N students. Includes `link_code` + `verified_at`. |
+| `ncert_chunks.language` | new column (Sprint 3) | `'en'` (default; backfill for existing rows) or `'hi'`. RAG filters by this when `tutor_language='hi'` so Hindi-as-a-subject answers ground in actual Hindi NCERT books, not English-translated chunks. |
+| `idx_ncert_chunks_lang_subject` | new index (Sprint 3) | Covers `(language, subject_code)` for the language-aware RAG retrieval. |
 | RLS policies | added | Teachers see same-school profiles. Super admin sees all. Parents see own links. Students confirm own links. |
 | `generate_school_invite_code()` | new function | 6-digit unique-across-both-columns code generator. |
 
@@ -388,7 +390,7 @@ Add Devanagari font preload (subset to weights actually used):
 | **0 (foundation)** | `RoleRoute`, `LoginScreen` redirect logic, `UserContext` schema extension. **No new screens** — pure plumbing. |
 | **1 (school onboarding)** | `SignupScreen` 4-tile, `SchoolOnboardingScreen`, `SchoolDashboardScreen`, `InviteCodeRedeemScreen`, `InviteCodeInput`, `InviteCodeCard`, all `school/*` components, `school-v4.css`. |
 | **2 (parents)** | `ParentDashboardScreen`, `ParentLinkScreen`, `ChildCard`, `ChildProgressDetail`, `PendingLinkBanner`, `parent-v4.css`. Drop the `Navigate to /home` placeholder. |
-| **3 (Hindi)** | `LanguageToggle`, settings row wiring, Devanagari `<link>` in `index.html`, `home-v4.css` font-stack. **3 files touched.** |
+| **3 (Hindi + Hindi-NCERT)** | `LanguageToggle`, settings row wiring, Devanagari `<link>` in `index.html`, `home-v4.css` font-stack. Plus admin-side: NCERT upload tab gets a `language` selector (en/hi) when uploading Hindi books. Plus the onboarding copy update when a Class 8-12 student picks Hindi as a subject. **~5 files touched.** Most of Sprint 3 is server-side (chunker, OCR fallback, retrieval filter) + content ingest. |
 | **4 (coding)** | `MathText` syntax highlighting via lazy `prism-react-renderer`, CS subject in `OnboardingClassScreen`. **2 files touched.** |
 | **5 (super admin)** | `SuperAdminScreen`, `SuperAdminSchoolDetailScreen`, `SchoolsTable`, `PlatformMetricsTiles`, `TopErrorsPanel`, `TopReportedTopicsPanel`, `super-admin-v4.css`. |
 
@@ -511,7 +513,14 @@ Add Devanagari font preload (subset to weights actually used):
 - **Rate limits**: `/link` 20/hr/parent (bumped from initial 10/hr after integration tests showed the limit was tight enough that two consecutive runs against the same TEST_UID hit the fuse); `/verify` 30/hr/student (brute-force fuse against the 32^8 = 1T-key space, which is already astronomical).
 - **`<PendingLinkBanner>` placement locked**: top of student `/home`, above ReplanCheckIn — pending parent-link is time-sensitive (parent is actively waiting), outranks streak / re-plan nudges.
 
-### F6. Hindi tutoring — ⏳ **Planned (Sprint 3)**
+### F6. Hindi tutoring + Hindi-as-a-subject native NCERT — ⏳ **Planned (Sprint 3, ~6 days)**
+
+Two halves, shipped together in Sprint 3:
+
+#### F6a. Tutor language (English ↔ Hindi)
+
+For Maths / Science / CS / Social Studies — content stays English in NCERT;
+Pa responds in Hindi (Devanagari) by translating at response time.
 
 - **`profiles.tutor_language`** added in migration.
 - **Settings row**: dropdown labelled "Pa speaks to me in" → English / हिन्दी. Saves via `PATCH /api/user/tutor-language`.
@@ -523,17 +532,38 @@ Add Devanagari font preload (subset to weights actually used):
   ${lang === 'hi' ? 'Hindi' : 'English'}.
   ```
 - **TTS routing** (`server/routes/ai.ts /tts`): if `tutor_language === 'hi'`, voice = `hi-IN-Wavenet-D` (or `hi-IN-Neural2-A` for naturalness); else `en-IN-Wavenet-D`.
-- **Cache key**: include `tutor_language` in the `response_cache.key` and the embedding-search RPC params. Otherwise an English cache hit serves a Hindi user. (Migration is not needed — append `::lang::hi` or `::lang::en` to the key string in `server/routes/ai.ts`.)
+- **Cache key**: include `tutor_language` in the `response_cache.key` and the embedding-search RPC params. Otherwise an English cache hit serves a Hindi user. (No migration needed — append `::lang::hi` or `::lang::en` to the key string in `server/routes/ai.ts`.)
 - **Frontend font fallback**: add `'Noto Sans Devanagari'` to `body` font-stack in `src/styles/home-v4.css`. Lexend doesn't ship Devanagari glyphs.
 - **`latexToSpeech.ts`**: extend to handle Hindi math vocabulary. v1 ship: keep English math vocabulary in Hindi context (e.g. "F equals m a" still spoken in English mid-Hindi sentence — natural for Indian Hindi speakers). Phase 2: full Hindi math vocab.
-- **NCERT content**: stays English. LLM translates retrieved chunks at response time. Caveat in PRD: response quality on culturally-Hindi subjects (Hindi grammar, Hindi literature) will be weaker; flag for Phase 2 native ingest.
+
+#### F6b. Hindi-as-a-subject — native NCERT ingest
+
+The underserved case. For CBSE Hindi (the subject — हिंदी), there is **no
+English source to translate from** — answers must ground in the actual
+Hindi NCERT books or Pa will hallucinate prose summaries, poem meanings,
+and grammar definitions.
+
+- **Migration**: `ncert_chunks.language` column (default `'en'`; backfill existing rows). New composite index on `(language, subject_code)` for the language-aware RAG retrieval.
+- **RAG retrieval change** in `server/routes/ai.ts`: `/doubt` reads `tutor_language` + detected subject; when subject = `hindi` AND language = `hi`, filter `ncert_chunks` to `language='hi'`. For other Hindi-mode answers (Sci/Maths), retrieval stays on English chunks and the LLM translates per F6a.
+- **Unit-aware chunker** for Hindi books — the current 800-char window splits poems mid-couplet and prose mid-paragraph, which destroys meaning for literature. New chunker respects:
+  - Poem boundaries (whole poem = one chunk, no mid-verse splits)
+  - Prose chapter section breaks (typically marked by ★ or numbered subsections)
+  - Grammar lesson units (one grammar rule + examples = one chunk)
+  - Falls back to 800-char window only if a section exceeds chunk size limit
+- **PDF extraction hardening** — older NCERT Hindi PDFs sometimes return garbled Unicode (ZWNJ issues, dropped conjuncts) via `pdf-parse`. Add a Tesseract OCR fallback path for pages where extracted text fails a Devanagari-validity check (ratio of Devanagari glyphs vs replacement chars).
+- **Content ingest** — Class 8: वसंत, दुर्वा, भारत की खोज. Class 9–10: स्पर्श, संचयन, क्षितिज, कृतिका (Course A + B). Class 11–12: आरोह, वितान, अंतरा, अंतराल. Plus a Hindi grammar handbook (ncert.nic.in). ~12 textbooks total. Run via the existing `/admin` NCERT Content tab.
+- **Concept extraction** — runs automatically on upload (same flow as English); concepts inserted with `language='hi'`. Admin reviews + publishes per chapter.
+- **Onboarding copy** — when Class 8–12 student picks Hindi as a subject AND `tutor_language='hi'`, show a small note: *"Pa has read your Hindi NCERT textbook (Vasant/Sparsh/etc.). Ask about poems, chapters, grammar — Pa will quote the book directly."*
 
 **Acceptance**:
 - Student toggles to Hindi in settings
-- Asks "n्यूटन के तीसरे नियम का उदाहरण दीजिए" → gets a Devanagari response with LaTeX math intact
+- Asks "न्यूटन के तीसरे नियम का उदाहरण दीजिए" → gets a Devanagari response (translated from English NCERT), with LaTeX math intact, TTS in Hindi voice (F6a path)
+- Asks "नेताजी का चश्मा कहानी का सारांश बताइए" → answer grounds in स्पर्श Chapter 10; Pa quotes the actual Hindi NCERT text, not a hallucinated summary (F6b path)
+- Asks "संज्ञा के कितने भेद हैं?" → answer cites the NCERT grammar handbook
+- Asks the same prose question in English language mode → 404 / "Hindi-as-a-subject queries are best asked in Hindi" — no English-translated fallback (translation of a poem destroys it)
 - Listen button plays Hindi-voice TTS
-- KaTeX still renders the math
-- Same student toggles back to English → next response is in English; cache key separation means no stale Hindi response
+- KaTeX still renders the math (mixed-language: F6b answers may interleave Devanagari prose with LaTeX `$...$` quotes if a poem cites a date/year)
+- Same student toggles back to English → next non-Hindi-as-subject doubt is in English; cache key separation prevents stale cross-language serves
 
 ### F7. Super admin dashboard — ⏳ **Planned (Sprint 5; endpoints stubbed in Sprint 0)**
 
@@ -593,14 +623,22 @@ Add Devanagari font preload (subset to weights actually used):
 ├── parent-v4.css (529 lines, scoped styles)
 └── tests/parent.integration.sh — 30 assertions covering 1:N + 2:1 + verify lifecycle
 
-⏳ Sprint 3 — Hindi (parallel-able with Sprint 4)           (3 days)
-├── PATCH /api/user/tutor-language
-├── Prompt directive in 4 ai.ts endpoints
-├── TTS voice routing
-├── Cache key separation (append ::lang::hi)
-├── Devanagari font fallback (Noto Sans Devanagari)
-├── Settings dropdown (LanguageToggle component)
-└── tests: Hindi response + cache key separation curl
+⏳ Sprint 3 — Hindi (parallel-able with Sprint 4)           (~6 days)
+├── F6a — Tutor language (2 days)
+│   ├── PATCH /api/user/tutor-language
+│   ├── Prompt directive in 4 ai.ts endpoints
+│   ├── TTS voice routing
+│   ├── Cache key separation (append ::lang::hi)
+│   ├── Devanagari font fallback (Noto Sans Devanagari)
+│   └── Settings dropdown (LanguageToggle component)
+├── F6b — Hindi-as-a-subject native NCERT (~4 days)
+│   ├── Migration: ncert_chunks.language column + composite index
+│   ├── Unit-aware chunker for poem / prose / grammar units
+│   ├── Tesseract OCR fallback for garbled Devanagari pages
+│   ├── RAG retrieval filters by language for Hindi-as-subject queries
+│   ├── Ingest ~12 NCERT Hindi books (Class 8–12 + grammar)
+│   └── Concept extraction on each book (admin reviews + publishes)
+└── tests: Hindi response + cache key separation + Hindi-NCERT retrieval curl
 
 ⏳ Sprint 4 — Coding support (parallel-able with Sprint 3)  (2 days + ingest)
 ├── SUBJECT_KEYWORDS extension (computer_science: python keywords)
@@ -631,7 +669,7 @@ hi-fi mocks in the v5.1 visual direction; engineering adopts mocks phase-by-phas
 
 **Original total**: ~6 weeks sequential, ~5 weeks calendar with 3+4 in parallel.
 
-**Updated total** (post-Sprint-2): **~3.5 weeks calendar remaining** (Sprints 3+4 parallel, then 5).
+**Updated total** (post-Sprint-2): **~4 weeks calendar remaining** (Sprint 3 expanded to 6 days for Hindi-as-a-subject NCERT ingest; Sprints 3+4 still parallel; then 5).
 
 ---
 
@@ -683,7 +721,7 @@ Explicitly **not** building:
 - **Razorpay / Stripe / GST invoicing** — see above.
 - **Email / SMS / WhatsApp notifications** — parent dashboard ships read-only.
 - **Code execution sandbox** — Pa explains code, doesn't run it.
-- **Hindi NCERT ingestion** — LLM translates English chunks at response time.
+- ~~**Hindi NCERT ingestion**~~ — Moved IN-scope as F6b (Hindi-as-a-subject native NCERT, Sprint 3). For Sci/Maths/CS the LLM still translates English chunks at response time.
 - **Tamil / Telugu / Marathi / Bengali / Kannada tutoring** — same architecture; ship after Hindi proves out.
 - **DPDP parent OTP at student signup** — still self-attestation. Tighten when paid plans demand it.
 - **CSV bulk upload of students** — invite codes scale to 500/school via cap.
@@ -702,7 +740,9 @@ Explicitly **not** building:
 |---|---|---|
 | Cross-school data leak via missed `school_id` filter | **High** | Contract test in Sprint 0 that signs in as Teacher-A-of-School-1 and tries to access Student-of-School-2 — expect 403 / empty. Run on every push. |
 | Invite code abuse (someone shares code on Reddit, randoms join) | Medium | School admin can regenerate. `max_students` cap stops blast radius. Add admin-approve toggle in v5.1 if it actually happens. |
-| Hindi response quality on culturally-Hindi subjects (lit, grammar) | Medium | LLM translation of English chunks is acceptable for Maths/Science/CS but weaker on Hindi-as-a-subject. Flag in onboarding ("Hindi support is best for Maths and Science right now"). |
+| Hindi response quality on culturally-Hindi subjects (lit, grammar) | ~~Medium~~ **Mitigated by F6b** | Was: "LLM translation of English chunks is weaker on Hindi-as-a-subject." Sprint 3 now ingests native Hindi NCERT books (Vasant, Sparsh, Kshitij, Aroh, etc.) and the RAG filters by `language` for Hindi-subject queries. Pa quotes the actual Hindi textbook. Residual risk: PDF extraction quality on older NCERT scans (mitigated by Tesseract OCR fallback). |
+| Hindi NCERT PDF extraction garbled (ZWNJ, conjuncts) | Medium | Some older NCERT Hindi PDFs return mangled Unicode via `pdf-parse`. Tesseract OCR fallback path triggers when extracted text fails a Devanagari-validity ratio check. Manually QA chunks before publishing. |
+| Unit-aware chunker boundary detection misses on poems | Low | Standard 800-char chunker splits poems mid-couplet. New chunker uses NCERT formatting (★, numbered sections, blank-line groups) to detect units. Manual spot-check during ingest catches misses. |
 | Coding without execution = lower-confidence answers | Medium | UI copy sets expectation. Track flag rate on CS questions; if >2× other subjects, prioritise sandbox in Phase 2. |
 | Per-school doubt cap surprises a school mid-day | Low | School dashboard surfaces "you have used X / Y doubts today". Soft 429 with friendly message. School admin can request a raise via email. |
 | Migration 012 breaks an existing teacher endpoint | Medium | Backfill ensures every existing teacher has a `teacher_classes` row matching their `class_level`. Run integration tests against staging before applying to prod. |
@@ -719,7 +759,7 @@ These need real-world feedback before we spec them:
 
 - **Pricing model** — observe cost-per-active-user for 4–8 weeks first.
 - **Code execution** — only if students complain Pa "guesses".
-- **Hindi NCERT native ingestion** — only if response quality complaints.
+- ~~**Hindi NCERT native ingestion**~~ — Moved into Sprint 3 as F6b. Pa now grounds Hindi-as-a-subject answers in the actual Hindi NCERT books.
 - **Other Indian languages** — when 1+ school requests Tamil / Telugu.
 - **Parent v5.1**: full doubt transcripts visible to parent, weekly email summary, screen-time limits, parent → teacher messaging.
 - **School v5.1**: branded login page (logo + colour), CSV bulk upload, domain auto-join, SSO.
@@ -754,7 +794,8 @@ The PRD is "shipped" when all of these are true:
 2. ✅ **Sprint 1** — A B2C student signs up with no code, completes onboarding, asks a doubt, takes a test — zero regressions vs v4. (Verified by full integration suite run post-Sprint-2.)
 3. ✅ **Sprint 0/1** — A teacher in School A cannot see a single byte of School B's data via any endpoint. (Verified by cross-school isolation contract test in `multitenant.integration.sh`.)
 4. ✅ **Sprint 2** — A parent can link to one or two children, see their progress, and a sibling parent (different account) can also link to the same child. (Verified by `tests/parent.integration.sh` — 30 assertions including 1:N + 2:1 + verify lifecycle.)
-5. ⏳ **Sprint 3** — A student toggles tutor language to Hindi → next doubt answer is in Devanagari, math intact, TTS in Hindi voice.
+5a. ⏳ **Sprint 3 (F6a)** — A student toggles tutor language to Hindi → next Sci/Maths doubt is in Devanagari, math intact, TTS in Hindi voice (English NCERT chunks translated at response time).
+5b. ⏳ **Sprint 3 (F6b)** — A Class 10 student asks "नेताजी का चश्मा कहानी का सारांश बताइए" → Pa quotes the actual स्पर्श textbook chapter, not a hallucinated summary. A grammar question cites the NCERT Hindi grammar handbook.
 6. ⏳ **Sprint 4** — A Class 11 CS student asks "explain Python list comprehension" → gets a syntax-highlighted code answer.
 7. ⏳ **Sprint 5** — Super admin (Vinoth) sees every school's headline stats on `/super-admin`.
 8. ✅ All v4 tests still pass. New v5 tests (cross-school isolation, parent linking — and pending Hindi cache key separation, school cap enforcement) pass. (Currently 50 unit + 111 integration assertions, 0 failures.)

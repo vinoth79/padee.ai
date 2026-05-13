@@ -90,8 +90,8 @@ CLASS10_STUDENT=$(curl -s "http://localhost:3001/api/admin/users" -H "X-Admin-Pa
 note "Test 1: ADMIN_PASSWORD refuse-to-start"
 # tsx -e doesn't support top-level await (CJS shim) so we use a temp .mjs probe
 # that uses .then/.catch for the dynamic import.
-cat > /tmp/probe-adminAuth.mjs <<'PROBE_EOF'
-import('/Users/admin/padee.ai/server/lib/adminAuth.ts')
+cat > /tmp/probe-adminAuth.mjs <<PROBE_EOF
+import('${REPO_ROOT}/server/lib/adminAuth.ts')
   .then(() => console.log('LOADED_NO_THROW'))
   .catch(e => console.log('THREW:', (e?.message || String(e)).slice(0, 120)))
 PROBE_EOF

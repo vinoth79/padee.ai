@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "bash tests/run-all.sh",
     "test:unit": "npx tsx tests/safeParseLLMJson.test.mjs && npx tsx tests/conceptExtract.test.mjs && npx tsx tests/conceptDetect.test.mjs",
-    "test:integration": "bash tests/grading.integration.sh && bash tests/onboarding.integration.sh && bash tests/cors.integration.sh && bash tests/teacher.integration.sh && bash tests/recommendations.integration.sh && bash tests/multitenant.integration.sh",
+    "test:integration": "bash tests/grading.integration.sh && bash tests/onboarding.integration.sh && bash tests/cors.integration.sh && bash tests/teacher.integration.sh && bash tests/recommendations.integration.sh && bash tests/multitenant.integration.sh && bash tests/parent.integration.sh",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "typecheck": "npx tsc --noEmit"

@@ -1,12 +1,18 @@
 # Padee.ai — PRD v5
 
-**Status**: Draft, ready for build · **Author**: Vinoth + Claude · **Date**: 2026-05-03
+**Status**: In progress (Sprints 0–2 shipped; 3–5 pending) · **Author**: Vinoth + Claude · **Originally drafted**: 2026-05-03 · **Last updated**: 2026-05-05
 
 PRD v4.x got the single-school student journey end-to-end. PRD v5 turns that
 into a platform that schools, parents, and Hindi-medium students can use,
 plus a centralised super-admin view to monitor every school's health.
 
-This is a **scope doc**, not a design doc. UX details land in a follow-up.
+This is a **scope doc**, not a design doc. UX details land in a follow-up
+(`UI_SPEC_v5.md`, `DESIGNER_BRIEF_v5.md`).
+
+> ⚠️ **A v5.1 whole-product visual refresh is in flight in parallel.** v5.1 is a
+> *visual* change (every screen redesigned), not a *product* change — the
+> features below are unchanged. See `DESIGNER_BRIEF_v5.md` §0 for the active
+> design effort.
 
 ---
 
@@ -35,7 +41,25 @@ contain LLM spend.
 | 1 | **Free for everyone** | Build traction first; pricing later. Per-school + per-user rate limits are the spend fuse. |
 | 2 | **Self-serve invite codes** | School admin signs up, gets a 6-digit code, shares with teachers + students. No CSV upload, no email invites, no SSO. |
 | 3 | **Coding = LLM-only (easy path)** | No code execution sandbox in v5. Pa explains code, doesn't run it. Revisit if students complain. |
-| 4 | **Hindi = tutoring-language only** | UI stays English. Per-user `tutor_language` toggle. LLM responds in Hindi/Devanagari, TTS swaps voice. NCERT chunks stay English (LLM translates at response time). |
+| 4 | **Hindi = tutoring-language + Hindi-as-a-subject native NCERT** | UI stays English. Per-user `tutor_language` toggle. LLM responds in Hindi/Devanagari, TTS swaps voice. **For Maths / Science / CS / English / Social Studies**: NCERT chunks stay English; LLM translates retrieved chunks at response time. **For Hindi-as-a-subject (हिंदी)**: native Hindi NCERT textbooks (Vasant, Sparsh, Kshitij, Aroh, etc.) are ingested into `ncert_chunks` with `language='hi'`; RAG filters by language so Pa cites the actual Hindi textbook. |
+
+---
+
+## Build status
+
+| Sprint | Title | Status | Commit / PR | Notes |
+|---|---|---|---|---|
+| 0 | Multi-tenant foundation | ✅ **Shipped** | `b500452` (on `main`) | Migration 012, helpers, isolation contract test green |
+| 1 | School onboarding | ✅ **Shipped** | `1a63e79` (on `main`) | 4-tile signup, /onboarding/school, /school dashboard, multi-class teachers |
+| 2 | Parents | ✅ **Shipped** | PR [#1](https://github.com/vinoth79/padee.ai/pull/1) (`51a3b3c` + `8b3ec5c` + `c417c07`) | 4 endpoints (link / verify / children / pending-incoming), v4 dashboard, integration test green |
+| 3 | Hindi tutoring + Hindi-as-a-subject NCERT | ⏳ **Planned** | — | ~6 days budget (was 3); scope expanded to include native Hindi NCERT ingest (Vasant/Sparsh/Kshitij/Aroh + grammar). Still parallel-able with 4. |
+| 4 | Coding subject (CS) | ⏳ **Planned** | — | 2 days + content ingest; parallel-able with 3 |
+| 5 | Super admin dashboard | ⏳ **Planned** | — | 1.5 weeks budget; biggest remaining sprint |
+| (5.5) | admin → super_admin auth merge | ⏳ **Deferred** | — | Drop `ADMIN_PASSWORD` after Sprint 5 ships super_admin auth UI; see "Build discoveries" §F8 |
+
+**Test coverage today (post-Sprint-2)**: 50 unit assertions + 111 integration assertions across 7 suites (grading, onboarding, CORS, teacher, recommendations, multitenant, parent). All green on two consecutive runs.
+
+**Remaining v5 effort**: ~3.5 weeks calendar (Sprints 3 + 4 in parallel, then 5).
 
 ---
 
@@ -63,6 +87,8 @@ All in **`supabase/migrations/012_multitenant_v5.sql`**. Summary:
 | `profiles.role` CHECK | expanded | + `'parent'` (now declared), `'school_admin'`, `'super_admin'`. |
 | `teacher_classes` | new join table | Teacher ↔ N classes. Backfilled from existing `profiles.class_level`. |
 | `parent_student_links` | new join table | Parent ↔ N students. Includes `link_code` + `verified_at`. |
+| `ncert_chunks.language` | new column (Sprint 3) | `'en'` (default; backfill for existing rows) or `'hi'`. RAG filters by this when `tutor_language='hi'` so Hindi-as-a-subject answers ground in actual Hindi NCERT books, not English-translated chunks. |
+| `idx_ncert_chunks_lang_subject` | new index (Sprint 3) | Covers `(language, subject_code)` for the language-aware RAG retrieval. |
 | RLS policies | added | Teachers see same-school profiles. Super admin sees all. Parents see own links. Students confirm own links. |
 | `generate_school_invite_code()` | new function | 6-digit unique-across-both-columns code generator. |
 
@@ -364,7 +390,7 @@ Add Devanagari font preload (subset to weights actually used):
 | **0 (foundation)** | `RoleRoute`, `LoginScreen` redirect logic, `UserContext` schema extension. **No new screens** — pure plumbing. |
 | **1 (school onboarding)** | `SignupScreen` 4-tile, `SchoolOnboardingScreen`, `SchoolDashboardScreen`, `InviteCodeRedeemScreen`, `InviteCodeInput`, `InviteCodeCard`, all `school/*` components, `school-v4.css`. |
 | **2 (parents)** | `ParentDashboardScreen`, `ParentLinkScreen`, `ChildCard`, `ChildProgressDetail`, `PendingLinkBanner`, `parent-v4.css`. Drop the `Navigate to /home` placeholder. |
-| **3 (Hindi)** | `LanguageToggle`, settings row wiring, Devanagari `<link>` in `index.html`, `home-v4.css` font-stack. **3 files touched.** |
+| **3 (Hindi + Hindi-NCERT)** | `LanguageToggle`, settings row wiring, Devanagari `<link>` in `index.html`, `home-v4.css` font-stack. Plus admin-side: NCERT upload tab gets a `language` selector (en/hi) when uploading Hindi books. Plus the onboarding copy update when a Class 8-12 student picks Hindi as a subject. **~5 files touched.** Most of Sprint 3 is server-side (chunker, OCR fallback, retrieval filter) + content ingest. |
 | **4 (coding)** | `MathText` syntax highlighting via lazy `prism-react-renderer`, CS subject in `OnboardingClassScreen`. **2 files touched.** |
 | **5 (super admin)** | `SuperAdminScreen`, `SuperAdminSchoolDetailScreen`, `SchoolsTable`, `PlatformMetricsTiles`, `TopErrorsPanel`, `TopReportedTopicsPanel`, `super-admin-v4.css`. |
 
@@ -384,15 +410,15 @@ Add Devanagari font preload (subset to weights actually used):
 
 ## Per-feature spec
 
-### F1. B2C (no change, just confirm)
+### F1. B2C (no change, just confirm) — ✅ **Shipped (Sprint 0/1)**
 
 - `/signup` Student tile → existing flow, `school_id = NULL`.
 - All existing v4 screens work as today.
 - No paywall, no gating, no plan tier.
 
-**Acceptance**: a brand new B2C student can sign up + onboard + ask a doubt + take a test, exactly like the v4 pilot. Zero regressions.
+**Acceptance**: a brand new B2C student can sign up + onboard + ask a doubt + take a test, exactly like the v4 pilot. Zero regressions. ✅ Verified by full integration suite (`npm run test:integration` — all v4 tests still pass post-Sprint-2).
 
-### F2. B2B school onboarding
+### F2. B2B school onboarding — ✅ **Shipped (Sprint 1, commit `1a63e79`)**
 
 - **`/signup` "Create school" tile** → captures email/password/name → creates user with `role = 'school_admin'` in `raw_user_meta_data`. Auto-trigger creates profile.
 - Post-signup redirect to **`/onboarding/school`**: form for school name → POST `/api/school/create` → backend generates two codes via `generate_school_invite_code()` and returns them.
@@ -414,7 +440,7 @@ Add Devanagari font preload (subset to weights actually used):
 - A randomly-signed-up B2C user can NOT see DPS data via any teacher endpoint
 - Admin regenerates the student code → old code returns 404 at redeem
 
-### F3. Multiple teachers + multi-class
+### F3. Multiple teachers + multi-class — ✅ **Shipped (Sprint 1)**
 
 - `teacher_classes` table backfilled. New endpoint `PATCH /api/user/teacher-classes` `{ classLevels: [9,10,11] }` to update.
 - `/api/teacher/students` queries `teacher_classes` (not just `profiles.class_level`) to determine which classes the teacher can see.
@@ -422,7 +448,7 @@ Add Devanagari font preload (subset to weights actually used):
 
 **Acceptance**: a teacher selects Class 9 + 10 → `/api/teacher/students` returns students from both classes in their school, none from outside.
 
-### F4. Coding support (easy path)
+### F4. Coding support (easy path) — ⏳ **Planned (Sprint 4)**
 
 - **No execution sandbox.** Pa explains code; the student runs it themselves. UI copy on `/ask`: "Pa explains code; doesn't run it yet."
 - Add `Computer Science` to `SUBJECT_KEYWORDS` in `server/routes/ai.ts`:
@@ -451,7 +477,7 @@ Add Devanagari font preload (subset to weights actually used):
 - Asks "what does this print?" with a code snippet → Pa reasons through it without claiming to execute
 - Practice MCQ for CS works (output-prediction format)
 
-### F5. Parents
+### F5. Parents — ✅ **Shipped (Sprint 2, PR [#1](https://github.com/vinoth79/padee.ai/pull/1))**
 
 - **Existing `/parent` placeholder removed.** New `/parent` is the dashboard.
 - **Linking flow**:
@@ -470,13 +496,31 @@ Add Devanagari font preload (subset to weights actually used):
 - **One parent : N students** supported (UI shows children as cards). **Two parents : 1 student** supported (separate links).
 
 **Acceptance**:
-- Parent A links to Student X via email + code-show flow
-- Parent A also links to Student Y (sibling)
-- Parent B (other parent) also links to Student X
-- All three see the right children with no leakage
-- An unverified link does not show the child to the parent
+- Parent A links to Student X via email + code-show flow ✅
+- Parent A also links to Student Y (sibling) ✅
+- Parent B (other parent) also links to Student X ✅
+- All three see the right children with no leakage ✅
+- An unverified link does not show the child to the parent ✅
 
-### F6. Hindi tutoring
+**Discoveries during Sprint 2 build (added to ship spec, not in original PRD):**
+
+- **4th endpoint added**: `GET /api/parent/pending-incoming` — student-side helper that powers `<PendingLinkBanner>` on `/home`. Original PRD specified 3 endpoints (link / verify / children); the banner needed a way to know a pending link exists without baking it into `/api/user/home-data`.
+- **Lost-code regen path**: when a parent calls `/link` again for an already-pending row, we overwrite the previous code with a fresh one (rather than 409). Real-world UX: a parent who closed the tab without copying the code shouldn't be stuck.
+- **Already-verified short-circuit**: `/link` with an already-verified pair returns `{ alreadyLinked: true, studentName }` with no fresh code minted. Prevents code-leak by accident.
+- **Self-link blocked twice**: DB CHECK constraint (`parent_id <> student_id`) plus an in-route guard for cleaner error copy.
+- **Privacy floor rendered, not just enforced**: `<ChildProgressDetail>` modal includes an explicit "What you can see / What we keep private" panel — design decision to make the v5 read-only contract user-facing, not just server-side.
+- **Link code = 8-char base32** (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, 32-char alphabet — no `0/1/I/O` confusion). Original PRD said "8-char alphanumeric" which is ambiguous (36 chars or 32?); 32 is correct.
+- **Rate limits**: `/link` 20/hr/parent (bumped from initial 10/hr after integration tests showed the limit was tight enough that two consecutive runs against the same TEST_UID hit the fuse); `/verify` 30/hr/student (brute-force fuse against the 32^8 = 1T-key space, which is already astronomical).
+- **`<PendingLinkBanner>` placement locked**: top of student `/home`, above ReplanCheckIn — pending parent-link is time-sensitive (parent is actively waiting), outranks streak / re-plan nudges.
+
+### F6. Hindi tutoring + Hindi-as-a-subject native NCERT — ⏳ **Planned (Sprint 3, ~6 days)**
+
+Two halves, shipped together in Sprint 3:
+
+#### F6a. Tutor language (English ↔ Hindi)
+
+For Maths / Science / CS / Social Studies — content stays English in NCERT;
+Pa responds in Hindi (Devanagari) by translating at response time.
 
 - **`profiles.tutor_language`** added in migration.
 - **Settings row**: dropdown labelled "Pa speaks to me in" → English / हिन्दी. Saves via `PATCH /api/user/tutor-language`.
@@ -488,19 +532,40 @@ Add Devanagari font preload (subset to weights actually used):
   ${lang === 'hi' ? 'Hindi' : 'English'}.
   ```
 - **TTS routing** (`server/routes/ai.ts /tts`): if `tutor_language === 'hi'`, voice = `hi-IN-Wavenet-D` (or `hi-IN-Neural2-A` for naturalness); else `en-IN-Wavenet-D`.
-- **Cache key**: include `tutor_language` in the `response_cache.key` and the embedding-search RPC params. Otherwise an English cache hit serves a Hindi user. (Migration is not needed — append `::lang::hi` or `::lang::en` to the key string in `server/routes/ai.ts`.)
+- **Cache key**: include `tutor_language` in the `response_cache.key` and the embedding-search RPC params. Otherwise an English cache hit serves a Hindi user. (No migration needed — append `::lang::hi` or `::lang::en` to the key string in `server/routes/ai.ts`.)
 - **Frontend font fallback**: add `'Noto Sans Devanagari'` to `body` font-stack in `src/styles/home-v4.css`. Lexend doesn't ship Devanagari glyphs.
 - **`latexToSpeech.ts`**: extend to handle Hindi math vocabulary. v1 ship: keep English math vocabulary in Hindi context (e.g. "F equals m a" still spoken in English mid-Hindi sentence — natural for Indian Hindi speakers). Phase 2: full Hindi math vocab.
-- **NCERT content**: stays English. LLM translates retrieved chunks at response time. Caveat in PRD: response quality on culturally-Hindi subjects (Hindi grammar, Hindi literature) will be weaker; flag for Phase 2 native ingest.
+
+#### F6b. Hindi-as-a-subject — native NCERT ingest
+
+The underserved case. For CBSE Hindi (the subject — हिंदी), there is **no
+English source to translate from** — answers must ground in the actual
+Hindi NCERT books or Pa will hallucinate prose summaries, poem meanings,
+and grammar definitions.
+
+- **Migration**: `ncert_chunks.language` column (default `'en'`; backfill existing rows). New composite index on `(language, subject_code)` for the language-aware RAG retrieval.
+- **RAG retrieval change** in `server/routes/ai.ts`: `/doubt` reads `tutor_language` + detected subject; when subject = `hindi` AND language = `hi`, filter `ncert_chunks` to `language='hi'`. For other Hindi-mode answers (Sci/Maths), retrieval stays on English chunks and the LLM translates per F6a.
+- **Unit-aware chunker** for Hindi books — the current 800-char window splits poems mid-couplet and prose mid-paragraph, which destroys meaning for literature. New chunker respects:
+  - Poem boundaries (whole poem = one chunk, no mid-verse splits)
+  - Prose chapter section breaks (typically marked by ★ or numbered subsections)
+  - Grammar lesson units (one grammar rule + examples = one chunk)
+  - Falls back to 800-char window only if a section exceeds chunk size limit
+- **PDF extraction hardening** — older NCERT Hindi PDFs sometimes return garbled Unicode (ZWNJ issues, dropped conjuncts) via `pdf-parse`. Add a Tesseract OCR fallback path for pages where extracted text fails a Devanagari-validity check (ratio of Devanagari glyphs vs replacement chars).
+- **Content ingest** — Class 8: वसंत, दुर्वा, भारत की खोज. Class 9–10: स्पर्श, संचयन, क्षितिज, कृतिका (Course A + B). Class 11–12: आरोह, वितान, अंतरा, अंतराल. Plus a Hindi grammar handbook (ncert.nic.in). ~12 textbooks total. Run via the existing `/admin` NCERT Content tab.
+- **Concept extraction** — runs automatically on upload (same flow as English); concepts inserted with `language='hi'`. Admin reviews + publishes per chapter.
+- **Onboarding copy** — when Class 8–12 student picks Hindi as a subject AND `tutor_language='hi'`, show a small note: *"Pa has read your Hindi NCERT textbook (Vasant/Sparsh/etc.). Ask about poems, chapters, grammar — Pa will quote the book directly."*
 
 **Acceptance**:
 - Student toggles to Hindi in settings
-- Asks "n्यूटन के तीसरे नियम का उदाहरण दीजिए" → gets a Devanagari response with LaTeX math intact
+- Asks "न्यूटन के तीसरे नियम का उदाहरण दीजिए" → gets a Devanagari response (translated from English NCERT), with LaTeX math intact, TTS in Hindi voice (F6a path)
+- Asks "नेताजी का चश्मा कहानी का सारांश बताइए" → answer grounds in स्पर्श Chapter 10; Pa quotes the actual Hindi NCERT text, not a hallucinated summary (F6b path)
+- Asks "संज्ञा के कितने भेद हैं?" → answer cites the NCERT grammar handbook
+- Asks the same prose question in English language mode → 404 / "Hindi-as-a-subject queries are best asked in Hindi" — no English-translated fallback (translation of a poem destroys it)
 - Listen button plays Hindi-voice TTS
-- KaTeX still renders the math
-- Same student toggles back to English → next response is in English; cache key separation means no stale Hindi response
+- KaTeX still renders the math (mixed-language: F6b answers may interleave Devanagari prose with LaTeX `$...$` quotes if a poem cites a date/year)
+- Same student toggles back to English → next non-Hindi-as-subject doubt is in English; cache key separation prevents stale cross-language serves
 
-### F7. Super admin dashboard
+### F7. Super admin dashboard — ⏳ **Planned (Sprint 5; endpoints stubbed in Sprint 0)**
 
 - **`/super-admin` route** behind `role = 'super_admin'` check.
 - **Tiles** (top of page):
@@ -528,57 +593,123 @@ Add Devanagari font preload (subset to weights actually used):
 ## Sequencing
 
 ```
-Sprint 0 — Foundation                                       (1 week)
-├── Migration 012 deployed (Supabase SQL Editor)
-├── server/lib/supabase.ts — schools-aware helpers
-├── server/routes/auth.ts (new) — /redeem-invite endpoint
-├── server/routes/school.ts (new) — /create, /regenerate-code, /dashboard
-├── server/routes/superAdmin.ts (new) — schema only, endpoints stubbed
+✅ Sprint 0 — Foundation                                    (1 week, SHIPPED)
+├── Migration 012 deployed (schools, teacher_classes, parent_student_links)
+├── server/lib/schoolAuth.ts — requireAuth/Role/SchoolAdmin/SuperAdmin helpers
+├── server/lib/rateLimit.ts — checkRateLimit (in-memory, per-key)
+├── server/routes/auth.ts — /redeem-invite endpoint
+├── server/routes/school.ts — /create, /regenerate-code, /dashboard
+├── server/routes/superAdmin.ts — schema-aware stubs (full UI in Sprint 5)
 ├── teacher.ts /students + /student/:id add school_id filter
-├── ai.ts /doubt adds per-school doubt cap check
-└── tests: cross-school isolation contract test (must-have)
+└── tests/multitenant.integration.sh — 12 assertions, all green
 
-Sprint 1 — School onboarding                                (1.5 weeks)
-├── /signup "Create school" tile
-├── /onboarding/school screen
-├── /school dashboard
-├── /onboarding/invite-code (insertable into existing onboarding flow)
-├── Settings: "Classes I teach" multi-select
-├── Frontend: school name in HomeTopNav (B2B users)
-└── tests: 5-school + multi-teacher integration test
+✅ Sprint 1 — School onboarding                             (1.5 weeks, SHIPPED)
+├── /signup "Create school" tile (4-tile role picker)
+├── /onboarding/school screen (focus layout; school name → 2 codes)
+├── /school dashboard (4 stat tiles + invite-code cards + recent signups)
+├── /onboarding/invite-code (6-digit cell input; skippable)
+├── Settings: "Classes I teach" multi-select for teachers
+├── HomeTopNav school-name pill for B2B users
+├── HomeForRole / RoleRoute helpers in src/components/ui/
+├── schoolApi, authApi, userApi.setTeacherClasses in src/services/api.ts
+└── tests: in tests/multitenant.integration.sh (5-school isolation contract)
 
-Sprint 2 — Parents                                          (1 week)
-├── /api/parent/* endpoints
-├── /parent dashboard rebuild
-├── /parent/link flow
-├── /home banner for student-confirms-parent flow
-└── tests: 1:N + 2:1 parent linking integration test
+✅ Sprint 2 — Parents                                       (1 week, SHIPPED)
+├── server/routes/parent.ts — 4 endpoints (link/verify/children/pending-incoming)
+├── ParentDashboardScreen with mobile-first 1/2/3-up child grid + 60s poll
+├── ParentLinkScreen with 8-char code reveal + copy-to-clipboard
+├── ChildCard / ChildProgressDetail / PendingLinkBanner components
+├── PendingLinkBanner mounted on StudentHomeScreenV4 above ReplanCheckIn
+├── parent-v4.css (529 lines, scoped styles)
+└── tests/parent.integration.sh — 30 assertions covering 1:N + 2:1 + verify lifecycle
 
-Sprint 3 — Hindi (parallel-able with Sprint 4)              (3 days)
-├── PATCH /api/user/tutor-language
-├── Prompt directive in 4 ai.ts endpoints
-├── TTS voice routing
-├── Cache key separation
-├── Devanagari font fallback
-├── Settings dropdown
-└── tests: Hindi response + cache key separation curl
+⏳ Sprint 3 — Hindi (parallel-able with Sprint 4)           (~6 days)
+├── F6a — Tutor language (2 days)
+│   ├── PATCH /api/user/tutor-language
+│   ├── Prompt directive in 4 ai.ts endpoints
+│   ├── TTS voice routing
+│   ├── Cache key separation (append ::lang::hi)
+│   ├── Devanagari font fallback (Noto Sans Devanagari)
+│   └── Settings dropdown (LanguageToggle component)
+├── F6b — Hindi-as-a-subject native NCERT (~4 days)
+│   ├── Migration: ncert_chunks.language column + composite index
+│   ├── Unit-aware chunker for poem / prose / grammar units
+│   ├── Tesseract OCR fallback for garbled Devanagari pages
+│   ├── RAG retrieval filters by language for Hindi-as-subject queries
+│   ├── Ingest ~12 NCERT Hindi books (Class 8–12 + grammar)
+│   └── Concept extraction on each book (admin reviews + publishes)
+└── tests: Hindi response + cache key separation + Hindi-NCERT retrieval curl
 
-Sprint 4 — Coding support (parallel-able with Sprint 3)     (2 days + ingest)
-├── SUBJECT_KEYWORDS extension
-├── CS prompt addition
-├── Frontend code highlighting
+⏳ Sprint 4 — Coding support (parallel-able with Sprint 3)  (2 days + ingest)
+├── SUBJECT_KEYWORDS extension (computer_science: python keywords)
+├── CS-aware prompt addition in /api/ai/doubt
+├── Frontend: lazy-load prism-react-renderer in MathText
 ├── Onboarding: CS in subject picker for Class 11–12
-└── content: upload + extract Class 11 + 12 NCERT CS
+└── Content: upload + extract Class 11 + 12 NCERT CS PDFs
 
-Sprint 5 — Super admin                                      (1.5 weeks)
-├── /api/super-admin/* endpoints
-├── /super-admin route + screens
+⏳ Sprint 5 — Super admin                                   (1.5 weeks)
+├── /api/super-admin/{schools,school/:id,metrics} endpoints
+├── /super-admin route + 2 screens
+├── SchoolsTable, PlatformMetricsTiles, TopErrorsPanel, TopReportedTopicsPanel
 ├── LLM cost extractor from llm-calls.jsonl
 ├── Error log extractor (bash + node script)
 └── tests: super_admin sees all schools; non-super_admin gets 403
+
+⏳ Post-Sprint-5 — admin → super_admin auth merge           (~half day, deferred)
+├── server/lib/adminAuth.ts deprecated; ADMIN_PASSWORD env var dropped
+├── /api/admin/* routes switch from X-Admin-Password to requireRole(['super_admin'])
+├── AdminScreen.tsx switches from password prompt to Supabase Auth
+├── tests/teacher.integration.sh Test 1 ("ADMIN_PASSWORD refuse-to-start") rewritten or dropped
+└── DEPLOYMENT.md updated: "promote your first super_admin via SQL" instructions
+
+(Visual side: v5.1 whole-product refresh runs in parallel — see DESIGNER_BRIEF_v5.md.
+Engineering implements features per the schedule above; design Claude produces
+hi-fi mocks in the v5.1 visual direction; engineering adopts mocks phase-by-phase.)
 ```
 
-**Total ~6 weeks sequential. ~5 weeks calendar with Sprint 3+4 in parallel.**
+**Original total**: ~6 weeks sequential, ~5 weeks calendar with 3+4 in parallel.
+
+**Updated total** (post-Sprint-2): **~4 weeks calendar remaining** (Sprint 3 expanded to 6 days for Hindi-as-a-subject NCERT ingest; Sprints 3+4 still parallel; then 5).
+
+---
+
+## Build discoveries (Sprints 0–2)
+
+Things that emerged during the build that weren't in the original PRD draft.
+Captured here for the audit trail.
+
+### Sprint 0 (foundation)
+
+- **`requireAuth` / `requireRole` / `requireSchoolAdmin` / `requireSuperAdmin` helper hierarchy** in `server/lib/schoolAuth.ts`. Original spec only mentioned per-endpoint role checks; the layered helpers cleaned up boilerplate across 11 routes and made cross-school isolation easy to grep.
+- **`sameSchool(a, b)` helper** for the case where a teacher must read a student in *their* school but not other schools — used by `/api/teacher/student/:id`.
+- **`generateUniqueInviteCode()`** is the JS twin of the SQL `generate_school_invite_code()` plpgsql function — duplicated intentionally so the insert path stays in app code where the rest of the row creation lives. Both loop up to 50 attempts.
+- **`generateLinkCode()`** uses base32 alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — 32 chars, no `0/1/I/O` confusion) via `crypto.randomBytes`. Correct keyspace for collision math is 32^8 = 1.1×10¹², not 36^8.
+- **Migration probe pattern** in tests: each integration test that depends on migration 012 first probes for `parent_student_links` / `schools` table existence; exits 0 with a yellow warning if missing, so test runs stay green during the pre-migration window.
+- **Rate-limit infrastructure** (`server/lib/rateLimit.ts`) — process-local in-memory counter keyed by `(category, userId)`. Resets on server restart. Sufficient for v5; would need Redis-backed shared store at multi-instance scale.
+
+### Sprint 1 (school onboarding)
+
+- **`HomeForRole` route helper** (separate from `RoleRoute`): `/home` is wrapped so non-students (school_admin, parent, etc.) typing `/home` in the URL bar get redirected to their own dashboard *before* the student UI renders. Without this, role-mismatched users would see a half-loaded student home for ~500ms.
+- **`/api/school/create` rate limit** of 5/hr/user — abuse fuse, since a legit school_admin creates exactly one school in their lifetime.
+- **`/api/school/dashboard` 60s poll** while visible (pauses when tab hidden) — reduces wasted polling against Supabase.
+- **B2B `<HomeTopNav>` school pill** — small purple chip showing school name when `profile.school_id` is set; differentiates B2B users at a glance.
+
+### Sprint 2 (parents)
+
+See **F5 §"Discoveries during Sprint 2 build"** above (lost-code regen, already-verified short-circuit, double self-link guard, privacy floor rendered, 4th endpoint, rate-limit tuning, base32 link code).
+
+### Cross-cutting
+
+- **Test path portability fix** (commit `d00dbef`) — 4 test files (`tests/safeParseLLMJson.test.mjs`, `conceptDetect.test.mjs`, `conceptExtract.test.mjs`, `teacher.integration.sh`) had hardcoded `/Users/admin/padee.ai/...` import paths committed from another contributor's machine. Swapped to relative `../server/lib/X.ts` imports + `${REPO_ROOT}` substitution in the integration shell script. **Recommend**: pre-commit hook or CI lint to catch any future hardcoded absolute path under `/Users/`.
+- **esbuild platform mismatch** — `node_modules` had `@esbuild/darwin-x64` but the dev machine is `arm64`. Fixed by `npm install` (which adds the right platform optional dep). Worth documenting in `DEPLOYMENT.md` for future contributors who pull from a different arch.
+- **`.env` symlink in worktrees** — `.env` is gitignored, so worktrees under `.claude/worktrees/*` don't inherit it from the parent repo. Symlink (`ln -s /Users/vinoth/padee.ai/.env .env`) is the canonical workaround — single source of truth for secrets, edits flow into every worktree. Captured in user memory.
+- **PR workflow established** — first PR (#1) opened post-Sprint-2 via `gh pr create`. Future sprints follow same one-branch-per-sprint pattern.
+
+### Decisions deferred
+
+- **`admin` vs `super_admin` role merge** (see "Sequencing" post-Sprint-5 row). Currently `admin` uses `X-Admin-Password` header (env var) and `super_admin` uses Supabase Auth + role check. Right end state: identity-bound super_admin only; password path deprecated. Order matters — Sprint 5 builds the super_admin auth UI; the merge follows.
+- **Self-promotion to super_admin via `@padee.ai` email** — currently manual SQL only (good security, mediocre onboarding for the 5th employee). Worth a trigger or a one-time admin endpoint after Sprint 5.
+- **Server-side rate-limit persistence** — in-memory counter resets on backend restart, which means integration tests run twice in 5 minutes against the same UID can trip limits unless we restart between. Acceptable for now; revisit if/when we go multi-instance.
 
 ---
 
@@ -590,7 +721,7 @@ Explicitly **not** building:
 - **Razorpay / Stripe / GST invoicing** — see above.
 - **Email / SMS / WhatsApp notifications** — parent dashboard ships read-only.
 - **Code execution sandbox** — Pa explains code, doesn't run it.
-- **Hindi NCERT ingestion** — LLM translates English chunks at response time.
+- ~~**Hindi NCERT ingestion**~~ — Moved IN-scope as F6b (Hindi-as-a-subject native NCERT, Sprint 3). For Sci/Maths/CS the LLM still translates English chunks at response time.
 - **Tamil / Telugu / Marathi / Bengali / Kannada tutoring** — same architecture; ship after Hindi proves out.
 - **DPDP parent OTP at student signup** — still self-attestation. Tighten when paid plans demand it.
 - **CSV bulk upload of students** — invite codes scale to 500/school via cap.
@@ -609,7 +740,9 @@ Explicitly **not** building:
 |---|---|---|
 | Cross-school data leak via missed `school_id` filter | **High** | Contract test in Sprint 0 that signs in as Teacher-A-of-School-1 and tries to access Student-of-School-2 — expect 403 / empty. Run on every push. |
 | Invite code abuse (someone shares code on Reddit, randoms join) | Medium | School admin can regenerate. `max_students` cap stops blast radius. Add admin-approve toggle in v5.1 if it actually happens. |
-| Hindi response quality on culturally-Hindi subjects (lit, grammar) | Medium | LLM translation of English chunks is acceptable for Maths/Science/CS but weaker on Hindi-as-a-subject. Flag in onboarding ("Hindi support is best for Maths and Science right now"). |
+| Hindi response quality on culturally-Hindi subjects (lit, grammar) | ~~Medium~~ **Mitigated by F6b** | Was: "LLM translation of English chunks is weaker on Hindi-as-a-subject." Sprint 3 now ingests native Hindi NCERT books (Vasant, Sparsh, Kshitij, Aroh, etc.) and the RAG filters by `language` for Hindi-subject queries. Pa quotes the actual Hindi textbook. Residual risk: PDF extraction quality on older NCERT scans (mitigated by Tesseract OCR fallback). |
+| Hindi NCERT PDF extraction garbled (ZWNJ, conjuncts) | Medium | Some older NCERT Hindi PDFs return mangled Unicode via `pdf-parse`. Tesseract OCR fallback path triggers when extracted text fails a Devanagari-validity ratio check. Manually QA chunks before publishing. |
+| Unit-aware chunker boundary detection misses on poems | Low | Standard 800-char chunker splits poems mid-couplet. New chunker uses NCERT formatting (★, numbered sections, blank-line groups) to detect units. Manual spot-check during ingest catches misses. |
 | Coding without execution = lower-confidence answers | Medium | UI copy sets expectation. Track flag rate on CS questions; if >2× other subjects, prioritise sandbox in Phase 2. |
 | Per-school doubt cap surprises a school mid-day | Low | School dashboard surfaces "you have used X / Y doubts today". Soft 429 with friendly message. School admin can request a raise via email. |
 | Migration 012 breaks an existing teacher endpoint | Medium | Backfill ensures every existing teacher has a `teacher_classes` row matching their `class_level`. Run integration tests against staging before applying to prod. |
@@ -622,9 +755,11 @@ Explicitly **not** building:
 
 These need real-world feedback before we spec them:
 
+### Carried from original v5 PRD
+
 - **Pricing model** — observe cost-per-active-user for 4–8 weeks first.
 - **Code execution** — only if students complain Pa "guesses".
-- **Hindi NCERT native ingestion** — only if response quality complaints.
+- ~~**Hindi NCERT native ingestion**~~ — Moved into Sprint 3 as F6b. Pa now grounds Hindi-as-a-subject answers in the actual Hindi NCERT books.
 - **Other Indian languages** — when 1+ school requests Tamil / Telugu.
 - **Parent v5.1**: full doubt transcripts visible to parent, weekly email summary, screen-time limits, parent → teacher messaging.
 - **School v5.1**: branded login page (logo + colour), CSV bulk upload, domain auto-join, SSO.
@@ -633,22 +768,39 @@ These need real-world feedback before we spec them:
 - **Sentry + PostHog** — error monitoring + product analytics. Both deferred from v4.
 - **Automated nightly recompute cron** (Railway scheduled job, currently manual).
 
+### Added during Sprints 0–2 build
+
+- **`admin` → `super_admin` auth merge** — drop `ADMIN_PASSWORD`, gate all `/api/admin/*` on `requireRole(['super_admin'])`. Half-day after Sprint 5. See "Sequencing" final row.
+- **Auto-promotion of Padee staff to super_admin** — `@padee.ai` email trigger or one-shot promotion endpoint. Currently manual SQL. ~2 hours.
+- **Pre-commit / CI lint for hardcoded absolute paths** — catches any future `/Users/<someone>/...` import in `tests/` or `src/` before it ships. ~2 hours.
+- **Multi-instance rate limiting** — current `server/lib/rateLimit.ts` is in-memory and per-process. Move to Redis or Supabase row-counter when we deploy a second backend instance.
+- **Parent v5.1 ergonomics** — 'last active' currently approximated from last doubt timestamp; could fold in practice + test for a more truthful signal.
+- **`<ChildProgressDetail>` extensibility** — privacy panel is hardcoded; future expansion (more child data) needs a structured way to surface what's newly visible. Possibly a per-attribute consent UI for the student.
+- **PR review automation** — wire up GitHub Actions to run `npm run typecheck && npm run test:unit && npm run test:integration` on PR open. Currently CI-less.
+
+### v5.1 visual refresh (parallel track)
+
+Tracked in `DESIGNER_BRIEF_v5.md`, not here. Engineering implements features
+per this PRD; design Claude produces hi-fi mocks; engineering adopts in a
+sequenced rollout that doesn't block feature sprints.
+
 ---
 
 ## Acceptance — definition of done for v5
 
 The PRD is "shipped" when all of these are true:
 
-1. A school admin can sign up, get codes, and have 2 teachers + 10 students join via codes — all scoped strictly to that school.
-2. A B2C student signs up with no code, completes onboarding, asks a doubt, takes a test — zero regressions vs v4.
-3. A teacher in School A cannot see a single byte of School B's data via any endpoint.
-4. A parent can link to one or two children, see their progress, and a sibling parent (different account) can also link to the same child.
-5. A student toggles tutor language to Hindi → next doubt answer is in Devanagari, math intact, TTS in Hindi voice.
-6. A Class 11 CS student asks "explain Python list comprehension" → gets a syntax-highlighted code answer.
-7. Super admin (Vinoth) sees every school's headline stats on `/super-admin`.
-8. All v4 tests still pass. New v5 tests (cross-school isolation, parent linking, Hindi cache key separation, school cap enforcement) pass.
-9. `DEPLOYMENT.md` updated with: how to seed a super_admin, how to apply migration 012, what env vars (if any) are added.
-10. No production data loss during migration apply (dry-run on staging first).
+1. ✅ **Sprint 1** — A school admin can sign up, get codes, and have 2 teachers + 10 students join via codes — all scoped strictly to that school. (Verified by `tests/multitenant.integration.sh`.)
+2. ✅ **Sprint 1** — A B2C student signs up with no code, completes onboarding, asks a doubt, takes a test — zero regressions vs v4. (Verified by full integration suite run post-Sprint-2.)
+3. ✅ **Sprint 0/1** — A teacher in School A cannot see a single byte of School B's data via any endpoint. (Verified by cross-school isolation contract test in `multitenant.integration.sh`.)
+4. ✅ **Sprint 2** — A parent can link to one or two children, see their progress, and a sibling parent (different account) can also link to the same child. (Verified by `tests/parent.integration.sh` — 30 assertions including 1:N + 2:1 + verify lifecycle.)
+5a. ⏳ **Sprint 3 (F6a)** — A student toggles tutor language to Hindi → next Sci/Maths doubt is in Devanagari, math intact, TTS in Hindi voice (English NCERT chunks translated at response time).
+5b. ⏳ **Sprint 3 (F6b)** — A Class 10 student asks "नेताजी का चश्मा कहानी का सारांश बताइए" → Pa quotes the actual स्पर्श textbook chapter, not a hallucinated summary. A grammar question cites the NCERT Hindi grammar handbook.
+6. ⏳ **Sprint 4** — A Class 11 CS student asks "explain Python list comprehension" → gets a syntax-highlighted code answer.
+7. ⏳ **Sprint 5** — Super admin (Vinoth) sees every school's headline stats on `/super-admin`.
+8. ✅ All v4 tests still pass. New v5 tests (cross-school isolation, parent linking — and pending Hindi cache key separation, school cap enforcement) pass. (Currently 50 unit + 111 integration assertions, 0 failures.)
+9. ⏳ `DEPLOYMENT.md` updated with: how to seed a super_admin, how to apply migration 012, what env vars (if any) are added. (Sprint 5; partial — migration 012 is documented.)
+10. ⏳ No production data loss during migration apply (dry-run on staging first). (Pending — currently dev-only.)
 
 ---
 

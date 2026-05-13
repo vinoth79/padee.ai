@@ -33,6 +33,8 @@ import ReplanCheckInBanner from '../components/home-v4/ReplanCheckInBanner'
 import RecentDoubts from '../components/home-v4/RecentDoubts'
 import TodayActivity from '../components/home-v4/TodayActivity'
 import RecentWins from '../components/home-v4/RecentWins'
+import PendingLinkBanner from '../components/parent/PendingLinkBanner'
+import '../styles/parent-v4.css'
 
 const SUBJECT_META = {
   Maths:            { color: 'var(--c-violet)',  bg: 'var(--c-purple-l)', fg: 'var(--c-purple)' },
@@ -421,6 +423,12 @@ export default function StudentHomeScreenV4({ onNavigate }) {
                 </div>
               </div>
             </div>
+
+            {/* Pending parent-link banner — outranks every other in-page nudge
+                because a parent is actively waiting for the kid to confirm.
+                Self-fetches from /api/parent/pending-incoming on mount; renders
+                nothing if there are no pending links. */}
+            <PendingLinkBanner />
 
             {/* Re-plan check-in — fires when student has missed 3+ pledged days.
                 Outranks streak-at-risk visually because it's a "let's renegotiate

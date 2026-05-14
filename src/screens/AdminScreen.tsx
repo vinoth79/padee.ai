@@ -862,7 +862,10 @@ export default function AdminScreen() {
               <div>
                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Chapter name (optional)</label>
                 <input type="text" value={chapterName} onChange={e => setChapterName(e.target.value)}
-                  placeholder="e.g. Electricity" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+                  placeholder={uploadLanguage === 'hi' ? 'जैसे, नेताजी का चश्मा' : 'e.g. Electricity'}
+                  lang={uploadLanguage}
+                  spellCheck={uploadLanguage === 'en'}
+                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
 

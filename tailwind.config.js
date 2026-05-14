@@ -4,7 +4,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['DM Sans', 'system-ui', '-apple-system', 'sans-serif'],
+        // Sprint 3 / F6a — 'Noto Sans Devanagari' fallback so any element
+        // using Tailwind's `font-sans` class renders Hindi correctly. The
+        // font asset is loaded via index.html <link>.
+        sans: ['DM Sans', 'Noto Sans Devanagari', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['DM Mono', 'ui-monospace', 'monospace'],
       },
       fontSize: {

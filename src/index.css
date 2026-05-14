@@ -105,7 +105,10 @@
   }
   body {
     background: var(--bg-page);
-    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    /* Sprint 3 / F6a — 'Noto Sans Devanagari' fallback so Hindi text renders
+       correctly everywhere (admin upload form, settings, anywhere outside
+       the .home-v4 scope). DM Sans doesn't ship Devanagari glyphs. */
+    font-family: 'DM Sans', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     font-size: 16px;
   }

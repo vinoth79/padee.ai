@@ -67,6 +67,13 @@ export default function PaBubble({
     if (c.enOnly && isHindi) return false
     return true
   })
+  // F6b — bilingual responses. When subject=Hindi + tutor_language=hi, the
+  // backend emits the response in two halves separated by ___HINDI___ /
+  // ___ENGLISH___ markers. We detect that here and render two side-by-side
+  // columns. Karaoke + TTS only run on the Hindi half; the English column
+  // is reference for non-Hindi-speaking classmates.
+  const bilingual = !isStreaming && parseBilingual(msg.text || '')
+
   return (
     <div className="pa-bubble">
       <div className="pa-avatar">
@@ -80,12 +87,25 @@ export default function PaBubble({
         {/* Response text — MathText renders LaTeX after stream completes.
             During streaming we show plain text (Q1=a) to avoid mid-stream
             half-rendered math. Challenge messages get a special view that
-            gates the solution behind a "Show solution" button. */}
+            gates the solution behind a "Show solution" button.
+            Bilingual responses render in a 2-column grid (Hindi | English). */}
         <div>
-          {msg.isChallenge && !isStreaming
-            ? <ChallengeView text={msg.text || ''} />
-            : <MathText text={msg.text || ''} streaming={isStreaming} />
-          }
+          {msg.isChallenge && !isStreaming ? (
+            <ChallengeView text={msg.text || ''} />
+          ) : bilingual ? (
+            <div className="bilingual-grid">
+              <div className="bilingual-col bilingual-hi">
+                <div className="bilingual-col-eyebrow">हिन्दी</div>
+                <MathText text={bilingual.hi} />
+              </div>
+              <div className="bilingual-col bilingual-en">
+                <div className="bilingual-col-eyebrow">English</div>
+                <MathText text={bilingual.en} />
+              </div>
+            </div>
+          ) : (
+            <MathText text={msg.text || ''} streaming={isStreaming} />
+          )}
           {isStreaming && <span className="streaming-cursor" />}
         </div>
 
@@ -129,7 +149,10 @@ export default function PaBubble({
             ) : <span />}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ListenButton text={msg.text} title="Read this answer aloud" />
+              {/* For bilingual responses, only read the Hindi half aloud —
+                  it's the primary content; English is the parallel reference
+                  for non-Hindi-speaking classmates. */}
+              <ListenButton text={bilingual ? bilingual.hi : msg.text} title="Read this answer aloud" />
               {showCopy && (
                 <button
                   onClick={() => onCopy?.(msg.id, msg.text)}
@@ -163,3 +186,28 @@ export default function PaBubble({
 // prompts (the parent handles the actual LLM call — this component just tells
 // it which key was clicked).
 export { CHIPS }
+
+// Sprint 3 / F6b — parse a bilingual response. The backend emits Hindi-as-a-
+// subject responses in the form:
+//
+//   ___HINDI___
+//   <Hindi explanation>
+//   ___ENGLISH___
+//   <English explanation>
+//
+// Returns null when the response is NOT bilingual (no markers, or only one
+// marker present — fall back to single-column rendering).
+function parseBilingual(text) {
+  if (!text) return null
+  // Tolerate slight LLM drift: allow optional whitespace around markers,
+  // accept either "___HINDI___" or "###HINDI###".
+  const hiMarker = /(?:^|\n)\s*(?:___|###)\s*HINDI\s*(?:___|###)\s*\n?/i
+  const enMarker = /(?:^|\n)\s*(?:___|###)\s*ENGLISH\s*(?:___|###)\s*\n?/i
+  const hi = text.match(hiMarker)
+  const en = text.match(enMarker)
+  if (!hi || !en || en.index <= hi.index) return null
+  const hiText = text.slice(hi.index + hi[0].length, en.index).trim()
+  const enText = text.slice(en.index + en[0].length).trim()
+  if (!hiText || !enText) return null
+  return { hi: hiText, en: enText }
+}

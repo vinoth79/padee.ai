@@ -319,8 +319,11 @@ ai.post('/doubt', async (c) => {
   // context in that case.
   const isFollowUp = Array.isArray(messages) && messages.length > 1
 
-  // Step 5: Build the prompt with memory injection
-  const systemPrompt = buildSystemPrompt(subject, className, ncertContext, memory, isFollowUp, tutorLang)
+  // Step 5: Build the prompt with memory injection. Bilingual output kicks
+  // in for Hindi-as-a-subject queries (subject=hindi + tutorLang=hi) so the
+  // student's non-Hindi-speaking classmates have an English column to follow.
+  const bilingual = shouldUseBilingual(subject, tutorLang)
+  const systemPrompt = buildSystemPrompt(subject, className, ncertContext, memory, isFollowUp, tutorLang, bilingual)
 
   // Step 5: Stream LLM response via Groq (Llama-70B)
   const fullMessages = [
@@ -335,11 +338,13 @@ ai.post('/doubt', async (c) => {
     let modelUsed = process.env.LLM_DOUBT_SIMPLE || 'groq/llama-3.3-70b-versatile'
     let fallbackFired = false
     try {
-      // Stream with automatic Groq → OpenAI fallback on rate-limit/5xx/timeout
+      // Stream with automatic Groq → OpenAI fallback on rate-limit/5xx/timeout.
+      // Bilingual responses double the output (Hindi + English halves) so we
+      // need ~2x the token budget; otherwise the English half gets truncated.
       const { streamWithFallback } = await import('../lib/llmFallback.js')
       const result = await streamWithFallback({
         messages: fullMessages.map((m: any) => ({ role: m.role, content: m.content })),
-        maxTokens: 800,
+        maxTokens: bilingual ? 1600 : 800,
         temperature: 0.3,
         onChunk: async (text) => {
           fullResponse += text
@@ -815,16 +820,47 @@ function detectMemoryUsage(
 // the student's chosen tutor_language. Math notation MUST stay in LaTeX
 // regardless of language; code MUST keep English keywords (Python, etc.).
 // For Hindi-as-a-subject queries (subject=hindi + tutorLang=hi), the RAG
-// retrieval already picks Hindi-NCERT chunks per F6b — no extra directive
-// needed beyond the standard Hindi-response one.
-function buildLanguageDirective(tutorLang: 'en' | 'hi'): string {
+// retrieval already picks Hindi-NCERT chunks per F6b. When `bilingual=true`
+// (passed by Hindi-as-a-subject queries), we also ask the LLM to emit a
+// side-by-side English version for non-Hindi-speaker classmates.
+function buildLanguageDirective(tutorLang: 'en' | 'hi', bilingual: boolean = false): string {
   if (tutorLang !== 'hi') return ''
+  if (bilingual) {
+    return `
+
+IMPORTANT — BILINGUAL RESPONSE FORMAT:
+Output your response in TWO HALVES separated by literal marker lines.
+The Hindi half is primary; the English half is a parallel translation for
+classmates from non-Hindi-speaking states.
+
+Use this EXACT format (markers verbatim, on their own lines):
+
+___HINDI___
+[Your full explanation in Hindi (Devanagari script). Cover everything: definitions, examples, analysis, mark distribution. This is the primary teaching response.]
+
+___ENGLISH___
+[The same explanation translated into clear English. Mirror the Hindi side paragraph-by-paragraph — same structure, same examples, same order. Translate poem/verse quotes too so non-Hindi readers can understand them.]
+
+RULES:
+- Math notation stays in LaTeX in BOTH halves (e.g. $F = ma$).
+- Hindi quotes from NCERT (poetic verses, prose excerpts) stay in Devanagari in the Hindi half AND get an English translation in the English half.
+- Do NOT add meta-commentary about the bilingual format.
+- Do NOT skip the markers — the UI splits on them exactly.`
+  }
   return `
 
 IMPORTANT — RESPONSE LANGUAGE:
 Respond in Hindi (Devanagari script).
 Math notation MUST stay in LaTeX regardless of language (e.g. $F = ma$, not "एफ बराबर एम ए").
 Code MUST stay in English with English keywords; you can comment in Hindi.`
+}
+
+// Sprint 3 / F6b — should this query get the bilingual treatment?
+// Triggers ONLY for Hindi-as-a-subject queries from Hindi-mode students.
+// Other Hindi-mode queries (Maths in Hindi etc.) keep the simple
+// "respond in Hindi" directive.
+function shouldUseBilingual(subject: string, tutorLang: 'en' | 'hi'): boolean {
+  return tutorLang === 'hi' && (subject || '').toLowerCase() === 'hindi'
 }
 
 // ─── Sprint 3 (F6b) — pick RAG language for a given query ────────────────
@@ -843,6 +879,7 @@ function buildSystemPrompt(
   memory: string,
   isFollowUp: boolean = false,
   tutorLang: 'en' | 'hi' = 'en',
+  bilingual: boolean = false,
 ): string {
   let prompt = `You are Padee, an AI tutor for CBSE Class ${className} ${subject || 'students'}.
 You help Indian students understand their NCERT textbook content.
@@ -894,8 +931,9 @@ Answer using ONLY the content above. CRITICAL presentation rules:
     prompt += `\n\nAnswer based on standard CBSE Class ${className} ${subject} curriculum. Do NOT add disclaimers about the textbook -- just answer directly and confidently.`
   }
 
-  // F6a — append language directive last so it overrides any English bias above
-  prompt += buildLanguageDirective(tutorLang)
+  // F6a / F6b — append language + bilingual directive last so it overrides
+  // any English bias above
+  prompt += buildLanguageDirective(tutorLang, bilingual)
 
   return prompt
 }

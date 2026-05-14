@@ -13,16 +13,28 @@ import { useUser } from '../../context/UserContext'
 // Action chips. Labels are always English — easier for the student to scan
 // among Hindi response text, less context-switching for parents observing,
 // and avoids the LLM-produced "looks-Hindi-but-isn't-quite-right" register
-// debates. `hiOnly: true` flags chips that only make sense in Hindi mode
-// (e.g. "English translation" is useless when the response is already
-// English).
+// debates.
+//
+// Visibility flags:
+//   hiOnly: true  — only show when tutor_language='hi'
+//   enOnly: true  — only show when tutor_language='en'
+// Chips with neither flag show in both modes.
+//
+// Why hide `visual` + `challenge` in Hindi mode:
+//   • Hindi mode is typically used for literature/poetry questions (Sprint 3
+//     / F6b Hindi-as-a-subject path). A diagram doesn't illustrate a poem,
+//     and "harder problem with given values" doesn't fit literary analysis.
+//   • For Hindi-mode students asking Maths/Sci questions, we lose those two
+//     chips — acceptable trade-off; they can switch to English mode for that
+//     use case. Better than cluttering the literature view with unusable
+//     options.
 const CHIPS = [
-  { key: 'visual',      label: 'Explain visually ✨' },
+  { key: 'visual',      label: 'Explain visually ✨', enOnly: true },
   { key: 'simpler',     label: 'Simpler please' },
   { key: 'exam',        label: 'Show exam answer' },
   { key: 'quiz',        label: 'Quiz me on this' },
   { key: 'similar',     label: 'Similar question' },
-  { key: 'challenge',   label: 'Challenge me' },
+  { key: 'challenge',   label: 'Challenge me', enOnly: true },
   { key: 'reallife',    label: 'Real-life example' },
   { key: 'mistakes',    label: 'Common mistakes' },
   // Sprint 3 / F6a — Hindi-mode-only helper. Re-emits the previous Pa
@@ -46,10 +58,15 @@ export default function PaBubble({
   const isError = msg.error
   // F6a — chip labels stay English regardless of tutor_language. We only
   // filter the chip *list* by language: hiOnly chips (e.g.
-  // "English translation") only appear when the student is in Hindi mode.
+  // "English translation") only appear in Hindi mode; enOnly chips (e.g.
+  // "Explain visually", "Challenge me") only in English mode.
   const { tutorLanguage } = useUser()
   const isHindi = tutorLanguage === 'hi'
-  const visibleChips = CHIPS.filter(c => !c.hiOnly || isHindi)
+  const visibleChips = CHIPS.filter(c => {
+    if (c.hiOnly && !isHindi) return false
+    if (c.enOnly && isHindi) return false
+    return true
+  })
   return (
     <div className="pa-bubble">
       <div className="pa-avatar">

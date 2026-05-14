@@ -93,16 +93,7 @@ export default function PaBubble({
           {msg.isChallenge && !isStreaming ? (
             <ChallengeView text={msg.text || ''} />
           ) : bilingual ? (
-            <div className="bilingual-grid">
-              <div className="bilingual-col bilingual-hi">
-                <div className="bilingual-col-eyebrow">हिन्दी</div>
-                <MathText text={bilingual.hi} />
-              </div>
-              <div className="bilingual-col bilingual-en">
-                <div className="bilingual-col-eyebrow">English</div>
-                <MathText text={bilingual.en} />
-              </div>
-            </div>
+            <BilingualInline hi={bilingual.hi} en={bilingual.en} />
           ) : (
             <MathText text={msg.text || ''} streaming={isStreaming} />
           )}
@@ -186,6 +177,59 @@ export default function PaBubble({
 // prompts (the parent handles the actual LLM call — this component just tells
 // it which key was clicked).
 export { CHIPS }
+
+// Sprint 3 / F6b — inline bilingual layout. Each Hindi paragraph followed
+// immediately by its English translation (one stanza). Replaces the
+// earlier side-by-side two-column layout — easier to follow line-by-line,
+// works better on phones, no need to scan horizontally between languages.
+//
+// Pairing strategy: split both halves on blank-line paragraph breaks. The
+// LLM is prompted to keep paragraphs mirrored, so para N on each side
+// pairs up cleanly. If counts diverge (rare — LLM dropped or merged a
+// para), we render unmatched paragraphs at the end labelled-as-such so
+// nothing is lost.
+//
+// Karaoke + TTS only run on the Hindi paragraphs (each is a separate
+// MathText that reads its own text identity). The English paragraphs are
+// reference scaffolding for non-Hindi-speaking classmates.
+function BilingualInline({ hi, en }) {
+  const hiParas = splitParagraphs(hi)
+  const enParas = splitParagraphs(en)
+  const n = Math.min(hiParas.length, enParas.length)
+  const stanzas = []
+  for (let i = 0; i < n; i++) {
+    stanzas.push({ hi: hiParas[i], en: enParas[i] })
+  }
+  const extraHi = hiParas.slice(n)
+  const extraEn = enParas.slice(n)
+  return (
+    <div className="bilingual-inline">
+      {stanzas.map((s, i) => (
+        <div key={i} className="bilingual-stanza">
+          <div className="bilingual-stanza-hi"><MathText text={s.hi} /></div>
+          <div className="bilingual-stanza-en"><MathText text={s.en} /></div>
+        </div>
+      ))}
+      {extraHi.length > 0 && (
+        <div className="bilingual-stanza bilingual-stanza-orphan">
+          <div className="bilingual-stanza-hi">{extraHi.map((p, i) => <MathText key={i} text={p} />)}</div>
+        </div>
+      )}
+      {extraEn.length > 0 && (
+        <div className="bilingual-stanza bilingual-stanza-orphan">
+          <div className="bilingual-stanza-en">{extraEn.map((p, i) => <MathText key={i} text={p} />)}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function splitParagraphs(text) {
+  if (!text) return []
+  // Split on blank lines (one or more newlines, with optional whitespace).
+  // Keep meaningful content only.
+  return text.split(/\n\s*\n+/).map(p => p.trim()).filter(p => p.length > 0)
+}
 
 // Sprint 3 / F6b — parse a bilingual response. The backend emits Hindi-as-a-
 // subject responses in the form:

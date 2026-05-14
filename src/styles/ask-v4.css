@@ -192,36 +192,40 @@
 }
 @keyframes v4-cursor-blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
 
-/* Sprint 3 / F6b — bilingual side-by-side layout for Hindi-as-a-subject
-   responses. Two columns on desktop (Hindi left, English right) so non-
-   Hindi-speaking classmates can follow in parallel. Stacks below 720px. */
-.ask-v4 .pa-bubble .bilingual-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* Sprint 3 / F6b — bilingual inline layout for Hindi-as-a-subject responses.
+   Each Hindi paragraph followed directly by its English translation as a
+   "stanza". Easier to follow than side-by-side — eye moves down, not side
+   to side. Works identically on phone + desktop. */
+.ask-v4 .pa-bubble .bilingual-inline {
+  display: flex;
+  flex-direction: column;
   gap: 18px;
-  margin-top: 2px;
 }
-.ask-v4 .pa-bubble .bilingual-col {
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px solid var(--c-hair, #ECECEE);
-  border-radius: 10px;
-  padding: 12px 14px;
+.ask-v4 .pa-bubble .bilingual-stanza {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.ask-v4 .pa-bubble .bilingual-col-eyebrow {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.ask-v4 .pa-bubble .bilingual-stanza-hi {
+  /* Primary content — inherits normal Pa-bubble text styling */
+  color: var(--c-ink);
+}
+.ask-v4 .pa-bubble .bilingual-stanza-en {
+  /* Translation — visually subordinate so the eye reads Hindi first */
+  font-size: 13px;
   color: var(--c-muted, #8A8A95);
-  margin-bottom: 6px;
+  font-style: italic;
+  line-height: 1.5;
+  padding-left: 10px;
+  border-left: 2px solid var(--c-hair-2, #F3EFE4);
 }
-.ask-v4 .pa-bubble .bilingual-hi .bilingual-col-eyebrow { color: var(--c-accent-d, #B2381B); }
-.ask-v4 .pa-bubble .bilingual-en .bilingual-col-eyebrow { color: var(--c-blue, #4C7CFF); }
-@media (max-width: 720px) {
-  .ask-v4 .pa-bubble .bilingual-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
+/* Orphan paragraphs (LLM produced mismatched para counts) — flag visually
+   so the demo audience / developer sees the mismatch without it breaking
+   the layout. */
+.ask-v4 .pa-bubble .bilingual-stanza-orphan {
+  opacity: 0.7;
+  border-top: 1px dashed var(--c-hair);
+  padding-top: 8px;
 }
 
 /* Sprint 3 / F6a — karaoke highlight for the WORD Pa is currently reading

@@ -331,23 +331,37 @@ async function processUpload(
   language: 'en' | 'hi' = 'en',
 ) {
   try {
-    // Step 1: Extract text from PDF
+    // Step 1: Extract text from PDF — multi-tier fallback chain (Sprint 3 / F6b)
+    // English PDFs: pdf-parse only. Hindi PDFs: pdf-parse → pdftotext →
+    // Tesseract OCR (last tier lands in a follow-up commit). The chain falls
+    // through on isProbablyDevanagari() < 30% so Krutidev-encoded legacy
+    // NCERT PDFs that pdf-parse renders as ASCII gibberish get re-extracted
+    // via poppler-utils.
     console.log(`[Admin] Extracting text from ${file.name} (language=${language})...`)
     const buffer = Buffer.from(await file.arrayBuffer())
-    const pdfParseModule = await import('pdf-parse')
-    const pdfParse = pdfParseModule.default || pdfParseModule
-    const pdf = await (pdfParse as any)(buffer)
-    const fullText = pdf.text
+    const { extractTextFromPdf } = await import('../lib/pdfExtract.js')
+    const extraction = await extractTextFromPdf(buffer, language)
+    const fullText = extraction.text
+
+    console.log(`[Admin] Extraction: tier=${extraction.tier}, chars/tier=${JSON.stringify(extraction.charsPerTier)}, devanagari%/tier=${JSON.stringify(Object.fromEntries(Object.entries(extraction.devanagariRatioPerTier).map(([k, v]) => [k, (v * 100).toFixed(1) + '%'])))}`)
 
     if (!fullText.trim()) {
       await updateUploadStatus(uploadId, 'failed', 'No text found in PDF')
       return
     }
 
+    if (extraction.tier === 'failed') {
+      const msg = language === 'hi'
+        ? `Extraction failed: all tiers returned non-Devanagari output. Best ratio: ${(Math.max(...Object.values(extraction.devanagariRatioPerTier)) * 100).toFixed(1)}%. The PDF likely uses a legacy non-Unicode font that needs OCR (Tesseract tier — coming in a follow-up).`
+        : `Extraction returned text but no tier matched the expected language profile.`
+      await updateUploadStatus(uploadId, 'failed', msg)
+      return
+    }
+
     // Step 2: Chunk the text — Hindi uses the unit-aware chunker (poems +
     // prose + grammar units), English uses the 800-char window. See
     // server/lib/ncertChunker.ts for the heuristics.
-    console.log(`[Admin] Chunking text (${fullText.length} chars, language=${language})...`)
+    console.log(`[Admin] Chunking text (${fullText.length} chars, language=${language}, tier=${extraction.tier})...`)
     const { chunkText: chunkTextLib } = await import('../lib/ncertChunker.js')
     const chunks = chunkTextLib(fullText, language)
 

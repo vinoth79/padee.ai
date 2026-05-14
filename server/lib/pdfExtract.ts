@@ -25,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { spawn } from 'node:child_process'
-import { writeFile, readFile, unlink, mkdtemp } from 'node:fs/promises'
+import { writeFile, readFile, unlink, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -140,16 +140,82 @@ function runCommand(cmd: string, args: string[], timeoutMs: number = 60_000): Pr
 }
 
 // ─── Tier 3 — Tesseract OCR ─────────────────────────────────────────────
-// Stubbed for this commit — full implementation lands in a follow-up.
-// Falling through to this tier today logs a warning and returns empty,
-// which surfaces "extraction failed" to the admin upload status.
-async function extractWithTesseract(_buffer: Buffer, _language: 'en' | 'hi'): Promise<string> {
-  console.warn(
-    '[pdfExtract] Tesseract tier not yet implemented. Tiers 1 + 2 both ' +
-    'failed the language check — upload will surface as "no text". ' +
-    'Tesseract OCR fallback lands in the next Sprint 3 commit.'
-  )
-  return ''
+// Last resort for PDFs whose embedded fonts neither pdf-parse nor pdftotext
+// can decode (legacy Krutidev / Shusha NCERT books that pdftotext also
+// chokes on). Renders each PDF page to a 300-DPI PNG via pdftoppm
+// (poppler-utils) and OCRs each image with tesseract.js + Hindi
+// traineddata.
+//
+// Performance: ~5-15s per page for Hindi at 300 DPI. A 20-page chapter
+// takes 2-5 minutes. processUpload is already async so this doesn't
+// block the response — admin just sees status='processing' for longer.
+//
+// Memory: rendered PNGs land in /tmp at ~2-3 MB each; cleaned up at the
+// end of extraction. tesseract.js worker holds ~50-80 MB in memory while
+// active.
+//
+// First-call warmup: tesseract.js downloads hin.traineddata (~30 MB) from
+// the jsdelivr CDN on first use. Subsequent calls in the same process
+// hit the worker cache. For Railway / cold starts, consider pre-warming
+// or bundling the traineddata as a Phase 2 optimisation.
+async function extractWithTesseract(buffer: Buffer, language: 'en' | 'hi'): Promise<string> {
+  // Tesseract language code differs from our 'en'/'hi':
+  //   'eng' for English, 'hin' for Hindi (Devanagari), 'hin+eng' for mixed.
+  // We use 'hin+eng' for Hindi PDFs because NCERT books often mix English
+  // labels (page numbers, "Reprint 2026-27" footers, etc.) into Hindi
+  // chapters — pure 'hin' would garble those.
+  const tessLang = language === 'hi' ? 'hin+eng' : 'eng'
+
+  const dir = await mkdtemp(path.join(tmpdir(), 'padee-ocr-'))
+  const inputPath = path.join(dir, 'in.pdf')
+  const ppmPrefix = path.join(dir, 'page')
+
+  try {
+    await writeFile(inputPath, buffer)
+
+    // Step 1: render PDF → PNG pages at 300 DPI via pdftoppm.
+    // Output: <dir>/page-1.png, page-2.png, ... (pdftoppm pads filenames
+    // with leading zeros based on total page count).
+    await runCommand('pdftoppm', ['-r', '300', '-png', inputPath, ppmPrefix], 120_000)
+
+    // Discover the rendered pages (sorted numerically by suffix).
+    const files = (await readdir(dir))
+      .filter(f => f.startsWith('page') && f.endsWith('.png'))
+      .sort((a, b) => {
+        // page-1.png, page-12.png → numeric sort on the suffix
+        const ai = parseInt(a.match(/page-?(\d+)/)?.[1] || '0', 10)
+        const bi = parseInt(b.match(/page-?(\d+)/)?.[1] || '0', 10)
+        return ai - bi
+      })
+
+    if (files.length === 0) {
+      console.warn('[pdfExtract] Tier 3: pdftoppm produced no images')
+      return ''
+    }
+
+    console.log(`[pdfExtract] Tier 3 (Tesseract): OCR-ing ${files.length} page(s) with lang=${tessLang}...`)
+
+    // Step 2: spin up a single tesseract.js worker, reuse across pages.
+    // Lazy import keeps the cold-start cost out of every backend startup.
+    const { createWorker } = await import('tesseract.js')
+    const worker = await createWorker(tessLang)
+
+    try {
+      const pageTexts: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        const pagePath = path.join(dir, files[i])
+        const { data } = await worker.recognize(pagePath)
+        pageTexts.push(data.text)
+        console.log(`[pdfExtract] Tier 3: page ${i + 1}/${files.length} → ${data.text.length} chars, confidence ${data.confidence.toFixed(1)}`)
+      }
+      return pageTexts.join('\n\n')
+    } finally {
+      await worker.terminate()
+    }
+  } finally {
+    // Best-effort cleanup of the entire temp dir (PDF + rendered PNGs).
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 // ─── Orchestrator ───────────────────────────────────────────────────────

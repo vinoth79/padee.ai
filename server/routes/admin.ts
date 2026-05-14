@@ -351,8 +351,10 @@ async function processUpload(
     }
 
     if (extraction.tier === 'failed') {
+      const ratios = extraction.devanagariRatioPerTier
+      const bestRatio = Math.max(...(Object.values(ratios).filter(v => typeof v === 'number') as number[]), 0)
       const msg = language === 'hi'
-        ? `Extraction failed: all tiers returned non-Devanagari output. Best ratio: ${(Math.max(...Object.values(extraction.devanagariRatioPerTier)) * 100).toFixed(1)}%. The PDF likely uses a legacy non-Unicode font that needs OCR (Tesseract tier — coming in a follow-up).`
+        ? `Extraction failed: all three tiers (pdf-parse, pdftotext, Tesseract OCR) returned <30% Devanagari content. Best ratio: ${(bestRatio * 100).toFixed(1)}%. This PDF may be image-only with poor OCR quality or contain mostly non-Hindi text — verify the source.`
         : `Extraction returned text but no tier matched the expected language profile.`
       await updateUploadStatus(uploadId, 'failed', msg)
       return

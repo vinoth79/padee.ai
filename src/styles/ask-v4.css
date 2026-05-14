@@ -192,22 +192,24 @@
 }
 @keyframes v4-cursor-blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
 
-/* Sprint 3 / F6a — karaoke highlight for the sentence Pa is currently reading
-   aloud. `.tts-sent` wraps every sentence-aligned segment; `.is-speaking` is
-   toggled by MathText based on the SpeechContext activeSentenceIndex. The
-   transition makes the highlight slide between sentences instead of popping. */
-.ask-v4 .pa-bubble .tts-sent {
-  border-radius: 4px;
-  padding: 1px 2px;
-  transition: background-color 180ms ease;
+/* Sprint 3 / F6a — karaoke highlight for the WORD Pa is currently reading
+   aloud. `.tts-word` wraps every word-aligned token; `.is-speaking` is
+   toggled by MathText based on SpeechContext.activeWordIndex (computed
+   each 80ms tick for server TTS, or per Web Speech onboundary event).
+   Transition makes the highlight pulse instead of popping. */
+.ask-v4 .pa-bubble .tts-word {
+  border-radius: 3px;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.ask-v4 .pa-bubble .tts-sent.is-speaking {
-  background-color: rgba(255, 181, 71, 0.32);     /* warm amber tint */
-  box-shadow: 0 0 0 1px rgba(255, 181, 71, 0.55);
+.ask-v4 .pa-bubble .tts-word.is-speaking {
+  background-color: rgba(255, 181, 71, 0.55);   /* warm amber, slightly stronger than sentence-level was */
+  color: var(--c-ink);
+  font-weight: 600;
+  padding: 0 2px;
 }
 /* Reduce flash for motion-sensitive users */
 @media (prefers-reduced-motion: reduce) {
-  .ask-v4 .pa-bubble .tts-sent { transition: none; }
+  .ask-v4 .pa-bubble .tts-word { transition: none; }
 }
 
 /* Chip row */

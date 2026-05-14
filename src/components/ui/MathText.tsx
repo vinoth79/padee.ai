@@ -16,7 +16,7 @@
 // should be near-zero in practice.
 // ═══════════════════════════════════════════════════════════════════════════
 import katex from 'katex'
-import { useSpeech, splitSentences } from '../../context/SpeechContext'
+import { useSpeech, splitSentences, tokenizeWords } from '../../context/SpeechContext'
 
 interface Props {
   text: string
@@ -28,15 +28,15 @@ interface Props {
 
 export default function MathText({ text, streaming, className, inlineOnly }: Props) {
   // Sprint 3 / F6a — karaoke highlight. If THIS text is currently being read
-  // aloud, mark the active sentence's span so the CSS can highlight it.
-  // We compare on text identity (===); MathText is always rendered with the
-  // same string instance the TTS started with, so this is stable.
-  const { activeText, activeSentenceIndex } = useSpeech() as {
+  // aloud, mark the active word's span. We compare on text identity (===);
+  // MathText is always rendered with the same string instance the TTS
+  // started with, so this is stable.
+  const { activeText, activeWordIndex } = useSpeech() as {
     activeText: string | null
-    activeSentenceIndex: number
+    activeWordIndex: number
   }
   const isBeingRead = activeText !== null && activeText === text
-  const liveSentenceIndex = isBeingRead ? activeSentenceIndex : -1
+  const liveWordIndex = isBeingRead ? activeWordIndex : -1
 
   if (!text) return null
 
@@ -49,18 +49,40 @@ export default function MathText({ text, streaming, className, inlineOnly }: Pro
     )
   }
 
-  const parts = splitMathWithSentenceIndex(text, inlineOnly)
+  const parts = splitMathWithWordIndex(text, inlineOnly)
   return (
     <span className={className} style={{ whiteSpace: 'pre-wrap' }}>
-      {parts.map((p, i) => {
-        const cls = p.sentenceIndex === liveSentenceIndex ? 'tts-sent is-speaking' : 'tts-sent'
-        if (p.kind === 'inline') {
-          return <span key={i} className={cls} data-sentence={p.sentenceIndex}><InlineMath expr={p.value} /></span>
-        }
-        if (p.kind === 'display') {
-          return <span key={i} className={cls} data-sentence={p.sentenceIndex}><DisplayMath expr={p.value} /></span>
-        }
-        return <span key={i} className={cls} data-sentence={p.sentenceIndex}><Markdown text={p.value} /></span>
+      {parts.map((p, i) => renderPart(p, i, liveWordIndex))}
+    </span>
+  )
+}
+
+// Render one part. Plain-text parts emit one <span class="tts-word"> per
+// WORD (whitespace stays as plain whitespace text nodes). Math parts emit
+// one wrapper span with the word-index of their starting word.
+function renderPart(
+  p: Part & { wordIndexAtStart: number; wordIndices: number[] },
+  key: number,
+  liveWordIndex: number,
+) {
+  if (p.kind === 'inline') {
+    const cls = p.wordIndexAtStart === liveWordIndex ? 'tts-word is-speaking' : 'tts-word'
+    return <span key={key} className={cls} data-word={p.wordIndexAtStart}><InlineMath expr={p.value} /></span>
+  }
+  if (p.kind === 'display') {
+    const cls = p.wordIndexAtStart === liveWordIndex ? 'tts-word is-speaking' : 'tts-word'
+    return <span key={key} className={cls} data-word={p.wordIndexAtStart}><DisplayMath expr={p.value} /></span>
+  }
+  // Plain text — tokenise into word + whitespace runs; wrap each word in a span
+  const tokens = tokenizeWords(p.value)
+  let wi = 0
+  return (
+    <span key={key}>
+      {tokens.map((t, j) => {
+        if (!t.isWord) return <span key={j}>{t.text}</span>
+        const myIdx = p.wordIndices[wi++]
+        const cls = myIdx === liveWordIndex ? 'tts-word is-speaking' : 'tts-word'
+        return <span key={j} className={cls} data-word={myIdx}>{t.text}</span>
       })}
     </span>
   )
@@ -72,47 +94,58 @@ type Part =
   | { kind: 'inline'; value: string }
   | { kind: 'display'; value: string }
 
-// Sprint 3 / F6a — Same logic as splitMath() below, but also assigns each
-// emitted part a `sentenceIndex` based on its position in `text`. We split
-// the source text into sentences (using the same regex as SpeechContext so
-// the indices align) and walk a cursor through both streams in parallel.
+// Sprint 3 / F6a — assigns a `wordIndex` to each split part. Per-word
+// tokenisation aligns with SpeechContext's tokenizeWords() — exact same
+// list of word tokens, so index N here matches index N there.
 //
-// Math expressions take the sentence index of the sentence they fall inside;
-// if a math block straddles a boundary (rare — display math on its own line)
-// it gets the index of the sentence it STARTED in.
-function splitMathWithSentenceIndex(
+// For plain-text parts we precompute the wordIndices array (one entry
+// per WORD token in the part, in order). For math parts we emit a single
+// wrapper with the wordIndex of the first word that follows the math
+// (or precedes if math is at the very end).
+function splitMathWithWordIndex(
   text: string,
   inlineOnly?: boolean,
-): Array<Part & { sentenceIndex: number }> {
+): Array<Part & { wordIndexAtStart: number; wordIndices: number[] }> {
   const rawParts = splitMath(text, inlineOnly)
-  const sentences = splitSentences(text)
-  // Build offset map: for each char position in `text`, which sentence is it in?
-  // sentenceEnds[i] = end-position of sentence i (exclusive)
-  const sentenceEnds: number[] = []
-  let pos = 0
-  for (const s of sentences) {
-    pos += s.length
-    sentenceEnds.push(pos)
-  }
-  const indexAt = (offset: number): number => {
-    if (sentenceEnds.length === 0) return 0
-    for (let i = 0; i < sentenceEnds.length; i++) {
-      if (offset < sentenceEnds[i]) return i
+  // Tokenise the WHOLE source text once. Word index N is consistent across
+  // both this rendering and the audio-tick's index for the same text.
+  const allTokens = tokenizeWords(text)
+  // Map: char offset in `text` → cumulative word count up to that offset.
+  // We'll walk the rawParts cursor and for each part figure out which word
+  // indices fall inside its character range.
+  const wordEnds: { wordIdx: number; charEnd: number }[] = []
+  let wi = 0
+  for (const t of allTokens) {
+    if (t.isWord) {
+      wordEnds.push({ wordIdx: wi, charEnd: t.end })
+      wi++
     }
-    return sentenceEnds.length - 1
   }
-  // Walk parts and assign sentenceIndex based on the running offset in text.
-  // Each part's length in the rendered output equals its source-text length
-  // for plain text; for inline math `$...$` the source span is value.length + 2,
-  // for display math `$$...$$` it's value.length + 4.
-  const out: Array<Part & { sentenceIndex: number }> = []
+
+  const out: Array<Part & { wordIndexAtStart: number; wordIndices: number[] }> = []
   let cursor = 0
   for (const p of rawParts) {
-    const idx = indexAt(cursor)
-    out.push({ ...p, sentenceIndex: idx })
-    if (p.kind === 'inline') cursor += p.value.length + 2
-    else if (p.kind === 'display') cursor += p.value.length + 4
-    else cursor += p.value.length
+    let segLen: number
+    if (p.kind === 'inline') segLen = p.value.length + 2
+    else if (p.kind === 'display') segLen = p.value.length + 4
+    else segLen = p.value.length
+    const segStart = cursor
+    const segEnd = cursor + segLen
+    // Word indices whose end falls within [segStart, segEnd]
+    const wordIndices: number[] = []
+    for (const w of wordEnds) {
+      if (w.charEnd > segStart && w.charEnd <= segEnd) wordIndices.push(w.wordIdx)
+    }
+    // For math parts: their "anchor" word is the first one in their range
+    // (or, if empty, the next word after the math block — covers display
+    // math on its own line surrounded by whitespace).
+    let anchor = wordIndices[0]
+    if (anchor === undefined) {
+      const nxt = wordEnds.find(w => w.charEnd > segStart)
+      anchor = nxt ? nxt.wordIdx : -1
+    }
+    out.push({ ...p, wordIndexAtStart: anchor, wordIndices })
+    cursor = segEnd
   }
   return out
 }

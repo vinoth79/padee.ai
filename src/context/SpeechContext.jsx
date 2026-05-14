@@ -63,10 +63,11 @@ const NULL_VALUE = {
   supported: false, speaking: false, loading: false, rate: 1,
   speak: () => {}, stop: () => {}, toggle: () => {}, setRate: () => {},
   // Sprint 3 / F6a — karaoke highlight state. activeText is the source string
-  // being spoken; activeSentenceIndex is the 0-based index of the currently
-  // spoken sentence inside that string. Components that render the same text
-  // can compare activeText === msg.text and apply highlight CSS.
-  activeText: null, activeSentenceIndex: -1,
+  // being spoken; activeSentenceIndex + activeWordIndex are 0-based indices
+  // into the sentence/word arrays for that string. Components that render
+  // the same text can compare activeText === msg.text and highlight the
+  // matching span.
+  activeText: null, activeSentenceIndex: -1, activeWordIndex: -1,
 }
 
 // Sentence segmentation. Hindi uses `।` (purna viram, U+0964) as the primary
@@ -93,6 +94,35 @@ export function splitSentences(text) {
   return out
 }
 
+// Word-level tokenisation for karaoke highlight. Each token carries its
+// {text, isWord, start, end} so the renderer can mark the active word while
+// keeping whitespace/punctuation as inline filler.
+//
+// Hindi works the same way: whitespace separates words in Devanagari just
+// like Latin. Punctuation like `।` `,` `.` attaches to the preceding word
+// here (we strip surrounding whitespace into separate tokens), which
+// matches how a reader visually sees "word ending".
+//
+// Exported so MathText and the tracker stay aligned on token indices.
+export function tokenizeWords(text) {
+  if (!text) return []
+  const tokens = []
+  // \S+ = non-whitespace run (a "word" — including attached punctuation)
+  // \s+ = whitespace run (one inter-word gap)
+  const re = /\S+|\s+/g
+  let m
+  while ((m = re.exec(text)) !== null) {
+    const isWord = !/^\s+$/.test(m[0])
+    tokens.push({
+      text: m[0],
+      isWord,
+      start: m.index,
+      end: m.index + m[0].length,
+    })
+  }
+  return tokens
+}
+
 export function useSpeech() {
   const ctx = useContext(SpeechContext)
   return ctx || NULL_VALUE
@@ -109,16 +139,18 @@ export function SpeechProvider({ children }) {
       return Number.isFinite(saved) && saved >= 0.5 && saved <= 2 ? saved : 1
     } catch { return 1 }
   })
-  // F6a — karaoke highlight state
+  // F6a — karaoke highlight state (both sentence + word indices)
   const [activeText, setActiveText] = useState(null)
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1)
+  const [activeWordIndex, setActiveWordIndex] = useState(-1)
 
   const audioRef = useRef(null)
   const objectUrlRef = useRef(null)
   const utteranceRef = useRef(null)
   const abortRef = useRef(null)
   const trackerRef = useRef(null)        // setInterval handle for the karaoke tick
-  const sentenceOffsetsRef = useRef([])  // cumulative char offsets per sentence end (for both backends)
+  const sentenceOffsetsRef = useRef([])  // cumulative char offsets per sentence end
+  const wordEndsRef = useRef([])         // end-offsets for each WORD token (skips whitespace)
 
   // Feature-detect once
   useEffect(() => {
@@ -150,16 +182,17 @@ export function SpeechProvider({ children }) {
       trackerRef.current = null
     }
     sentenceOffsetsRef.current = []
+    wordEndsRef.current = []
     setSpeaking(false)
     setLoading(false)
     setActiveText(null)
     setActiveSentenceIndex(-1)
+    setActiveWordIndex(-1)
   }
 
   // Compute cumulative end-offsets for each sentence in `prepared` (the text
   // that's actually being read aloud — post-prepare() so it matches what TTS
   // gets). offsets[i] = end-position in `prepared` of sentence i.
-  // Used by the karaoke tick to pick the active sentence from progress.
   function computeSentenceOffsets(prepared) {
     const sentences = splitSentences(prepared)
     const ends = []
@@ -171,26 +204,50 @@ export function SpeechProvider({ children }) {
     return ends
   }
 
-  // Karaoke tick — runs every 250ms while audio plays. For the server backend
-  // we use audio.currentTime / audio.duration → progress %. For the browser
-  // backend we use the onBoundary event (more precise) and fall back to a
-  // wall-clock estimate if boundaries don't fire.
+  // Compute end-offsets for each WORD (skips whitespace) in `prepared`.
+  // The renderer (MathText) builds the same token list against the SOURCE
+  // text — for the highlight to align, both sides use tokenizeWords() and
+  // the same whitespace filter.
+  function computeWordEnds(prepared) {
+    return tokenizeWords(prepared)
+      .filter(t => t.isWord)
+      .map(t => t.end)
+  }
+
+  // Karaoke tick — runs every 80ms while audio plays so word-level
+  // highlights look smooth. For the server backend we estimate progress
+  // from audio.currentTime / audio.duration; for the browser backend we
+  // use onBoundary events directly (more precise).
   function startTrackerForAudio(audio, prepared, sourceText) {
-    const offsets = computeSentenceOffsets(prepared)
-    sentenceOffsetsRef.current = offsets
+    const sentEnds = computeSentenceOffsets(prepared)
+    const wordEnds = computeWordEnds(prepared)
+    sentenceOffsetsRef.current = sentEnds
+    wordEndsRef.current = wordEnds
     setActiveText(sourceText)
-    setActiveSentenceIndex(offsets.length > 0 ? 0 : -1)
+    setActiveSentenceIndex(sentEnds.length > 0 ? 0 : -1)
+    setActiveWordIndex(wordEnds.length > 0 ? 0 : -1)
     if (trackerRef.current) clearInterval(trackerRef.current)
     trackerRef.current = setInterval(() => {
       if (!audio || !audio.duration || isNaN(audio.duration)) return
       const progress = audio.currentTime / audio.duration  // 0..1
-      const totalChars = offsets[offsets.length - 1] || 1
-      const charPos = progress * totalChars
-      // Linear search is fine — sentence counts in practice <50
-      let idx = offsets.findIndex(end => charPos < end)
-      if (idx < 0) idx = offsets.length - 1
-      setActiveSentenceIndex(idx)
-    }, 250)
+      // Sentence index
+      if (sentEnds.length > 0) {
+        const totalChars = sentEnds[sentEnds.length - 1] || 1
+        const charPos = progress * totalChars
+        let sIdx = sentEnds.findIndex(end => charPos < end)
+        if (sIdx < 0) sIdx = sentEnds.length - 1
+        setActiveSentenceIndex(sIdx)
+      }
+      // Word index — use the same charPos scale (sentence ends and word
+      // ends both measured against `prepared`).
+      if (wordEnds.length > 0) {
+        const totalChars = wordEnds[wordEnds.length - 1] || 1
+        const charPos = progress * totalChars
+        let wIdx = wordEnds.findIndex(end => charPos < end)
+        if (wIdx < 0) wIdx = wordEnds.length - 1
+        setActiveWordIndex(wIdx)
+      }
+    }, 80)
   }
 
   // Stop on tab hidden / unmount
@@ -209,10 +266,13 @@ export function SpeechProvider({ children }) {
     const clean = prepare(text)
     if (!clean) return false
     window.speechSynthesis.cancel()
-    const offsets = computeSentenceOffsets(clean)
-    sentenceOffsetsRef.current = offsets
+    const sentEnds = computeSentenceOffsets(clean)
+    const wordEnds = computeWordEnds(clean)
+    sentenceOffsetsRef.current = sentEnds
+    wordEndsRef.current = wordEnds
     setActiveText(text)
-    setActiveSentenceIndex(offsets.length > 0 ? 0 : -1)
+    setActiveSentenceIndex(sentEnds.length > 0 ? 0 : -1)
+    setActiveWordIndex(wordEnds.length > 0 ? 0 : -1)
 
     const u = new SpeechSynthesisUtterance(clean)
     const voice = pickBrowserVoice()
@@ -220,16 +280,25 @@ export function SpeechProvider({ children }) {
     u.rate = rate
     u.pitch = 1
     u.onstart = () => { setSpeaking(true); setLoading(false) }
-    u.onend = () => { setSpeaking(false); setActiveText(null); setActiveSentenceIndex(-1) }
-    u.onerror = () => { setSpeaking(false); setActiveText(null); setActiveSentenceIndex(-1) }
-    // Web Speech fires onboundary per word (or sentence on some engines).
-    // event.charIndex gives the position in the SOURCE string — we map it
-    // to a sentence index using the offsets we precomputed.
+    u.onend = () => {
+      setSpeaking(false)
+      setActiveText(null); setActiveSentenceIndex(-1); setActiveWordIndex(-1)
+    }
+    u.onerror = () => {
+      setSpeaking(false)
+      setActiveText(null); setActiveSentenceIndex(-1); setActiveWordIndex(-1)
+    }
+    // Web Speech onboundary fires per word (charIndex in the source string).
+    // Some engines also fire per sentence (e.name === 'sentence'). We update
+    // both indices so highlighting stays accurate even without the tick.
     u.onboundary = (e) => {
       if (typeof e.charIndex !== 'number') return
-      let idx = offsets.findIndex(end => e.charIndex < end)
-      if (idx < 0) idx = offsets.length - 1
-      setActiveSentenceIndex(idx)
+      let sIdx = sentEnds.findIndex(end => e.charIndex < end)
+      if (sIdx < 0) sIdx = sentEnds.length - 1
+      setActiveSentenceIndex(sIdx)
+      let wIdx = wordEnds.findIndex(end => e.charIndex < end)
+      if (wIdx < 0) wIdx = wordEnds.length - 1
+      setActiveWordIndex(wIdx)
     }
     utteranceRef.current = u
     window.speechSynthesis.speak(u)
@@ -275,7 +344,7 @@ export function SpeechProvider({ children }) {
       audio.onended = () => {
         setSpeaking(false)
         if (trackerRef.current) { clearInterval(trackerRef.current); trackerRef.current = null }
-        setActiveText(null); setActiveSentenceIndex(-1)
+        setActiveText(null); setActiveSentenceIndex(-1); setActiveWordIndex(-1)
       }
       audio.onpause = () => {
         setSpeaking(false)
@@ -284,7 +353,7 @@ export function SpeechProvider({ children }) {
       audio.onerror = () => {
         setSpeaking(false); setLoading(false)
         if (trackerRef.current) { clearInterval(trackerRef.current); trackerRef.current = null }
-        setActiveText(null); setActiveSentenceIndex(-1)
+        setActiveText(null); setActiveSentenceIndex(-1); setActiveWordIndex(-1)
       }
       audioRef.current = audio
       await audio.play()
@@ -319,7 +388,7 @@ export function SpeechProvider({ children }) {
 
   const value = {
     supported, speaking, loading, speak, stop, toggle, rate, setRate,
-    activeText, activeSentenceIndex,
+    activeText, activeSentenceIndex, activeWordIndex,
   }
   return <SpeechContext.Provider value={value}>{children}</SpeechContext.Provider>
 }

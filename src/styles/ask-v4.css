@@ -192,6 +192,24 @@
 }
 @keyframes v4-cursor-blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
 
+/* Sprint 3 / F6a — karaoke highlight for the sentence Pa is currently reading
+   aloud. `.tts-sent` wraps every sentence-aligned segment; `.is-speaking` is
+   toggled by MathText based on the SpeechContext activeSentenceIndex. The
+   transition makes the highlight slide between sentences instead of popping. */
+.ask-v4 .pa-bubble .tts-sent {
+  border-radius: 4px;
+  padding: 1px 2px;
+  transition: background-color 180ms ease;
+}
+.ask-v4 .pa-bubble .tts-sent.is-speaking {
+  background-color: rgba(255, 181, 71, 0.32);     /* warm amber tint */
+  box-shadow: 0 0 0 1px rgba(255, 181, 71, 0.55);
+}
+/* Reduce flash for motion-sensitive users */
+@media (prefers-reduced-motion: reduce) {
+  .ask-v4 .pa-bubble .tts-sent { transition: none; }
+}
+
 /* Chip row */
 .ask-v4 .chip-row {
   display: flex; flex-wrap: wrap; gap: 8px;

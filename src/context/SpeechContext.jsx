@@ -62,6 +62,35 @@ const SpeechContext = createContext(null)
 const NULL_VALUE = {
   supported: false, speaking: false, loading: false, rate: 1,
   speak: () => {}, stop: () => {}, toggle: () => {}, setRate: () => {},
+  // Sprint 3 / F6a — karaoke highlight state. activeText is the source string
+  // being spoken; activeSentenceIndex is the 0-based index of the currently
+  // spoken sentence inside that string. Components that render the same text
+  // can compare activeText === msg.text and apply highlight CSS.
+  activeText: null, activeSentenceIndex: -1,
+}
+
+// Sentence segmentation. Hindi uses `।` (purna viram, U+0964) as the primary
+// sentence terminator; English uses `.`/`!`/`?`. We keep the terminator with
+// the sentence so highlighted spans don't lose their punctuation.
+//
+// Exported so other modules (e.g. MathText) can split identically — keeps
+// sentence indices in sync between the audio-tick logic and the rendered
+// spans.
+export function splitSentences(text) {
+  if (!text) return []
+  // Match a run of non-terminator chars followed by an optional terminator
+  // and trailing whitespace. The terminator stays attached.
+  const re = /[^।.!?]+[।.!?]*\s*/g
+  const out = []
+  let m
+  while ((m = re.exec(text)) !== null) {
+    const seg = m[0]
+    if (seg.trim().length > 0) out.push(seg)
+  }
+  // Fallback: if the regex produced nothing (e.g. text has no terminators),
+  // return the whole text as one sentence.
+  if (out.length === 0 && text.trim().length > 0) out.push(text)
+  return out
 }
 
 export function useSpeech() {
@@ -80,11 +109,16 @@ export function SpeechProvider({ children }) {
       return Number.isFinite(saved) && saved >= 0.5 && saved <= 2 ? saved : 1
     } catch { return 1 }
   })
+  // F6a — karaoke highlight state
+  const [activeText, setActiveText] = useState(null)
+  const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1)
 
   const audioRef = useRef(null)
   const objectUrlRef = useRef(null)
   const utteranceRef = useRef(null)
   const abortRef = useRef(null)
+  const trackerRef = useRef(null)        // setInterval handle for the karaoke tick
+  const sentenceOffsetsRef = useRef([])  // cumulative char offsets per sentence end (for both backends)
 
   // Feature-detect once
   useEffect(() => {
@@ -111,8 +145,52 @@ export function SpeechProvider({ children }) {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
+    if (trackerRef.current) {
+      clearInterval(trackerRef.current)
+      trackerRef.current = null
+    }
+    sentenceOffsetsRef.current = []
     setSpeaking(false)
     setLoading(false)
+    setActiveText(null)
+    setActiveSentenceIndex(-1)
+  }
+
+  // Compute cumulative end-offsets for each sentence in `prepared` (the text
+  // that's actually being read aloud — post-prepare() so it matches what TTS
+  // gets). offsets[i] = end-position in `prepared` of sentence i.
+  // Used by the karaoke tick to pick the active sentence from progress.
+  function computeSentenceOffsets(prepared) {
+    const sentences = splitSentences(prepared)
+    const ends = []
+    let pos = 0
+    for (const s of sentences) {
+      pos += s.length
+      ends.push(pos)
+    }
+    return ends
+  }
+
+  // Karaoke tick — runs every 250ms while audio plays. For the server backend
+  // we use audio.currentTime / audio.duration → progress %. For the browser
+  // backend we use the onBoundary event (more precise) and fall back to a
+  // wall-clock estimate if boundaries don't fire.
+  function startTrackerForAudio(audio, prepared, sourceText) {
+    const offsets = computeSentenceOffsets(prepared)
+    sentenceOffsetsRef.current = offsets
+    setActiveText(sourceText)
+    setActiveSentenceIndex(offsets.length > 0 ? 0 : -1)
+    if (trackerRef.current) clearInterval(trackerRef.current)
+    trackerRef.current = setInterval(() => {
+      if (!audio || !audio.duration || isNaN(audio.duration)) return
+      const progress = audio.currentTime / audio.duration  // 0..1
+      const totalChars = offsets[offsets.length - 1] || 1
+      const charPos = progress * totalChars
+      // Linear search is fine — sentence counts in practice <50
+      let idx = offsets.findIndex(end => charPos < end)
+      if (idx < 0) idx = offsets.length - 1
+      setActiveSentenceIndex(idx)
+    }, 250)
   }
 
   // Stop on tab hidden / unmount
@@ -131,14 +209,28 @@ export function SpeechProvider({ children }) {
     const clean = prepare(text)
     if (!clean) return false
     window.speechSynthesis.cancel()
+    const offsets = computeSentenceOffsets(clean)
+    sentenceOffsetsRef.current = offsets
+    setActiveText(text)
+    setActiveSentenceIndex(offsets.length > 0 ? 0 : -1)
+
     const u = new SpeechSynthesisUtterance(clean)
     const voice = pickBrowserVoice()
     if (voice) u.voice = voice
     u.rate = rate
     u.pitch = 1
     u.onstart = () => { setSpeaking(true); setLoading(false) }
-    u.onend = () => setSpeaking(false)
-    u.onerror = () => setSpeaking(false)
+    u.onend = () => { setSpeaking(false); setActiveText(null); setActiveSentenceIndex(-1) }
+    u.onerror = () => { setSpeaking(false); setActiveText(null); setActiveSentenceIndex(-1) }
+    // Web Speech fires onboundary per word (or sentence on some engines).
+    // event.charIndex gives the position in the SOURCE string — we map it
+    // to a sentence index using the offsets we precomputed.
+    u.onboundary = (e) => {
+      if (typeof e.charIndex !== 'number') return
+      let idx = offsets.findIndex(end => e.charIndex < end)
+      if (idx < 0) idx = offsets.length - 1
+      setActiveSentenceIndex(idx)
+    }
     utteranceRef.current = u
     window.speechSynthesis.speak(u)
     return true
@@ -176,10 +268,24 @@ export function SpeechProvider({ children }) {
       objectUrlRef.current = url
       const audio = new Audio(url)
       audio.playbackRate = rate
-      audio.onplaying = () => { setSpeaking(true); setLoading(false) }
-      audio.onended = () => setSpeaking(false)
-      audio.onpause = () => setSpeaking(false)
-      audio.onerror = () => { setSpeaking(false); setLoading(false) }
+      audio.onplaying = () => {
+        setSpeaking(true); setLoading(false)
+        startTrackerForAudio(audio, clean, text)
+      }
+      audio.onended = () => {
+        setSpeaking(false)
+        if (trackerRef.current) { clearInterval(trackerRef.current); trackerRef.current = null }
+        setActiveText(null); setActiveSentenceIndex(-1)
+      }
+      audio.onpause = () => {
+        setSpeaking(false)
+        if (trackerRef.current) { clearInterval(trackerRef.current); trackerRef.current = null }
+      }
+      audio.onerror = () => {
+        setSpeaking(false); setLoading(false)
+        if (trackerRef.current) { clearInterval(trackerRef.current); trackerRef.current = null }
+        setActiveText(null); setActiveSentenceIndex(-1)
+      }
       audioRef.current = audio
       await audio.play()
       return true
@@ -211,6 +317,9 @@ export function SpeechProvider({ children }) {
     if (audioRef.current) audioRef.current.playbackRate = clamped
   }, [])
 
-  const value = { supported, speaking, loading, speak, stop, toggle, rate, setRate }
+  const value = {
+    supported, speaking, loading, speak, stop, toggle, rate, setRate,
+    activeText, activeSentenceIndex,
+  }
   return <SpeechContext.Provider value={value}>{children}</SpeechContext.Provider>
 }

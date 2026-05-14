@@ -13,3 +13,8 @@ playwright-report/
 playwright/.cache/
 # Local Claude Code IDE settings (per-machine, never shared)
 .claude/
+
+# Tesseract.js traineddata cache (downloaded on first OCR run; ~5–30 MB each).
+# Lands in CWD by default — gitignore so it doesn't bloat the repo. Re-fetched
+# automatically next time tesseract.js needs it.
+*.traineddata

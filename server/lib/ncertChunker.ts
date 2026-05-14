@@ -40,7 +40,16 @@ export interface Chunk {
 const STRONG_MARKERS_RE = /^\s*[★●◆❖■▪]\s+|^\s*(?:अध्याय|पाठ|भाग|खंड|प्रश्न)\s+\d+|^\s*\d+\.\s+|^\s*\(\d+\)\s+/
 
 const SHORT_LINE_THRESHOLD = 60        // verse-line heuristic (chars)
-const HINDI_CHUNK_MAX = 1500            // softer than English; respects unit boundaries
+// Sprint 3 / F6b — chunk-size tuning (May 14)
+// Original was 1500 chars; the Surdas chapter ingest produced only 3 huge
+// chunks, which gave RAG retrieval almost no precision. The LLM grounded
+// in the right chapter but missed specific scholarly concepts (bee
+// metaphor, vipralambha shringar, nirgun-sagun tension) because the
+// retrieved chunks were too coarse-grained for the query embedding to
+// "pull" the relevant passage strongly.
+// Reducing to 700 produces ~3x more chunks per chapter without breaking
+// the verse-intact heuristic (a typical NCERT poem is 200-400 chars).
+const HINDI_CHUNK_MAX = 700
 const ENGLISH_CHUNK_MAX = 800
 const ENGLISH_OVERLAP = 100
 

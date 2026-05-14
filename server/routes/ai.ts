@@ -823,7 +823,7 @@ function detectMemoryUsage(
 // retrieval already picks Hindi-NCERT chunks per F6b. When `bilingual=true`
 // (passed by Hindi-as-a-subject queries), we also ask the LLM to emit a
 // side-by-side English version for non-Hindi-speaker classmates.
-function buildLanguageDirective(tutorLang: 'en' | 'hi', bilingual: boolean = false): string {
+function buildLanguageDirective(tutorLang: 'en' | 'hi', bilingual: boolean = false, className: number = 10): string {
   if (tutorLang !== 'hi') return ''
   if (bilingual) {
     return `
@@ -839,13 +839,55 @@ ___HINDI___
 [Your full explanation in Hindi (Devanagari script). Cover everything: definitions, examples, analysis, mark distribution. This is the primary teaching response.]
 
 ___ENGLISH___
-[The same explanation translated into clear English. Mirror the Hindi side paragraph-by-paragraph — same structure, same examples, same order. Translate poem/verse quotes too so non-Hindi readers can understand them.]
+[The same explanation translated into clear English. Mirror the Hindi side paragraph-by-paragraph — same structure, same examples, same order.]
 
 RULES:
 - Math notation stays in LaTeX in BOTH halves (e.g. $F = ma$).
-- Hindi quotes from NCERT (poetic verses, prose excerpts) stay in Devanagari in the Hindi half AND get an English translation in the English half.
+- Hindi quotes from NCERT (poetic verses, prose excerpts) stay in Devanagari in the Hindi half. In the English half, render the MEANING in idiomatic English prose — NEVER write the Hindi syllables phonetically in Latin letters (do NOT write "Oodhau, tum hau ati badrbhagi" — write "Uddhav, you are so fortunate (sarcastic)" instead).
 - Do NOT add meta-commentary about the bilingual format.
-- Do NOT skip the markers — the UI splits on them exactly.`
+- Do NOT skip the markers — the UI splits on them exactly.
+
+HINDI-LITERATURE SCHOLARSHIP DEPTH (when answering about Hindi-as-a-subject):
+Your reader is a Class ${className} CBSE student preparing for board exams. Generic praise (e.g. "the love is deeply described") loses marks; named scholarly concepts gain them. So ALWAYS include the following when applicable:
+
+1. Named rasas + bhavas. Don't just say "love" or "separation pain" —
+   use the canonical Sanskrit/Hindi terms:
+   • वात्सल्य रस (Vatsalya — parental affection, e.g. Yashoda + child Krishna)
+   • संयोग शृंगार (Sanyog Shringar — love-in-union)
+   • विप्रलंभ शृंगार (Vipralambha Shringar — love-in-separation; gopis pining)
+   • भक्ति रस (Bhakti — devotion; some scholars list as 10th rasa)
+   • करुण रस (Karun — pathos/grief)
+   Pick the SPECIFIC one that applies and name it explicitly.
+
+2. Named symbols / metaphors. If the chapter has a famous metaphor in
+   its title or central image, identify it by name and explain its symbolic
+   meaning. Examples:
+   • भ्रमर (the bee) in Bhramargeet = the messenger Uddhav
+   • हारिल की लकरी (the heron's branch) = the gopis' unshakable
+     attachment to Krishna
+   • चाँद (the moon) in Yashoda's pads = Krishna himself
+   Skip if no famous metaphor applies; never invent one.
+
+3. Philosophical / cultural context where central to the chapter:
+   • निर्गुण भक्ति vs सगुण भक्ति (formless vs form-based devotion)
+   • भक्तिकाल (the Bhakti era ~14th-17th century, its poets, themes)
+   • ब्रजभाषा and its role as the bhakti literature dialect
+   Identify the relevant context — don't load every answer with all of these.
+
+4. Verse interpretation MUST capture the actual literary device used —
+   irony, sarcasm, oxymoron, metaphor, alliteration (अनुप्रास),
+   simile (उपमा). If the gopis are speaking SARCASTICALLY (very common in
+   Bhramargeet), say so explicitly — don't translate sarcasm as literal
+   praise.
+
+5. Cite the specific NCERT chapter when grounding from the RAG content:
+   "इस पद में..." / "In this pad from NCERT Class X chapter Y..." — gives
+   the student confidence that the answer is exam-aligned.
+
+End the Hindi half with a one-line exam-prep tip in Hindi if the question is
+analytical (e.g. "बोर्ड परीक्षा में: रस का नाम लेना न भूलें, उदाहरण के साथ
+verse की पंक्ति दें" / "In the board exam: don't forget to name the rasa
+and quote one line of the verse as evidence").`
   }
   return `
 
@@ -932,8 +974,9 @@ Answer using ONLY the content above. CRITICAL presentation rules:
   }
 
   // F6a / F6b — append language + bilingual directive last so it overrides
-  // any English bias above
-  prompt += buildLanguageDirective(tutorLang, bilingual)
+  // any English bias above. className flows into the bilingual prompt's
+  // exam-prep context.
+  prompt += buildLanguageDirective(tutorLang, bilingual, className)
 
   return prompt
 }

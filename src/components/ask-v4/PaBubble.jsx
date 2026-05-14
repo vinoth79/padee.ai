@@ -10,24 +10,25 @@ import InlineQuiz from './InlineQuiz'
 import ChallengeView from './ChallengeView'
 import { useUser } from '../../context/UserContext'
 
-// Action chips. Bilingual labels (en + hi). Sprint 3 / F6a adds Hindi
-// labels alongside the original English so chips localise when the
-// student has `tutor_language='hi'`. `hiOnly: true` flags chips that
-// only make sense in Hindi mode (e.g. "Translate to English" is useless
-// when the response is already English).
+// Action chips. Labels are always English — easier for the student to scan
+// among Hindi response text, less context-switching for parents observing,
+// and avoids the LLM-produced "looks-Hindi-but-isn't-quite-right" register
+// debates. `hiOnly: true` flags chips that only make sense in Hindi mode
+// (e.g. "English translation" is useless when the response is already
+// English).
 const CHIPS = [
-  { key: 'visual',      en: 'Explain visually ✨',  hi: 'चित्र से समझाओ ✨' },
-  { key: 'simpler',     en: 'Simpler please',        hi: 'और सरल भाषा में' },
-  { key: 'exam',        en: 'Show exam answer',      hi: 'बोर्ड परीक्षा का उत्तर' },
-  { key: 'quiz',        en: 'Quiz me on this',       hi: 'मुझसे प्रश्न पूछो' },
-  { key: 'similar',     en: 'Similar question',      hi: 'इस जैसा एक प्रश्न' },
-  { key: 'challenge',   en: 'Challenge me',          hi: 'मुश्किल सवाल' },
-  { key: 'reallife',    en: 'Real-life example',     hi: 'रोज़मर्रा का उदाहरण' },
-  { key: 'mistakes',    en: 'Common mistakes',       hi: 'अक्सर होने वाली गलतियाँ' },
-  // Sprint 3 / F6a — Hindi-mode helper. Re-emits the previous Pa response
-  // in English while preserving math + code. Useful for parents reviewing
-  // a kid's session or students cross-checking technical terms.
-  { key: 'translate-en', en: 'English translation',  hi: 'अंग्रेज़ी अनुवाद', hiOnly: true },
+  { key: 'visual',      label: 'Explain visually ✨' },
+  { key: 'simpler',     label: 'Simpler please' },
+  { key: 'exam',        label: 'Show exam answer' },
+  { key: 'quiz',        label: 'Quiz me on this' },
+  { key: 'similar',     label: 'Similar question' },
+  { key: 'challenge',   label: 'Challenge me' },
+  { key: 'reallife',    label: 'Real-life example' },
+  { key: 'mistakes',    label: 'Common mistakes' },
+  // Sprint 3 / F6a — Hindi-mode-only helper. Re-emits the previous Pa
+  // response in English while preserving math + code. Useful for parents
+  // reviewing a kid's session or students cross-checking technical terms.
+  { key: 'translate-en', label: 'English translation', hiOnly: true },
 ]
 
 export default function PaBubble({
@@ -43,9 +44,9 @@ export default function PaBubble({
 }) {
   const isStreaming = msg.streaming
   const isError = msg.error
-  // F6a — pick chip label set by the student's tutor language. Hide
-  // hiOnly chips (e.g. translate-to-english) when the student is in
-  // English mode.
+  // F6a — chip labels stay English regardless of tutor_language. We only
+  // filter the chip *list* by language: hiOnly chips (e.g.
+  // "English translation") only appear when the student is in Hindi mode.
   const { tutorLanguage } = useUser()
   const isHindi = tutorLanguage === 'hi'
   const visibleChips = CHIPS.filter(c => !c.hiOnly || isHindi)
@@ -97,7 +98,7 @@ export default function PaBubble({
           <div className="chip-row">
             {visibleChips.map(c => (
               <button key={c.key} className="chip" onClick={() => onChip?.(c.key)}>
-                {isHindi ? c.hi : c.en}
+                {c.label}
               </button>
             ))}
           </div>

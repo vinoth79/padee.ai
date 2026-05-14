@@ -196,28 +196,54 @@ function BilingualInline({ hi, en }) {
   const hiParas = splitParagraphs(hi)
   const enParas = splitParagraphs(en)
   const n = Math.min(hiParas.length, enParas.length)
-  const stanzas = []
+  // F6b — precompute each Hindi paragraph's word offset within the FULL hi
+  // text. The ListenButton speaks `hi` (the full half), so SpeechContext's
+  // activeWordIndex is global to that string. Each paragraph's MathText
+  // needs its starting word offset so it can translate global → local.
+  //
+  // Word counts here are computed over the source paragraph (same definition
+  // as MathText / SpeechContext: \S+ runs). Approximation note: the actual
+  // spoken text goes through prepare() (latexToSpeech etc.) which can drop
+  // or alter tokens — for plain Hindi prose without LaTeX (typical for F6b
+  // literature responses) the counts align exactly.
+  const wordOffsets = []
+  let running = 0
   for (let i = 0; i < n; i++) {
-    stanzas.push({ hi: hiParas[i], en: enParas[i] })
+    wordOffsets.push(running)
+    const count = (hiParas[i].match(/\S+/g) || []).length
+    // +1 because paragraph joins (blank line between them) don't insert a
+    // visible word in source text, so subsequent paragraphs start exactly
+    // at `running + count` in the tokenized stream. No padding needed.
+    running += count
   }
-  const extraHi = hiParas.slice(n)
-  const extraEn = enParas.slice(n)
+
   return (
     <div className="bilingual-inline">
-      {stanzas.map((s, i) => (
+      {hiParas.slice(0, n).map((hiPara, i) => (
         <div key={i} className="bilingual-stanza">
-          <div className="bilingual-stanza-hi"><MathText text={s.hi} /></div>
-          <div className="bilingual-stanza-en"><MathText text={s.en} /></div>
+          <div className="bilingual-stanza-hi">
+            {/* parentText = full Hindi half → karaoke highlight tracks the
+                global TTS playhead. wordOffset = words preceding this para. */}
+            <MathText text={hiPara} parentText={hi} wordOffset={wordOffsets[i]} />
+          </div>
+          <div className="bilingual-stanza-en">
+            {/* English column is reference only — no karaoke needed */}
+            <MathText text={enParas[i]} />
+          </div>
         </div>
       ))}
-      {extraHi.length > 0 && (
+      {hiParas.length > n && (
         <div className="bilingual-stanza bilingual-stanza-orphan">
-          <div className="bilingual-stanza-hi">{extraHi.map((p, i) => <MathText key={i} text={p} />)}</div>
+          <div className="bilingual-stanza-hi">
+            {hiParas.slice(n).map((p, i) => (
+              <MathText key={i} text={p} parentText={hi} wordOffset={wordOffsets[n - 1] || 0} />
+            ))}
+          </div>
         </div>
       )}
-      {extraEn.length > 0 && (
+      {enParas.length > n && (
         <div className="bilingual-stanza bilingual-stanza-orphan">
-          <div className="bilingual-stanza-en">{extraEn.map((p, i) => <MathText key={i} text={p} />)}</div>
+          <div className="bilingual-stanza-en">{enParas.slice(n).map((p, i) => <MathText key={i} text={p} />)}</div>
         </div>
       )}
     </div>

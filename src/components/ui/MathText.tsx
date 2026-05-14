@@ -24,19 +24,45 @@ interface Props {
   className?: string
   /** Inline-only mode — refuse to render display ($$...$$) blocks. */
   inlineOnly?: boolean
+  /**
+   * Sprint 3 / F6b — for components like BilingualInline that render slices
+   * of a larger speech text across multiple MathText instances. `parentText`
+   * is the full text passed to TTS; `wordOffset` is the count of words
+   * preceding this slice in the parent. Lets each slice highlight its own
+   * local word when the global activeWordIndex falls inside its range.
+   *
+   * Omit both for normal (non-sliced) usage — defaults to text identity match.
+   */
+  parentText?: string
+  wordOffset?: number
 }
 
-export default function MathText({ text, streaming, className, inlineOnly }: Props) {
-  // Sprint 3 / F6a — karaoke highlight. If THIS text is currently being read
-  // aloud, mark the active word's span. We compare on text identity (===);
-  // MathText is always rendered with the same string instance the TTS
-  // started with, so this is stable.
+export default function MathText({
+  text, streaming, className, inlineOnly,
+  parentText, wordOffset = 0,
+}: Props) {
+  // Sprint 3 / F6a — karaoke highlight. Standard mode: compare activeText
+  // to `text` directly. Bilingual / sliced mode: compare to `parentText`
+  // and subtract wordOffset so each slice's local word indices align with
+  // the global activeWordIndex.
   const { activeText, activeWordIndex } = useSpeech() as {
     activeText: string | null
     activeWordIndex: number
   }
-  const isBeingRead = activeText !== null && activeText === text
-  const liveWordIndex = isBeingRead ? activeWordIndex : -1
+  const matchKey = parentText ?? text
+  const isBeingRead = activeText !== null && activeText === matchKey
+  // Translate global active word index → local index for this slice.
+  // tokenizeWords(text).filter(t => t.isWord).length = number of word
+  // tokens this slice owns; the active index falls inside our range iff
+  // 0 <= (active - offset) < localWordCount.
+  let liveWordIndex = -1
+  if (isBeingRead && activeWordIndex >= 0) {
+    const local = activeWordIndex - wordOffset
+    if (local >= 0) {
+      const localWordCount = tokenizeWords(text).filter(t => t.isWord).length
+      if (local < localWordCount) liveWordIndex = local
+    }
+  }
 
   if (!text) return null
 

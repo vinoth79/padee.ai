@@ -2,7 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 import ConceptCatalogTab from '../components/admin/ConceptCatalogTab'
 import FlaggedReviewTab from '../components/admin/FlaggedReviewTab'
 
-const SUBJECTS = ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'Computer Science', 'English', 'Social Science', 'Economics', 'Accounts', 'Business Studies']
+// Order mirrors how teachers think about uploads — core subjects first (8-10
+// CBSE), then 11-12 streams, then second-language subjects. 'Science' covers
+// the unified Class 8-10 Science textbook; 'Social Studies' covers the 8-10
+// Social Studies books; the split-out 11-12 versions live alongside.
+// Hindi + Sanskrit are second-language subjects that need their own native
+// NCERT chunks (Sprint 3 / F6b) — use the हिन्दी radio when uploading those.
+const SUBJECTS = [
+  'Mathematics', 'Science', 'Social Studies', 'English',
+  'Physics', 'Chemistry', 'Biology',
+  'Computer Science',
+  'Hindi', 'Sanskrit',
+  'Economics', 'Accounts', 'Business Studies',
+  'Social Science',  // kept for backwards compatibility with existing uploads tagged this way
+]
 const CLASSES = [8, 9, 10, 11, 12]
 
 interface Upload {

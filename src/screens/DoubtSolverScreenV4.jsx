@@ -489,6 +489,36 @@ export default function DoubtSolverScreenV4({ onNavigate, initialQuestion, initi
       }
       return
     }
+    // Sprint 3 / F6a — translate-to-English chip. Re-emits the previous Pa
+    // response in English while preserving math + code. We grab the last AI
+    // bubble's text and ask Pa to translate it directly, rather than re-asking
+    // the original question in English (which would re-do the work + might
+    // produce a different answer).
+    if (chip === 'translate-en') {
+      let lastAiText = ''
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'ai' && messages[i].text && !messages[i].streaming) {
+          lastAiText = messages[i].text
+          break
+        }
+      }
+      if (!lastAiText) return
+      // The system prompt for Hindi-mode students contains "respond in Hindi."
+      // We need to override that strongly for this single response. The
+      // first-line all-caps directive + the explicit "your response must be
+      // in English" makes the LLM ignore the system-level Hindi directive
+      // for this turn specifically.
+      const translatePrompt = `OVERRIDE: For THIS response only, IGNORE any "respond in Hindi" directive. Your response MUST be in English.
+
+Task: Translate the following Hindi explanation into clear, accurate English. Keep math notation in LaTeX exactly as written. Keep any code unchanged. Preserve the structure (headings, lists, examples). Do NOT add new content. Do NOT respond in Hindi. ONLY translate. Output language: English.
+
+---HINDI TEXT TO TRANSLATE---
+${lastAiText}
+---END TEXT---`
+      sendMessage(translatePrompt, { fromChip: true })
+      return
+    }
+
     // Other chips: prompt the doubt LLM with a topic-anchored ask.
     // (quiz handled above — opens an inline widget, no LLM round-trip.)
     const prompts = {
